@@ -14,11 +14,10 @@
 
 module;
 
-#include <boost/asio/ip/tcp.hpp>
-
 import pg_protocol_handler;
 import boost;
-import stl;
+import std;
+import type_alias;
 import session;
 import infinity_exception;
 
@@ -38,7 +37,7 @@ module connection;
 namespace infinity {
 
 Connection::Connection(boost::asio::io_service &io_service)
-    : socket_(MakeShared<boost::asio::ip::tcp::socket>(io_service)), pg_handler_(MakeShared<PGProtocolHandler>(socket())) {}
+    : socket_(std::make_shared<boost::asio::ip::tcp::socket>(io_service)), pg_handler_(std::make_shared<PGProtocolHandler>(socket())) {}
 
 Connection::~Connection() {
     if(session_ == nullptr) {
@@ -67,7 +66,7 @@ void Connection::Run() {
             LOG_TRACE("Client is closed");
             return;
         } catch (const Exception &e) {
-            HashMap<PGMessageType, String> error_message_map;
+            std::unordered_map<PGMessageType, std::string> error_message_map;
             error_message_map[PGMessageType::kHumanReadableError] = e.what();
             LOG_ERROR(e.what());
             pg_handler_->send_error_response(error_message_map);
@@ -92,7 +91,7 @@ void Connection::HandleRequest() {
     const auto cmd_type = pg_handler_->read_command_type();
 
     // FIXME
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
@@ -136,7 +135,7 @@ void Connection::HandleRequest() {
 }
 
 void Connection::HandlerSimpleQuery(QueryContext *query_context) {
-    const String &query = pg_handler_->read_command_body();
+    const std::string &query = pg_handler_->read_command_body();
     LOG_TRACE(Format("Query: {}", query));
 
     // Start to execute the query.
@@ -144,7 +143,7 @@ void Connection::HandlerSimpleQuery(QueryContext *query_context) {
 
     // Response to the result message to client
     if (result.result_table_.get() == nullptr) {
-        HashMap<PGMessageType, String> error_message_map;
+        std::unordered_map<PGMessageType, std::string> error_message_map;
         error_message_map[PGMessageType::kHumanReadableError] = result.status_.message();
         pg_handler_->send_error_response(error_message_map);
     } else {
@@ -156,7 +155,7 @@ void Connection::HandlerSimpleQuery(QueryContext *query_context) {
     pg_handler_->send_ready_for_query();
 }
 
-void Connection::SendTableDescription(const SharedPtr<DataTable> &result_table) {
+void Connection::SendTableDescription(const std::shared_ptr<DataTable> &result_table) {
     u32 column_name_length_sum = 0;
     SizeT column_count = result_table->ColumnCount();
     for (SizeT idx = 0; idx < column_count; ++idx) {
@@ -170,7 +169,7 @@ void Connection::SendTableDescription(const SharedPtr<DataTable> &result_table) 
     pg_handler_->SendDescriptionHeader(column_name_length_sum, column_count);
 
     for (SizeT idx = 0; idx < column_count; ++idx) {
-        SharedPtr<DataType> column_type = result_table->GetColumnTypeById(idx);
+        std::shared_ptr<DataType> column_type = result_table->GetColumnTypeById(idx);
 
         u32 object_id = 0;
         i16 object_width = 0;
@@ -301,9 +300,9 @@ void Connection::SendTableDescription(const SharedPtr<DataTable> &result_table) 
 
 void Connection::SendQueryResponse(const QueryResult &query_result) {
 
-    const SharedPtr<DataTable> &result_table = query_result.result_table_;
+    const std::shared_ptr<DataTable> &result_table = query_result.result_table_;
     SizeT column_count = result_table->ColumnCount();
-    auto values_as_strings = Vector<Optional<String>>(column_count);
+    auto values_as_strings = std::vector<std::optional<std::string>>(column_count);
     SizeT block_count = result_table->DataBlockCount();
     for (SizeT idx = 0; idx < block_count; ++idx) {
         auto block = result_table->GetDataBlockById(idx);
@@ -315,7 +314,7 @@ void Connection::SendQueryResponse(const QueryResult &query_result) {
             // iterate each column_vector of the block
             for (SizeT column_id = 0; column_id < column_count; ++column_id) {
                 auto &column_vector = block->column_vectors[column_id];
-                const String string_value = column_vector->ToString(row_id);
+                const std::string string_value = column_vector->ToString(row_id);
                 values_as_strings[column_id] = string_value;
                 string_length_sum += string_value.size();
             }
@@ -323,7 +322,7 @@ void Connection::SendQueryResponse(const QueryResult &query_result) {
         }
     }
 
-    String message;
+    std::string message;
     switch (query_result.root_operator_type_) {
         case LogicalNodeType::kInsert: {
             message = "INSERT 0 1";
@@ -334,7 +333,7 @@ void Connection::SendQueryResponse(const QueryResult &query_result) {
             break;
         }
         default: {
-            message = Format("SELECT {}", ToStr(query_result.result_table_->row_count()));
+            message = Format("SELECT {}", std::to_string(query_result.result_table_->row_count()));
         }
     }
 

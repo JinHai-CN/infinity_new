@@ -15,7 +15,7 @@
 module;
 
 import boost;
-import stl;
+import std;
 import session;
 import pg_protocol_handler;
 import query_context;
@@ -36,7 +36,7 @@ public:
 
     void Run();
 
-    inline SharedPtr<boost::asio::ip::tcp::socket> socket() { return socket_; }
+    inline std::shared_ptr<boost::asio::ip::tcp::socket> socket() { return socket_; }
 
 private:
     void HandleConnection();
@@ -45,18 +45,18 @@ private:
 
     void HandlerSimpleQuery(QueryContext *query_context);
 
-    void SendTableDescription(const SharedPtr<DataTable> &result_table);
+    void SendTableDescription(const std::shared_ptr<DataTable> &result_table);
 
     void SendQueryResponse(const QueryResult &query_result);
 
 private:
-    const SharedPtr<boost::asio::ip::tcp::socket> socket_{};
+    const std::shared_ptr<boost::asio::ip::tcp::socket> socket_{};
 
-    const SharedPtr<PGProtocolHandler> pg_handler_{};
+    const std::shared_ptr<PGProtocolHandler> pg_handler_{};
 
     bool terminate_connection_ = false;
 
-    SharedPtr<RemoteSession> session_{};
+    std::shared_ptr<RemoteSession> session_{};
 };
 
 } // namespace infinity
