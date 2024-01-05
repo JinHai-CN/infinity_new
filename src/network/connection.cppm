@@ -30,13 +30,13 @@ enum class ConnectionStatus : char { kIdle, kRunning, kSuspend, kTerminated };
 
 export class Connection {
 public:
-    explicit Connection(AsioIOService &io_service);
+    explicit Connection(boost::asio::io_service &io_service);
 
     ~Connection();
 
     void Run();
 
-    inline SharedPtr<AsioSocket> socket() { return socket_; }
+    inline SharedPtr<boost::asio::ip::tcp::socket> socket() { return socket_; }
 
 private:
     void HandleConnection();
@@ -50,7 +50,7 @@ private:
     void SendQueryResponse(const QueryResult &query_result);
 
 private:
-    const SharedPtr<AsioSocket> socket_{};
+    const SharedPtr<boost::asio::ip::tcp::socket> socket_{};
 
     const SharedPtr<PGProtocolHandler> pg_handler_{};
 

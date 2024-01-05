@@ -17,7 +17,7 @@
 #include "network/thrift_server.h"
 
 import compilation_config;
-import stl;
+import std;
 import third_party;
 import db_server;
 import infinity_exception;
@@ -106,7 +106,7 @@ void ParseArguments(int argc, char **argv, StartupParameter &parameters) {
     options.add_options()("h,help", "Display this help and exit") // NOLINT
         ("f,config",
          "Specify the config file path. No default config file",
-         cxx_value<String>()->default_value("")) // NOLINT
+         cxx_value<std::string>()->default_value("")) // NOLINT
         ;
 
     ParseResult result = options.parse(argc, argv);
@@ -116,9 +116,9 @@ void ParseArguments(int argc, char **argv, StartupParameter &parameters) {
         return;
     }
 
-    String config_path = result["config"].as<String>();
+    std::string config_path = result["config"].as<std::string>();
     if (!config_path.empty()) {
-        parameters.config_path = MakeShared<String>(config_path);
+        parameters.config_path = MakeShared<std::string>(config_path);
     }
 }
 

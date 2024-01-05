@@ -14,7 +14,7 @@
 
 module;
 
-import stl;
+import std;
 import singleton;
 import boost;
 import connection;
@@ -24,7 +24,7 @@ export module db_server;
 namespace infinity {
 
 export struct StartupParameter {
-    SharedPtr<String> config_path{};
+    std::shared_ptr<std::string> config_path{};
 };
 
 class ThriftServer;
@@ -38,12 +38,12 @@ public:
 private:
     void CreateConnection();
 
-    void StartConnection(SharedPtr<Connection> &connection);
+    void StartConnection(std::shared_ptr<Connection> &connection);
 
-    atomic_bool initialized{false};
-    atomic_u64 running_connection_count_{0};
-    AsioIOService io_service_{};
-    UniquePtr<AsioAcceptor> acceptor_ptr_{};
+    std::atomic<bool> initialized{false};
+    std::atomic<unsigned long> running_connection_count_{0};
+    boost::asio::io_service io_service_{};
+    std::unique_ptr<boost::asio::ip::tcp::acceptor> acceptor_ptr_{};
 };
 
 }
