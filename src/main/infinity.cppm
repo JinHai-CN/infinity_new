@@ -15,7 +15,8 @@ module;
 
 export module infinity;
 
-import stl;
+import std;
+import type_alias;
 import config;
 import resource_manager;
 import task_scheduler;
@@ -34,35 +35,35 @@ public:
 
     ~Infinity() = default;
 
-    static SharedPtr<Infinity> RemoteConnect();
+    static std::shared_ptr<Infinity> RemoteConnect();
 
     u64 GetSessionId();
 
     void RemoteDisconnect();
 
-    static void LocalInit(const String &path);
+    static void LocalInit(const std::string &path);
 
     static void LocalUnInit();
 
-    static SharedPtr<Infinity> LocalConnect();
+    static std::shared_ptr<Infinity> LocalConnect();
 
     void LocalDisconnect();
 
-    QueryResult CreateDatabase(const String &db_name, const CreateDatabaseOptions &options);
+    QueryResult CreateDatabase(const std::string &db_name, const CreateDatabaseOptions &options);
 
-    QueryResult DropDatabase(const String &db_name, const DropDatabaseOptions &options);
+    QueryResult DropDatabase(const std::string &db_name, const DropDatabaseOptions &options);
 
     QueryResult ListDatabases();
 
-    SharedPtr<Database> GetDatabase(const String &db_name);
+    std::shared_ptr<Database> GetDatabase(const std::string &db_name);
 
     QueryResult Flush();
 
     // For embedded sqllogictest
-    QueryResult Query(const String& query_text);
+    QueryResult Query(const std::string& query_text);
 
 private:
-    SharedPtr<BaseSession> session_{};
+    std::shared_ptr<BaseSession> session_{};
 };
 
 } // namespace infinity

@@ -27,16 +27,16 @@ import logger;
 
 namespace infinity {
 
-QueryResult Table::CreateIndex(const String &index_name, Vector<IndexInfo *> *index_info_list, CreateIndexOptions) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Table::CreateIndex(const std::string &index_name, Vector<IndexInfo *> *index_info_list, CreateIndexOptions) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
 
-    UniquePtr<CreateStatement> create_statement = MakeUnique<CreateStatement>();
-    SharedPtr<CreateIndexInfo> create_index_info = MakeShared<CreateIndexInfo>();
+    std::unique_ptr<CreateStatement> create_statement = std::make_unique<CreateStatement>();
+    std::shared_ptr<CreateIndexInfo> create_index_info = std::make_shared<CreateIndexInfo>();
 
     create_index_info->schema_name_ = session_->current_database();
     create_index_info->table_name_ = table_name_;
@@ -50,15 +50,15 @@ QueryResult Table::CreateIndex(const String &index_name, Vector<IndexInfo *> *in
     return result;
 }
 
-QueryResult Table::DropIndex(const String &index_name) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Table::DropIndex(const std::string &index_name) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<DropStatement> drop_statement = MakeUnique<DropStatement>();
-    SharedPtr<DropIndexInfo> drop_index_info = MakeShared<DropIndexInfo>();
+    std::unique_ptr<DropStatement> drop_statement = std::make_unique<DropStatement>();
+    std::shared_ptr<DropIndexInfo> drop_index_info = std::make_shared<DropIndexInfo>();
 
     drop_index_info->schema_name_ = session_->current_database();
     drop_index_info->table_name_ = table_name_;
@@ -71,14 +71,14 @@ QueryResult Table::DropIndex(const String &index_name) {
     return result;
 }
 
-QueryResult Table::Insert(Vector<String> *columns, Vector<Vector<ParsedExpr *> *> *values) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Table::Insert(Vector<std::string> *columns, Vector<Vector<ParsedExpr *> *> *values) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<InsertStatement> insert_statement = MakeUnique<InsertStatement>();
+    std::unique_ptr<InsertStatement> insert_statement = std::make_unique<InsertStatement>();
 
     insert_statement->schema_name_ = session_->current_database();
     insert_statement->table_name_ = table_name_;
@@ -89,14 +89,14 @@ QueryResult Table::Insert(Vector<String> *columns, Vector<Vector<ParsedExpr *> *
     return result;
 }
 
-QueryResult Table::Import(const String &path, ImportOptions import_options) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Table::Import(const std::string &path, ImportOptions import_options) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<CopyStatement> import_statement = MakeUnique<CopyStatement>();
+    std::unique_ptr<CopyStatement> import_statement = std::make_unique<CopyStatement>();
 
     import_statement->copy_from_ = true;
     import_statement->file_path_ = path;
@@ -112,13 +112,13 @@ QueryResult Table::Import(const String &path, ImportOptions import_options) {
 }
 
 QueryResult Table::Delete(ParsedExpr *filter) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<DeleteStatement> delete_statement = MakeUnique<DeleteStatement>();
+    std::unique_ptr<DeleteStatement> delete_statement = std::make_unique<DeleteStatement>();
     delete_statement->schema_name_ = session_->current_database();
     delete_statement->table_name_ = table_name_;
     delete_statement->where_expr_ = filter;
@@ -127,13 +127,13 @@ QueryResult Table::Delete(ParsedExpr *filter) {
 }
 
 QueryResult Table::Update(ParsedExpr *filter, Vector<UpdateExpr *> *update_list) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<UpdateStatement> update_statement = MakeUnique<UpdateStatement>();
+    std::unique_ptr<UpdateStatement> update_statement = std::make_unique<UpdateStatement>();
     update_statement->schema_name_ = session_->current_database();
     update_statement->table_name_ = table_name_;
     update_statement->where_expr_ = filter;
@@ -144,13 +144,13 @@ QueryResult Table::Update(ParsedExpr *filter, Vector<UpdateExpr *> *update_list)
 
 QueryResult Table::Search(SearchExpr *search_expr, ParsedExpr *filter, Vector<ParsedExpr *> *output_columns) {
 
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<SelectStatement> select_statement = MakeUnique<SelectStatement>();
+    std::unique_ptr<SelectStatement> select_statement = std::make_unique<SelectStatement>();
 
     auto *table_ref = new TableReference();
     table_ref->db_name_ = session_->current_database();

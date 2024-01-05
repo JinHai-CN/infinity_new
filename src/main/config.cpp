@@ -17,9 +17,9 @@ module;
 #include <unistd.h>
 
 module config;
-//
+import type_alias;
 import third_party;
-import stl;
+import std;
 import boost;
 import compilation_config;
 import default_values;
@@ -35,50 +35,50 @@ u64 Config::GetAvailableMem() {
     return pages * page_size;
 }
 
-void Config::ParseTimeZoneStr(const String &time_zone_str, String &parsed_time_zone, i32 &parsed_time_zone_bias) {
+void Config::ParseTimeZoneStr(const std::string &time_zone_str, std::string &parsed_time_zone, i32 &parsed_time_zone_bias) {
     parsed_time_zone = time_zone_str.substr(0, 3);
     ToUpper(parsed_time_zone);
-    parsed_time_zone_bias = StrToInt(time_zone_str.substr(3, String::npos));
+    parsed_time_zone_bias = std::stoi(time_zone_str.substr(3, std::string::npos));
 }
 
-SharedPtr<String> Config::ParseByteSize(const String &byte_size_str, u64 &byte_size) {
+std::shared_ptr<std::string> Config::ParseByteSize(const std::string &byte_size_str, u64 &byte_size) {
 
-    HashMap<String, u64> byte_unit = {{"kb", 1024ul}, {"mb", 1024ul * 1024ul}, {"gb", 1024ul * 1024ul * 1024ul}};
+    std::unordered_map<std::string, u64> byte_unit = {{"kb", 1024ul}, {"mb", 1024ul * 1024ul}, {"gb", 1024ul * 1024ul * 1024ul}};
     if (byte_size_str.empty()) {
-        return MakeShared<String>("No byte size is given");
+        return std::make_shared<std::string>("No byte size is given");
         ;
     }
 
     u64 factor;
-    const char *ptr = FromChars(byte_size_str.data(), byte_size_str.data() + byte_size_str.size(), factor);
-    if (ptr == nullptr) {
-        return MakeShared<String>("Unrecognized byte size");
-    } else {
-        String unit = ptr;
+    auto res = std::from_chars(byte_size_str.data(), byte_size_str.data() + byte_size_str.size(), factor);
+    if (res.ec == std::errc()) {
+        std::string unit = res.ptr;
         ToLower(unit);
         auto it = byte_unit.find(unit);
         if (it != byte_unit.end()) {
             byte_size = factor * it->second;
             return nullptr;
         } else {
-            return MakeShared<String>("Unrecognized byte size");
+            return std::make_shared<std::string>("Unrecognized byte size");
         }
+    } else {
+        return std::make_shared<std::string>("Unrecognized byte size");
     }
 }
 
-// extern SharedPtr<spdlogger> infinity_logger;
+// extern std::shared_ptr<spdlogger> infinity_logger;
 
-SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
-    SharedPtr<String> result;
+std::shared_ptr<std::string> Config::Init(const std::shared_ptr<std::string> &config_path) {
+    std::shared_ptr<std::string> result;
 
     // Default general config
-    String default_version = Format("{}.{}.{}", version_major(), version_minor(), version_patch());
+    std::string default_version = Format("{}.{}.{}", version_major(), version_minor(), version_patch());
 
-    String default_time_zone = "UTC";
+    std::string default_time_zone = "UTC";
     i32 default_time_zone_bias = 8;
 
     // Default system config
-    u64 default_total_cpu_number = Thread::hardware_concurrency();
+    u64 default_total_cpu_number = std::thread::hardware_concurrency();
     u64 default_total_memory_size = GetAvailableMem();
     u64 default_query_cpu_limit = default_total_cpu_number;
     u64 default_query_memory_limit = default_total_memory_size;
@@ -88,14 +88,14 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
     u64 default_profile_record_capacity = 100;
 
     // Default network config
-    String default_listen_address = "0.0.0.0";
+    std::string default_listen_address = "0.0.0.0";
     u32 default_pg_port = 5432;
     u32 default_http_port = 8088;
     u32 default_sdk_port = 23817;
 
     // Default log config
-    SharedPtr<String> default_log_filename = MakeShared<String>("infinity.log");
-    SharedPtr<String> default_log_dir = MakeShared<String>("/tmp/infinity/log");
+    std::shared_ptr<std::string> default_log_filename = std::make_shared<std::string>("infinity.log");
+    std::shared_ptr<std::string> default_log_dir = std::make_shared<std::string>("/tmp/infinity/log");
     bool default_log_to_stdout = false;
     u64 default_log_max_size = 1024lu * 1024lu * 1024lu; // 1Gib
     u64 default_log_file_rotate_count = 10;
@@ -104,13 +104,13 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
     LogLevel default_log_level = LogLevel::kInfo;
 
     // Default storage config
-    SharedPtr<String> default_data_dir = MakeShared<String>("/tmp/infinity/data");
-    SharedPtr<String> default_wal_dir = MakeShared<String>("/tmp/infinity/wal");
+    std::shared_ptr<std::string> default_data_dir = std::make_shared<std::string>("/tmp/infinity/data");
+    std::shared_ptr<std::string> default_wal_dir = std::make_shared<std::string>("/tmp/infinity/wal");
     u64 default_row_size = 8192lu;
 
     // Default buffer config
     u64 default_buffer_pool_size = 4 * 1024lu * 1024lu * 1024lu; // 4Gib
-    SharedPtr<String> default_temp_dir = MakeShared<String>("/tmp/infinity/temp");
+    std::shared_ptr<std::string> default_temp_dir = std::make_shared<std::string>("/tmp/infinity/temp");
 
     // Default wal config
     u64 wal_size_threshold = DEFAULT_WAL_FILE_SIZE_THRESHOLD;
@@ -121,7 +121,7 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
     u64 delta_checkpoint_interval_wal_bytes = DELTA_CHECKPOINT_INTERVAL_WAL_BYTES;
 
     // Default resource config
-    String default_resource_dict_path = String("/tmp/infinity/resource");
+    std::string default_resource_dict_path = std::string("/tmp/infinity/resource");
 
     LocalFileSystem fs;
     if (config_path.get() == nullptr || !fs.Exists(*config_path)) {
@@ -160,7 +160,7 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
         {
             system_option_.log_filename = default_log_filename;
             system_option_.log_dir = default_log_dir;
-            system_option_.log_file_path = MakeShared<String>(Format("{}/{}", *system_option_.log_dir, *system_option_.log_filename));
+            system_option_.log_file_path = std::make_shared<std::string>(Format("{}/{}", *system_option_.log_dir, *system_option_.log_filename));
             system_option_.log_to_stdout = default_log_to_stdout;
             system_option_.log_max_size = default_log_max_size; // 1Gib
             system_option_.log_file_rotate_count = default_log_file_rotate_count;
@@ -169,15 +169,15 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
 
         // Storage
         {
-            system_option_.data_dir = MakeShared<String>(*default_data_dir);
-            system_option_.wal_dir = MakeShared<String>(*default_wal_dir);
+            system_option_.data_dir = std::make_shared<std::string>(*default_data_dir);
+            system_option_.wal_dir = std::make_shared<std::string>(*default_wal_dir);
             system_option_.default_row_size = default_row_size;
         }
 
         // Buffer
         {
             system_option_.buffer_pool_size = default_buffer_pool_size; // 4Gib
-            system_option_.temp_dir = MakeShared<String>(*default_temp_dir);
+            system_option_.temp_dir = std::make_shared<std::string>(*default_temp_dir);
         }
 
         // Wal
@@ -197,22 +197,22 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
         {
             auto general_config = config["general"];
 
-            String infinity_version = general_config["version"].value_or("invalid");
-            if (!IsEqual(default_version, infinity_version)) {
-                return MakeShared<String>("Unmatched version in config file.");
+            std::string infinity_version = general_config["version"].value_or("invalid");
+            if (default_version != infinity_version) {
+                return std::make_shared<std::string>("Unmatched version in config file.");
             }
             system_option_.version = infinity_version;
 
-            String time_zone_str = general_config["timezone"].value_or("invalid");
-            if (IsEqual(time_zone_str, "invalid")) {
-                result = MakeShared<String>("Timezone isn't given in config file.");
+            std::string time_zone_str = general_config["timezone"].value_or("invalid");
+            if (time_zone_str == "invalid") {
+                result = std::make_shared<std::string>("Timezone isn't given in config file.");
                 return result;
             }
 
             try {
                 ParseTimeZoneStr(time_zone_str, system_option_.time_zone, system_option_.time_zone_bias);
             } catch (...) {
-                result = MakeShared<String>(Format("Timezone can't be recognized: {}", time_zone_str));
+                result = std::make_shared<std::string>(Format("Timezone can't be recognized: {}", time_zone_str));
                 return result;
             }
         }
@@ -233,7 +233,7 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
                     system_option_.total_memory_size = total_memory_size_int;
                 }
             } else {
-                String total_memory_size_str = system_config["total_memory_size"].value_or("8GB");
+                std::string total_memory_size_str = system_config["total_memory_size"].value_or("8GB");
                 result = ParseByteSize(total_memory_size_str, system_option_.total_memory_size);
                 if (result.get() != nullptr) {
                     return result;
@@ -262,7 +262,7 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
                     system_option_.query_memory_limit = query_memory_size_int;
                 }
             } else {
-                String query_memory_limit_str = system_config["query_memory_limit"].value_or("4MB");
+                std::string query_memory_limit_str = system_config["query_memory_limit"].value_or("4MB");
                 result = ParseByteSize(query_memory_limit_str, system_option_.query_memory_limit);
                 if (result.get() != nullptr) {
                     return result;
@@ -290,8 +290,8 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
             boost::system::error_code error;
             boost::asio::ip::make_address(system_option_.listen_address, error);
             if (error) {
-                String err_msg = Format("Not a valid IPv4 address: {}", system_option_.listen_address);
-                result = MakeShared<String>(err_msg);
+                std::string err_msg = Format("Not a valid IPv4 address: {}", system_option_.listen_address);
+                result = std::make_shared<std::string>(err_msg);
                 return result;
             }
 
@@ -303,14 +303,14 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
         // Log
         {
             auto log_config = config["log"];
-            system_option_.log_filename = MakeShared<String>(log_config["log_filename"].value_or(*default_log_filename));
-            system_option_.log_dir = MakeShared<String>(log_config["log_dir"].value_or(*default_log_dir));
+            system_option_.log_filename = std::make_shared<std::string>(log_config["log_filename"].value_or(*default_log_filename));
+            system_option_.log_dir = std::make_shared<std::string>(log_config["log_dir"].value_or(*default_log_dir));
 
-            String log_file_path = Format("{}/{}", *system_option_.log_dir, *system_option_.log_filename);
-            system_option_.log_file_path = MakeShared<String>(log_file_path);
+            std::string log_file_path = Format("{}/{}", *system_option_.log_dir, *system_option_.log_filename);
+            system_option_.log_file_path = std::make_shared<std::string>(log_file_path);
             system_option_.log_to_stdout = log_config["log_to_stdout"].value_or(default_log_to_stdout);
 
-            String log_max_size_str = log_config["log_max_size"].value_or("1GB");
+            std::string log_max_size_str = log_config["log_max_size"].value_or("1GB");
             result = ParseByteSize(log_max_size_str, system_option_.log_max_size);
             if (result.get() != nullptr) {
                 return result;
@@ -318,19 +318,19 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
 
             system_option_.log_file_rotate_count = log_config["log_file_rotate_count"].value_or(default_log_file_rotate_count);
 
-            String log_level = log_config["log_level"].value_or("invalid");
-            if (IsEqual(log_level, "trace")) {
+            std::string log_level = log_config["log_level"].value_or("invalid");
+            if (log_level == "trace") {
                 system_option_.log_level = LogLevel::kTrace;
-            } else if (IsEqual(log_level, "info")) {
+            } else if (log_level == "info") {
                 system_option_.log_level = LogLevel::kInfo;
-            } else if (IsEqual(log_level, "warning")) {
+            } else if (log_level == "warning") {
                 system_option_.log_level = LogLevel::kWarning;
-            } else if (IsEqual(log_level, "error")) {
+            } else if (log_level == "error") {
                 system_option_.log_level = LogLevel::kError;
-            } else if (IsEqual(log_level, "critical")) {
+            } else if (log_level == "critical") {
                 system_option_.log_level = LogLevel::kFatal;
             } else {
-                result = MakeShared<String>("Invalid log level in config file");
+                result = std::make_shared<std::string>("Invalid log level in config file");
                 return result;
             }
         }
@@ -338,20 +338,20 @@ SharedPtr<String> Config::Init(const SharedPtr<String> &config_path) {
         // Storage
         {
             auto storage_config = config["storage"];
-            system_option_.data_dir = MakeShared<String>(storage_config["data_dir"].value_or(*default_data_dir));
-            system_option_.wal_dir = MakeShared<String>(storage_config["wal_dir"].value_or(*default_wal_dir));
+            system_option_.data_dir = std::make_shared<std::string>(storage_config["data_dir"].value_or(*default_data_dir));
+            system_option_.wal_dir = std::make_shared<std::string>(storage_config["wal_dir"].value_or(*default_wal_dir));
             system_option_.default_row_size = storage_config["default_row_size"].value_or(default_row_size);
         }
 
         // Buffer
         {
             auto buffer_config = config["buffer"];
-            String buffer_pool_size_str = buffer_config["buffer_pool_size"].value_or("4GB");
+            std::string buffer_pool_size_str = buffer_config["buffer_pool_size"].value_or("4GB");
             result = ParseByteSize(buffer_pool_size_str, system_option_.buffer_pool_size);
             if (result.get() != nullptr) {
                 return result;
             }
-            system_option_.temp_dir = MakeShared<String>(buffer_config["temp_dir"].value_or("invalid"));
+            system_option_.temp_dir = std::make_shared<std::string>(buffer_config["temp_dir"].value_or("invalid"));
         }
 
         // Wal

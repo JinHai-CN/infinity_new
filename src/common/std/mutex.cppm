@@ -1,5 +1,6 @@
 module;
 #include <mutex>
+#include <shared_mutex>
 # 3 __FILE__ 1 3 // Enter "faked" system files since std is reserved module name
 export module std:mutex;
 export namespace std {
@@ -10,5 +11,7 @@ export namespace std {
     inline constexpr std::defer_lock_t defer_lock_in_modules = std::defer_lock;
     inline constexpr std::try_to_lock_t try_to_lock_in_modules = std::try_to_lock;
     using std::unique_lock;
+    using std::shared_lock;
     using std::scoped_lock;
+    using std::shared_mutex;
 }

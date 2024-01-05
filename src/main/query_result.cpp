@@ -24,7 +24,7 @@ module query_result;
 
 namespace infinity {
 
-String QueryResult::ToString() const {
+std::string QueryResult::ToString() const {
     std::stringstream ss;
 
     switch (root_operator_type_) {
@@ -44,7 +44,7 @@ String QueryResult::ToString() const {
 
     SizeT column_count = result_table_->ColumnCount();
     for (SizeT idx = 0; idx < column_count; ++idx) {
-        String end;
+        std::string end;
         if (idx != column_count - 1) {
             end = " ";
         }

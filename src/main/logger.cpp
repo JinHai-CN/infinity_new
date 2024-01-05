@@ -16,33 +16,34 @@ module;
 
 module logger;
 
-import stl;
+import std;
+import type_alias;
 import config;
 import third_party;
 
 namespace infinity {
 
-static SharedPtr<spd_stdout_color_sink> stdout_sinker = nullptr;
-static SharedPtr<spd_rotating_file_sink> rotating_file_sinker = nullptr;
+static std::shared_ptr<spd_stdout_color_sink> stdout_sinker = nullptr;
+static std::shared_ptr<spd_rotating_file_sink> rotating_file_sinker = nullptr;
 
-SharedPtr<spd_logger> infinity_logger = nullptr;
+std::shared_ptr<spd_logger> infinity_logger = nullptr;
 
 void Logger::Initialize(const Config *config_ptr) {
     if (stdout_sinker.get() == nullptr) {
-        stdout_sinker = MakeShared<spd_stdout_color_sink>(); // NOLINT
+        stdout_sinker = std::make_shared<spd_stdout_color_sink>(); // NOLINT
     }
 
     SizeT log_max_size = config_ptr->log_max_size();
     SizeT log_file_rotate_count = config_ptr->log_file_rotate_count();
 
     if (rotating_file_sinker.get() == nullptr) {
-        rotating_file_sinker = MakeShared<spd_rotating_file_sink>(*config_ptr->log_file_path(), log_max_size,
+        rotating_file_sinker = std::make_shared<spd_rotating_file_sink>(*config_ptr->log_file_path(), log_max_size,
                                                                   log_file_rotate_count); // NOLINT
     }
 
-    Vector<spd_sink_ptr> sinks{stdout_sinker, rotating_file_sinker};
+    std::vector<spd_sink_ptr> sinks{stdout_sinker, rotating_file_sinker};
 
-    infinity_logger = MakeShared<spd_logger>("infinity", sinks.begin(), sinks.end()); // NOLINT
+    infinity_logger = std::make_shared<spd_logger>("infinity", sinks.begin(), sinks.end()); // NOLINT
     infinity_logger->set_pattern("[%H:%M:%S.%e] [%t] [%^%l%$] %v");
     RegisterLogger(infinity_logger);
 

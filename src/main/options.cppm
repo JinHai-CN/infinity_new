@@ -16,7 +16,8 @@ module;
 
 export module options;
 
-import stl;
+import std;
+import type_alias;
 import third_party;
 
 namespace infinity {
@@ -31,8 +32,8 @@ export struct SessionOptions {
 
 export struct SystemOptions {
     // General
-    String version{};
-    String time_zone{};
+    std::string version{};
+    std::string time_zone{};
     i32 time_zone_bias{};
 
     // System
@@ -46,15 +47,15 @@ export struct SystemOptions {
     u64 profile_record_capacity{};
 
     // Network
-    String listen_address{};
+    std::string listen_address{};
     u16 pg_port{};
     u32 http_port{};
     u32 sdk_port{};
 
     // Log
-    SharedPtr<String> log_filename{MakeShared<String>("infinity.log")};
-    SharedPtr<String> log_dir{};
-    SharedPtr<String> log_file_path{};
+    std::shared_ptr<std::string> log_filename{std::make_shared<std::string>("infinity.log")};
+    std::shared_ptr<std::string> log_dir{};
+    std::shared_ptr<std::string> log_file_path{};
     bool log_to_stdout{};
     u64 log_max_size{};
     SizeT log_file_rotate_count{};
@@ -62,13 +63,13 @@ export struct SystemOptions {
     //    spdlog::level::level_enum log_level{spdlog::level::info};
 
     // Storage
-    SharedPtr<String> data_dir{};
-    SharedPtr<String> wal_dir{};
+    std::shared_ptr<std::string> data_dir{};
+    std::shared_ptr<std::string> wal_dir{};
     u64 default_row_size{};
 
     // Buffer
     u64 buffer_pool_size{};
-    SharedPtr<String> temp_dir{};
+    std::shared_ptr<std::string> temp_dir{};
 
     // Wal
     u64 wal_size_threshold_{};
@@ -78,7 +79,7 @@ export struct SystemOptions {
     u64 delta_checkpoint_interval_wal_bytes_{};
 
     // Resource
-    String resource_dict_path_{};
+    std::string resource_dict_path_{};
 };
 
 } // namespace infinity

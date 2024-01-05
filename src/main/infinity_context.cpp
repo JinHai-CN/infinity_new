@@ -26,23 +26,23 @@ import session_manager;
 
 namespace infinity {
 
-void InfinityContext::Init(const SharedPtr<String> &config_path) {
+void InfinityContext::Init(const std::shared_ptr<std::string> &config_path) {
     if (initialized_) {
         return;
     } else {
         // Config
-        config_ = MakeUnique<Config>();
+        config_ = std::make_unique<Config>();
         config_->Init(config_path);
 
         Logger::Initialize(config_.get());
 
-        resource_manager_ = MakeUnique<ResourceManager>(config_->worker_cpu_limit(), config_->total_memory_size());
+        resource_manager_ = std::make_unique<ResourceManager>(config_->worker_cpu_limit(), config_->total_memory_size());
 
-        task_scheduler_ = MakeUnique<TaskScheduler>(config_.get());
+        task_scheduler_ = std::make_unique<TaskScheduler>(config_.get());
 
-        session_mgr_ = MakeUnique<SessionManager>();
+        session_mgr_ = std::make_unique<SessionManager>();
 
-        storage_ = MakeUnique<Storage>(config_.get());
+        storage_ = std::make_unique<Storage>(config_.get());
         storage_->Init();
 
         initialized_ = true;

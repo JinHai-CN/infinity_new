@@ -26,18 +26,18 @@ import parser;
 
 namespace infinity {
 
-QueryResult Database::CreateTable(const String &table_name,
+QueryResult Database::CreateTable(const std::string &table_name,
                                   Vector<ColumnDef *> column_defs,
                                   Vector<TableConstraint *> constraints,
                                   const CreateTableOptions &) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<CreateStatement> create_statement = MakeUnique<CreateStatement>();
-    SharedPtr<CreateTableInfo> create_table_info = MakeShared<CreateTableInfo>();
+    std::unique_ptr<CreateStatement> create_statement = std::make_unique<CreateStatement>();
+    std::shared_ptr<CreateTableInfo> create_table_info = std::make_shared<CreateTableInfo>();
     create_table_info->table_name_ = table_name;
     create_table_info->column_defs_ = Move(column_defs);
     create_table_info->constraints_ = Move(constraints);
@@ -46,15 +46,15 @@ QueryResult Database::CreateTable(const String &table_name,
     return result;
 }
 
-QueryResult Database::DropTable(const String &table_name, const DropTableOptions &options) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Database::DropTable(const std::string &table_name, const DropTableOptions &options) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<DropStatement> drop_statement = MakeUnique<DropStatement>();
-    SharedPtr<DropTableInfo> drop_table_info = MakeShared<DropTableInfo>();
+    std::unique_ptr<DropStatement> drop_statement = std::make_unique<DropStatement>();
+    std::shared_ptr<DropTableInfo> drop_table_info = std::make_shared<DropTableInfo>();
     drop_table_info->schema_name_ = db_name_;
     drop_table_info->table_name_ = table_name;
     drop_table_info->conflict_type_ = options.conflict_type_;
@@ -64,43 +64,43 @@ QueryResult Database::DropTable(const String &table_name, const DropTableOptions
 }
 
 QueryResult Database::ListTables() {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<ShowStatement> show_statement = MakeUnique<ShowStatement>();
+    std::unique_ptr<ShowStatement> show_statement = std::make_unique<ShowStatement>();
     show_statement->show_type_ = ShowStmtType::kTables;
     QueryResult result = query_context_ptr->QueryStatement(show_statement.get());
     return result;
 }
 
-QueryResult Database::DescribeTable(const String &) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Database::DescribeTable(const std::string &) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<ShowStatement> show_statement = MakeUnique<ShowStatement>();
+    std::unique_ptr<ShowStatement> show_statement = std::make_unique<ShowStatement>();
     show_statement->show_type_ = ShowStmtType::kColumns;
     QueryResult result = query_context_ptr->QueryStatement(show_statement.get());
     return result;
 }
 
-SharedPtr<Table> Database::GetTable(const String &table_name) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+std::shared_ptr<Table> Database::GetTable(const std::string &table_name) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<CommandStatement> command_statement = MakeUnique<CommandStatement>();
-    command_statement->command_info_ = MakeShared<CheckTable>(table_name.c_str());
+    std::unique_ptr<CommandStatement> command_statement = std::make_unique<CommandStatement>();
+    command_statement->command_info_ = std::make_shared<CheckTable>(table_name.c_str());
     QueryResult result= query_context_ptr->QueryStatement(command_statement.get());
     if (result.status_.ok()) {
-        return MakeShared<Table>(table_name, session_);
+        return std::make_shared<Table>(table_name, session_);
     } else {
         return nullptr;
     }

@@ -1,5 +1,6 @@
 module;
 #include <string>
+#include <charconv>
 # 3 __FILE__ 1 3 // Enter "faked" system files since std is reserved module name
 export module std:string;
 export namespace std {
@@ -19,6 +20,11 @@ export namespace std {
 #endif
 
     using std::to_string;
+    using std::stoi;
+    using std::strtol;
+    using std::strtof;
+    using std::strtod;
+    using std::from_chars;
 
     inline namespace literals {
         using std::literals::operator""s;

@@ -14,7 +14,7 @@
 
 export module query_result;
 
-import stl;
+import std;
 import data_table;
 import status;
 import logical_node_type;
@@ -28,8 +28,8 @@ public:
     BaseResult(BaseResult& other): status_(other.status_), result_table_(other.result_table_) {}
 
     BaseResult& operator=(BaseResult&& other)  noexcept {
-        status_ = Move(other.status_);
-        result_table_ = Move(other.result_table_);
+        status_ = std::move(other.status_);
+        result_table_ = std::move(other.result_table_);
         return *this;
     }
 
@@ -37,16 +37,16 @@ public:
     [[nodiscard]] inline ErrorCode ErrorCode() const { return status_.code(); }
     [[nodiscard]] inline DataTable* ResultTable() const { return result_table_.get(); }
     [[nodiscard]] inline const char *ErrorMsg() const { return status_.message(); }
-    [[nodiscard]] inline String& ErrorStr() const { return *status_.msg_; }
+    [[nodiscard]] inline std::string& ErrorStr() const { return *status_.msg_; }
 
 public:
     Status status_{};
-    SharedPtr<DataTable> result_table_{};
+    std::shared_ptr<DataTable> result_table_{};
 };
 
 export struct QueryResult : public BaseResult {
     LogicalNodeType root_operator_type_{LogicalNodeType::kInvalid};
-    String ToString() const;
+    std::string ToString() const;
 
     static QueryResult UnusedResult() {
         return {};

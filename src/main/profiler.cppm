@@ -25,7 +25,7 @@ export class BaseProfiler {
 public:
     BaseProfiler() = default;
 
-    explicit BaseProfiler(String name) : name_(Move(name)) {}
+    explicit BaseProfiler(std::string name) : name_(Move(name)) {}
 
     // Start the profiler
     void Begin();
@@ -33,9 +33,9 @@ public:
     // End the profiler
     void End();
 
-    [[nodiscard]] String ElapsedToString(i64 scale = 1) const;
+    [[nodiscard]] std::string ElapsedToString(i64 scale = 1) const;
 
-    static String ElapsedToString(NanoSeconds duration, i64 scale = 1);
+    static std::string ElapsedToString(NanoSeconds duration, i64 scale = 1);
 
     // Return the elapsed time from begin, if the profiler is ended, it will return total elapsed time.
     [[nodiscard]] inline i64 Elapsed() const {
@@ -49,8 +49,8 @@ public:
 
     [[nodiscard]] inline i64 GetEnd() const { return end_ts_.time_since_epoch().count(); }
 
-    [[nodiscard]] const String &name() const { return name_; }
-    void set_name(const String &name) { name_ = name; }
+    [[nodiscard]] const std::string &name() const { return name_; }
+    void set_name(const std::string &name) { name_ = name; }
 
 private:
     [[nodiscard]] static inline TimePoint<Clock> Now() {
@@ -63,7 +63,7 @@ private:
     TimePoint<Clock> end_ts_{};
 
     bool finished_ = false;
-    String name_{};
+    std::string name_{};
 };
 
 export enum class QueryPhase : i8 {
@@ -93,7 +93,7 @@ struct OperatorInformation {
           output_data_size_(other.output_data_size_), output_rows_(other.output_rows_) {
     }
 
-    OperatorInformation(String name, i64 start, i64 end, i64 elapsed, u16 input_rows, i32 output_data_size, u16 output_rows)
+    OperatorInformation(std::string name, i64 start, i64 end, i64 elapsed, u16 input_rows, i32 output_data_size, u16 output_rows)
         : name_(Move(name)), start_(start), end_(end), elapsed_(elapsed), input_rows_(input_rows), output_data_size_(output_data_size), output_rows_(output_rows) {
     }
 
@@ -110,7 +110,7 @@ struct OperatorInformation {
         return *this;
     }
 
-    String name_ {};
+    std::string name_ {};
 
     i64 start_ {};
     i64 end_ {};
@@ -127,11 +127,11 @@ export struct TaskBinding {
 
 export class OptimizerProfiler {
 public:
-    void StartRule(const String &rule_name);
+    void StartRule(const std::string &rule_name);
 
     void StopRule();
 
-    [[nodiscard]] String ToString(SizeT intent = 0) const;
+    [[nodiscard]] std::string ToString(SizeT intent = 0) const;
 
 private:
     Vector<BaseProfiler> profilers_;
@@ -198,9 +198,9 @@ public:
 
     OptimizerProfiler &optimizer() { return optimizer_; }
 
-    [[nodiscard]] String ToString() const;
+    [[nodiscard]] std::string ToString() const;
 
-    static String QueryPhaseToString(QueryPhase phase);
+    static std::string QueryPhaseToString(QueryPhase phase);
 
     static Json Serialize(const QueryProfiler *profiler);
 

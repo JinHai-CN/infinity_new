@@ -13,7 +13,7 @@
 // limitations under the License.
 module;
 
-import stl;
+import std;
 import third_party;
 
 export module logger;
@@ -24,7 +24,7 @@ export module logger;
 
 namespace infinity {
 
-export extern SharedPtr<spd_logger> infinity_logger;
+export extern std::shared_ptr<spd_logger> infinity_logger;
 
 class Config;
 
@@ -38,27 +38,27 @@ public:
 };
 
 export inline void
-LOG_TRACE(const String& msg) {
+LOG_TRACE(const std::string& msg) {
     infinity_logger->trace(msg);
 }
 
 export inline void
-LOG_INFO(const String& msg) {
+LOG_INFO(const std::string& msg) {
     infinity_logger->info(msg);
 }
 
 export inline void
-LOG_WARN(const String& msg) {
+LOG_WARN(const std::string& msg) {
     infinity_logger->warn(msg);
 }
 
 export inline void
-LOG_ERROR(const String& msg) {
+LOG_ERROR(const std::string& msg) {
     infinity_logger->error(msg);
 }
 
 export inline void
-LOG_CRITICAL(const String& msg) {
+LOG_CRITICAL(const std::string& msg) {
     infinity_logger->critical(msg);
 }
 

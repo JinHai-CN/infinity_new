@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import txn;
 import config;
 import options;
@@ -36,8 +37,8 @@ public:
     BaseSession(u64 session_id, SessionType session_type)
         : current_database_("default"), session_type_(session_type), session_id_(session_id) {}
 
-    inline void set_current_schema(const String &current_database) { current_database_ = current_database; }
-    [[nodiscard]] inline String &current_database() { return current_database_; }
+    inline void set_current_schema(const std::string &current_database) { current_database_ = current_database; }
+    [[nodiscard]] inline std::string &current_database() { return current_database_; }
     SessionOptions *options() { return &session_options; }
     [[nodiscard]] inline u64 session_id() const { return session_id_; }
 
@@ -52,7 +53,7 @@ public:
 
 protected:
     // Current schema
-    String current_database_{};
+    std::string current_database_{};
 
     // Txn is session level.
     Txn *txn_{};
@@ -77,23 +78,23 @@ export class RemoteSession : public BaseSession {
 public:
     explicit RemoteSession(u64 session_id) : BaseSession(session_id, SessionType::kRemote) {}
 
-    [[nodiscard]] inline const String &user_name() const { return user_name_; }
+    [[nodiscard]] inline const std::string &user_name() const { return user_name_; }
 
     [[nodiscard]] inline u64 user_id() const { return user_id_; }
 
-    inline void SetClientInfo(const String &ip_address, u16 port) {
+    inline void SetClientInfo(const std::string &ip_address, u16 port) {
         client_address_ = ip_address;
         client_port_ = port;
     }
 
 private:
     // User / Tenant information
-    String tenant_name_{};
-    String user_name_{};
+    std::string tenant_name_{};
+    std::string user_name_{};
 
     u64 user_id_{0};
 
-    String client_address_{};
+    std::string client_address_{};
     u16 client_port_{};
 };
 
@@ -101,13 +102,13 @@ private:
 // public:
 //     explicit Session() : current_database_("default") {}
 //
-//     [[nodiscard]] inline String &current_database() { return current_database_; }
+//     [[nodiscard]] inline std::string &current_database() { return current_database_; }
 //
-//     [[nodiscard]] inline const String &user_name() const { return user_name_; }
+//     [[nodiscard]] inline const std::string &user_name() const { return user_name_; }
 //
 //     [[nodiscard]] inline u64 user_id() const { return user_id_; }
 //
-//     inline void SetClientInfo(const String &ip_address, u16 port) {
+//     inline void SetClientInfo(const std::string &ip_address, u16 port) {
 //         client_address_ = ip_address;
 //         client_port_ = port;
 //     }
@@ -118,15 +119,15 @@ private:
 //
 // private:
 //     // Current schema
-//     String current_database_;
+//     std::string current_database_;
 //
 //     // User / Tenant information
-//     String tenant_name_;
-//     String user_name_;
+//     std::string tenant_name_;
+//     std::string user_name_;
 //
 //     u64 user_id_{0};
 //
-//     String client_address_{};
+//     std::string client_address_{};
 //     u16 client_port_{};
 // };
 

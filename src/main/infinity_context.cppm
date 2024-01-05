@@ -16,7 +16,7 @@ module;
 
 export module infinity_context;
 
-import stl;
+import std;
 import config;
 import resource_manager;
 import task_scheduler;
@@ -38,7 +38,7 @@ public:
 
     [[nodiscard]] inline SessionManager *session_manager() noexcept { return session_mgr_.get(); }
 
-    void Init(const SharedPtr<String> &config_path);
+    void Init(const std::shared_ptr<std::string> &config_path);
 
     void UnInit();
 
@@ -47,11 +47,11 @@ private:
 
     InfinityContext() = default;
 
-    UniquePtr<Config> config_{};
-    UniquePtr<ResourceManager> resource_manager_{};
-    UniquePtr<TaskScheduler> task_scheduler_{};
-    UniquePtr<Storage> storage_{};
-    UniquePtr<SessionManager> session_mgr_{};
+    std::unique_ptr<Config> config_{};
+    std::unique_ptr<ResourceManager> resource_manager_{};
+    std::unique_ptr<TaskScheduler> task_scheduler_{};
+    std::unique_ptr<Storage> storage_{};
+    std::unique_ptr<SessionManager> session_mgr_{};
 
     bool initialized_{false};
 };

@@ -38,8 +38,8 @@ import status;
 
 namespace infinity {
 
-SharedPtr<Infinity> Infinity::RemoteConnect() {
-    SharedPtr<Infinity> infinity_ptr = MakeShared<Infinity>();
+std::shared_ptr<Infinity> Infinity::RemoteConnect() {
+    std::shared_ptr<Infinity> infinity_ptr = std::make_shared<Infinity>();
     SessionManager* session_mgr = InfinityContext::instance().session_manager();
     infinity_ptr->session_ = session_mgr->CreateRemoteSession();
     return infinity_ptr;
@@ -55,14 +55,14 @@ u64 Infinity::GetSessionId() {
     return session_->session_id();
 }
 
-void Infinity::LocalInit(const String &path) {
+void Infinity::LocalInit(const std::string &path) {
     LocalFileSystem fs;
     if (!fs.Exists(path)) {
         std::cerr << path << " doesn't exist." << std::endl;
         return;
     }
 
-    SharedPtr<String> config_path = MakeShared<String>(path + "/infinity_conf.toml");
+    std::shared_ptr<std::string> config_path = std::make_shared<std::string>(path + "/infinity_conf.toml");
 
     InfinityContext::instance().Init(config_path);
 }
@@ -71,8 +71,8 @@ void Infinity::LocalUnInit() {
     InfinityContext::instance().UnInit();
 }
 
-SharedPtr<Infinity> Infinity::LocalConnect() {
-    SharedPtr<Infinity> infinity_ptr = MakeShared<Infinity>();
+std::shared_ptr<Infinity> Infinity::LocalConnect() {
+    std::shared_ptr<Infinity> infinity_ptr = std::make_shared<Infinity>();
 
     SessionManager* session_mgr = InfinityContext::instance().session_manager();
     infinity_ptr->session_ = session_mgr->CreateLocalSession();
@@ -83,24 +83,24 @@ void Infinity::LocalDisconnect() {
 //    Printf("To disconnect the database.\n");
 }
 
-QueryResult Infinity::CreateDatabase(const String &db_name, const CreateDatabaseOptions &create_db_options) {
+QueryResult Infinity::CreateDatabase(const std::string &db_name, const CreateDatabaseOptions &create_db_options) {
     QueryResult query_result;
     if(db_name.empty()) {
         query_result.result_table_ = nullptr;
-        UniquePtr<String> err_msg = MakeUnique<String>("Empty database name is given.");
+        std::unique_ptr<std::string> err_msg = std::make_unique<std::string>("Empty database name is given.");
         LOG_ERROR(*err_msg);
         query_result.status_ = Status(ErrorCode::kError, Move(err_msg));
         return query_result;
     }
 
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<CreateStatement> create_statement = MakeUnique<CreateStatement>();
-    SharedPtr<CreateSchemaInfo> create_schema_info = MakeShared<CreateSchemaInfo>();
+    std::unique_ptr<CreateStatement> create_statement = std::make_unique<CreateStatement>();
+    std::shared_ptr<CreateSchemaInfo> create_schema_info = std::make_shared<CreateSchemaInfo>();
     create_schema_info->schema_name_ = db_name;
     create_statement->create_info_ = create_schema_info;
 
@@ -109,15 +109,15 @@ QueryResult Infinity::CreateDatabase(const String &db_name, const CreateDatabase
     return query_result;
 }
 
-QueryResult Infinity::DropDatabase(const String &db_name, const DropDatabaseOptions &) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Infinity::DropDatabase(const std::string &db_name, const DropDatabaseOptions &) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<DropStatement> drop_statement = MakeUnique<DropStatement>();
-    SharedPtr<DropSchemaInfo> drop_schema_info = MakeShared<DropSchemaInfo>();
+    std::unique_ptr<DropStatement> drop_statement = std::make_unique<DropStatement>();
+    std::shared_ptr<DropSchemaInfo> drop_schema_info = std::make_shared<DropSchemaInfo>();
     drop_schema_info->schema_name_ = db_name;
     drop_statement->drop_info_ = drop_schema_info;
     QueryResult result = query_context_ptr->QueryStatement(drop_statement.get());
@@ -125,37 +125,37 @@ QueryResult Infinity::DropDatabase(const String &db_name, const DropDatabaseOpti
 }
 
 QueryResult Infinity::ListDatabases() {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<ShowStatement> show_statement = MakeUnique<ShowStatement>();
+    std::unique_ptr<ShowStatement> show_statement = std::make_unique<ShowStatement>();
     show_statement->show_type_ = ShowStmtType::kDatabases;
     QueryResult result = query_context_ptr->QueryStatement(show_statement.get());
     return result;
 }
 
-SharedPtr<Database> Infinity::GetDatabase(const String &db_name) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+std::shared_ptr<Database> Infinity::GetDatabase(const std::string &db_name) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<CommandStatement> command_statement = MakeUnique<CommandStatement>();
-    command_statement->command_info_ = MakeShared<UseCmd>(db_name.c_str());
+    std::unique_ptr<CommandStatement> command_statement = std::make_unique<CommandStatement>();
+    command_statement->command_info_ = std::make_shared<UseCmd>(db_name.c_str());
     QueryResult result = query_context_ptr->QueryStatement(command_statement.get());
     if (result.status_.ok()) {
-        return MakeShared<Database>(db_name, session_);
+        return std::make_shared<Database>(db_name, session_);
     } else {
         return nullptr;
     }
 }
 
-QueryResult Infinity::Query(const String &query_text) {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+QueryResult Infinity::Query(const std::string &query_text) {
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
@@ -166,13 +166,13 @@ QueryResult Infinity::Query(const String &query_text) {
 }
 
 QueryResult Infinity::Flush() {
-    UniquePtr<QueryContext> query_context_ptr = MakeUnique<QueryContext>(session_.get());
+    std::unique_ptr<QueryContext> query_context_ptr = std::make_unique<QueryContext>(session_.get());
     query_context_ptr->Init(InfinityContext::instance().config(),
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
                             InfinityContext::instance().session_manager());
-    UniquePtr<FlushStatement> flush_statement = MakeUnique<FlushStatement>();
+    std::unique_ptr<FlushStatement> flush_statement = std::make_unique<FlushStatement>();
     flush_statement->type_ = FlushType::kData;
 
     QueryResult result = query_context_ptr->QueryStatement(flush_statement.get());

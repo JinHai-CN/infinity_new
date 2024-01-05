@@ -15,7 +15,8 @@
 module;
 
 import logical_node_type;
-import stl;
+import std;
+import type_alias;
 import config;
 import session;
 import resource_manager;
@@ -60,13 +61,13 @@ public:
         resource_manager_ = nullptr;
     }
 
-    QueryResult Query(const String &query);
+    QueryResult Query(const std::string &query);
 
     QueryResult QueryStatement(const BaseStatement *statement);
 
-    inline void set_current_schema(const String &current_schema) { session_ptr_->set_current_schema(current_schema); }
+    inline void set_current_schema(const std::string &current_schema) { session_ptr_->set_current_schema(current_schema); }
 
-    [[nodiscard]] inline const String &schema_name() const { return session_ptr_->current_database(); }
+    [[nodiscard]] inline const std::string &schema_name() const { return session_ptr_->current_database(); }
 
     [[nodiscard]] inline u64 cpu_number_limit() const { return cpu_number_limit_; }
 
@@ -90,8 +91,6 @@ public:
 
     void RollbackTxn();
 
-
-
     [[nodiscard]] Txn *GetTxn() const { return session_ptr_->GetTxn(); }
 
     [[nodiscard]] inline Storage *storage() const { return storage_; }
@@ -114,14 +113,14 @@ public:
 
     void FlushProfiler(TaskProfiler &&profiler) {
         if(query_profiler_) {
-            query_profiler_->Flush(Move(profiler));
+            query_profiler_->Flush(std::move(profiler));
         }
     }
 
 private:
     inline void CreateQueryProfiler() {
         if (is_enable_profiling()) {
-            query_profiler_ = MakeShared<QueryProfiler>(true);
+            query_profiler_ = std::make_shared<QueryProfiler>(true);
         }
     }
 
@@ -150,13 +149,13 @@ private:
 
 private:
     // Parser
-    UniquePtr<SQLParser> parser_{};
-    UniquePtr<LogicalPlanner> logical_planner_{};
-    UniquePtr<Optimizer> optimizer_{};
-    UniquePtr<PhysicalPlanner> physical_planner_{};
-    UniquePtr<FragmentBuilder> fragment_builder_{};
+    std::unique_ptr<SQLParser> parser_{};
+    std::unique_ptr<LogicalPlanner> logical_planner_{};
+    std::unique_ptr<Optimizer> optimizer_{};
+    std::unique_ptr<PhysicalPlanner> physical_planner_{};
+    std::unique_ptr<FragmentBuilder> fragment_builder_{};
 
-    SharedPtr<QueryProfiler> query_profiler_{};
+    std::shared_ptr<QueryProfiler> query_profiler_{};
 
     Config *global_config_{};
     TaskScheduler *scheduler_{};
@@ -167,13 +166,13 @@ private:
 
     // Get following information from session.
     // Current schema
-    String current_schema_;
+    std::string current_schema_;
 
     u64 catalog_version_{};
 
     // User / Tenant information
-    String tenant_name_;
-    String user_name_;
+    std::string tenant_name_;
+    std::string user_name_;
 
     u64 query_id_{0};
     u64 tenant_id_{0};

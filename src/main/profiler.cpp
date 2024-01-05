@@ -46,8 +46,8 @@ NanoSeconds BaseProfiler::ElapsedInternal() const {
     return ElapsedFromStart(now, begin_ts_);
 }
 
-String BaseProfiler::ElapsedToString(NanoSeconds duration, i64 scale) {
-    String result;
+std::string BaseProfiler::ElapsedToString(NanoSeconds duration, i64 scale) {
+    std::string result;
     if (duration.count() <= 1000 * scale) {
         result.append(Format("{}ns", duration.count()));
     } else if (duration.count() <= 1000 * 1000 * scale) {
@@ -60,20 +60,20 @@ String BaseProfiler::ElapsedToString(NanoSeconds duration, i64 scale) {
     return result;
 }
 
-String BaseProfiler::ElapsedToString(i64 scale) const {
+std::string BaseProfiler::ElapsedToString(i64 scale) const {
     return ElapsedToString(this->ElapsedInternal(), scale);
 }
 
-void OptimizerProfiler::StartRule(const String &rule_name) {
+void OptimizerProfiler::StartRule(const std::string &rule_name) {
     profilers_.emplace_back(rule_name);
     profilers_.back().Begin();
 }
 
 void OptimizerProfiler::StopRule() { profilers_.back().End(); }
 
-String OptimizerProfiler::ToString(SizeT intent) const {
-    String result;
-    String space(intent, ' ');
+std::string OptimizerProfiler::ToString(SizeT intent) const {
+    std::string result;
+    std::string space(intent, ' ');
 
     SizeT profiler_count = profilers_.size();
     for (SizeT idx = 0; idx < profiler_count; ++idx) {
@@ -127,7 +127,7 @@ void TaskProfiler::StopOperator(const OperatorState *operator_state) {
     active_operator_ = nullptr;
 }
 
-String QueryProfiler::QueryPhaseToString(QueryPhase phase) {
+std::string QueryProfiler::QueryPhaseToString(QueryPhase phase) {
     switch (phase) {
         case QueryPhase::kParser: {
             return "Parser";
@@ -236,7 +236,7 @@ void QueryProfiler::ExecuteRender(std::stringstream &ss) const {
     }
 }
 
-String QueryProfiler::ToString() const {
+std::string QueryProfiler::ToString() const {
     std::stringstream ss;
     constexpr SizeT profilers_count = magic_enum::enum_integer(QueryPhase::kInvalid);
 

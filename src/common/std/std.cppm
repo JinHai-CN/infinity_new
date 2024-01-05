@@ -1,4 +1,9 @@
 # 1 __FILE__ 1 3 // Enter "faked" system files since std is reserved module name
+module;
+
+#include <algorithm>
+#include <cctype>
+
 export module std;
 
 export import :string;
@@ -33,3 +38,16 @@ export import :condition_variable;
 //export import :coroutine;
 export import :unordered_map;
 export import :optional;
+export import :move;
+export import :system_error;
+
+export namespace infinity {
+
+void ToUpper(std::string & str) { std::transform(str.begin(), str.end(), str.begin(), ::toupper); }
+int32_t ToUpper(int c) { return ::toupper(c); }
+
+void ToLower(std::string & str) { std::transform(str.begin(), str.end(), str.begin(), ::tolower); }
+int32_t ToLower(int c) { return ::tolower(c); }
+
+}
+

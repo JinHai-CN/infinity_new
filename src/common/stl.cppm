@@ -125,11 +125,11 @@ export {
         return path.substr(pos + 1);
     }
 
-    void ToUpper(String & str) { std::transform(str.begin(), str.end(), str.begin(), ::toupper); }
-    int ToUpper(int c) { return ::toupper(c); }
-
-    void ToLower(String & str) { std::transform(str.begin(), str.end(), str.begin(), ::tolower); }
-    int ToLower(int c) { return ::tolower(c); }
+//    void ToUpper(String & str) { std::transform(str.begin(), str.end(), str.begin(), ::toupper); }
+//    int ToUpper(int c) { return ::toupper(c); }
+//
+//    void ToLower(String & str) { std::transform(str.begin(), str.end(), str.begin(), ::tolower); }
+//    int ToLower(int c) { return ::tolower(c); }
 
     inline void StringToLower(String & str) {
         std::transform(str.begin(), str.end(), str.begin(), [](const auto c) { return std::tolower(c); });

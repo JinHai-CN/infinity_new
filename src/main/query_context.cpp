@@ -17,7 +17,7 @@ module;
 #include <sstream>
 //#include "gperftools/profiler.h"
 
-import stl;
+import std;
 import session;
 import config;
 import task_scheduler;
@@ -67,18 +67,18 @@ void QueryContext::Init(Config *global_config_ptr,
     cpu_number_limit_ = resource_manager_ptr->GetCpuResource();
     memory_size_limit_ = resource_manager_ptr->GetMemoryResource();
 
-    parser_ = MakeUnique<SQLParser>();
-    logical_planner_ = MakeUnique<LogicalPlanner>(this);
-    optimizer_ = MakeUnique<Optimizer>(this);
-    physical_planner_ = MakeUnique<PhysicalPlanner>(this);
-    fragment_builder_ = MakeUnique<FragmentBuilder>(this);
+    parser_ = std::make_unique<SQLParser>();
+    logical_planner_ = std::make_unique<LogicalPlanner>(this);
+    optimizer_ = std::make_unique<Optimizer>(this);
+    physical_planner_ = std::make_unique<PhysicalPlanner>(this);
+    fragment_builder_ = std::make_unique<FragmentBuilder>(this);
 }
 
-QueryResult QueryContext::Query(const String &query) {
+QueryResult QueryContext::Query(const std::string &query) {
     CreateQueryProfiler();
 
     StartProfile(QueryPhase::kParser);
-    UniquePtr<ParserResult> parsed_result = MakeUnique<ParserResult>();
+    std::unique_ptr<ParserResult> parsed_result = std::make_unique<ParserResult>();
     parser_->Parse(query, parsed_result.get());
 
     if (parsed_result->IsError()) {
@@ -113,7 +113,7 @@ QueryResult QueryContext::QueryStatement(const BaseStatement *statement) {
 
         // Build unoptimized logical plan for each SQL statement.
         StartProfile(QueryPhase::kLogicalPlan);
-        SharedPtr<BindContext> bind_context;
+        std::shared_ptr<BindContext> bind_context;
         auto state = logical_planner_->Build(statement, bind_context);
         // FIXME
         if (!state.ok()) {
@@ -121,7 +121,7 @@ QueryResult QueryContext::QueryStatement(const BaseStatement *statement) {
         }
 
         current_max_node_id_ = bind_context->GetNewLogicalNodeId();
-        SharedPtr<LogicalNode> logical_plan = logical_planner_->LogicalPlan();
+        std::shared_ptr<LogicalNode> logical_plan = logical_planner_->LogicalPlan();
         StopProfile(QueryPhase::kLogicalPlan);
 
         // Apply optimized rule to the logical plan
@@ -131,17 +131,17 @@ QueryResult QueryContext::QueryStatement(const BaseStatement *statement) {
 
         // Build physical plan
         StartProfile(QueryPhase::kPhysicalPlan);
-        UniquePtr<PhysicalOperator> physical_plan = physical_planner_->BuildPhysicalOperator(logical_plan);
+        std::unique_ptr<PhysicalOperator> physical_plan = physical_planner_->BuildPhysicalOperator(logical_plan);
         StopProfile(QueryPhase::kPhysicalPlan);
 
         StartProfile(QueryPhase::kPipelineBuild);
         // Fragment Builder, only for test now.
-        // SharedPtr<PlanFragment> plan_fragment = fragment_builder.Build(physical_plan);
+        // std::shared_ptr<PlanFragment> plan_fragment = fragment_builder.Build(physical_plan);
         auto plan_fragment = fragment_builder_->BuildFragment(physical_plan.get());
         StopProfile(QueryPhase::kPipelineBuild);
 
         StartProfile(QueryPhase::kTaskBuild);
-        Vector<FragmentTask *> tasks;
+        std::vector<FragmentTask *> tasks;
         FragmentContext::BuildTask(this, nullptr, plan_fragment.get(), tasks);
         StopProfile(QueryPhase::kTaskBuild);
 

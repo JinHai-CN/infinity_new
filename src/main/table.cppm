@@ -14,7 +14,7 @@
 
 export module table;
 
-import stl;
+import std;
 import query_options;
 import value;
 import parser;
@@ -25,25 +25,25 @@ namespace infinity {
 
 export class Table {
 public:
-    Table(String table_name, SharedPtr<BaseSession> session) : table_name_(Move(table_name)), session_(Move(session)) {}
+    Table(std::string table_name, std::shared_ptr<BaseSession> session) : table_name_(std::move(table_name)), session_(std::move(session)) {}
 
-    QueryResult CreateIndex(const String &index_name, Vector<IndexInfo *> *index_info_list, CreateIndexOptions create_index_options);
+    QueryResult CreateIndex(const std::string &index_name, std::vector<IndexInfo *> *index_info_list, CreateIndexOptions create_index_options);
 
-    QueryResult DropIndex(const String &index_name);
+    QueryResult DropIndex(const std::string &index_name);
 
-    QueryResult Insert(Vector<String> *columns, Vector<Vector<ParsedExpr *> *> *values);
+    QueryResult Insert(std::vector<std::string> *columns, std::vector<std::vector<ParsedExpr *> *> *values);
 
-    QueryResult Import(const String &path, ImportOptions import_options);
+    QueryResult Import(const std::string &path, ImportOptions import_options);
 
     QueryResult Delete(ParsedExpr *filter);
 
-    QueryResult Update(ParsedExpr *filter, Vector<UpdateExpr *> *update_list);
+    QueryResult Update(ParsedExpr *filter, std::vector<UpdateExpr *> *update_list);
 
-    QueryResult Search(SearchExpr *search_expr, ParsedExpr *filter, Vector<ParsedExpr *> *output_columns);
+    QueryResult Search(SearchExpr *search_expr, ParsedExpr *filter, std::vector<ParsedExpr *> *output_columns);
 
 private:
-    String table_name_{};
-    SharedPtr<BaseSession> session_{};
+    std::string table_name_{};
+    std::shared_ptr<BaseSession> session_{};
 };
 
 } // namespace infinity

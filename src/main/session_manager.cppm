@@ -13,7 +13,8 @@
 // limitations under the License.
 module;
 
-import stl;
+import std;
+import type_alias;
 import session;
 
 export module session_manager;
@@ -25,28 +26,28 @@ export class SessionManager {
 public:
     SessionManager() = default;
 
-    SharedPtr<RemoteSession> CreateRemoteSession() {
+    std::shared_ptr<RemoteSession> CreateRemoteSession() {
         u64 session_id = ++ session_id_generator_;
-        SharedPtr<RemoteSession> remote_session = MakeShared<RemoteSession>(session_id);
+        std::shared_ptr<RemoteSession> remote_session = std::make_shared<RemoteSession>(session_id);
         {
-            UniqueLock<RWMutex> w_locker(rw_locker_);
+            std::unique_lock<std::shared_mutex> w_locker(rw_locker_);
             sessions_.emplace(session_id, remote_session.get());
         }
         return remote_session;
     }
 
-    SharedPtr<LocalSession> CreateLocalSession() {
+    std::shared_ptr<LocalSession> CreateLocalSession() {
         u64 session_id = ++ session_id_generator_;
-        SharedPtr<LocalSession> local_session = MakeShared<LocalSession>(session_id);
+        std::shared_ptr<LocalSession> local_session = std::make_shared<LocalSession>(session_id);
         {
-            UniqueLock<RWMutex> w_locker(rw_locker_);
+            std::unique_lock<std::shared_mutex> w_locker(rw_locker_);
             sessions_.emplace(session_id, local_session.get());
         }
         return local_session;
     }
 
     BaseSession* GetSessionByID(u64 session_id) {
-        SharedLock<RWMutex> r_locker(rw_locker_);
+        std::shared_lock<std::shared_mutex> r_locker(rw_locker_);
         auto iter = sessions_.find(session_id);
         if(iter == sessions_.end()) {
             return nullptr;
@@ -56,21 +57,21 @@ public:
     }
 
     void RemoveSessionByID(u64 session_id) {
-        UniqueLock<RWMutex> w_locker(rw_locker_);
+        std::unique_lock<std::shared_mutex> w_locker(rw_locker_);
         sessions_.erase(session_id);
     }
 
     SizeT GetSessionCount() {
-        SharedLock<RWMutex> r_locker(rw_locker_);
+        std::unique_lock<std::shared_mutex> r_locker(rw_locker_);
         return sessions_.size();
     }
 
 private:
-    RWMutex rw_locker_{};
-    HashMap<u64, BaseSession*> sessions_;
+    std::shared_mutex rw_locker_{};
+    std::unordered_map<u64, BaseSession*> sessions_;
 
     // First session is ONE;
-    atomic_u64 session_id_generator_{};
+    std::atomic<u64> session_id_generator_{};
 };
 
 }

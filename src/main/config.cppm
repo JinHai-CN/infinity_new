@@ -15,27 +15,28 @@ module;
 
 export module config;
 
-import stl;
+import std;
 import third_party;
 import options;
+import type_alias;
 
 namespace infinity {
 
-export constexpr StringView profile_history_capacity_name = "profile_history_capacity";
-export constexpr StringView enable_profiling_name = "enable_profile";
-export constexpr StringView worker_cpu_limit = "cpu_count";
-export constexpr StringView log_level = "log_level";
+export constexpr std::string_view profile_history_capacity_name = "profile_history_capacity";
+export constexpr std::string_view enable_profiling_name = "enable_profile";
+export constexpr std::string_view worker_cpu_limit = "cpu_count";
+export constexpr std::string_view log_level = "log_level";
 
 export struct Config {
 public:
-    SharedPtr<String> Init(const SharedPtr<String> &config_path);
+    std::shared_ptr<std::string> Init(const std::shared_ptr<std::string> &config_path);
 
     void PrintAll() const;
 
     // General
-    [[nodiscard]] inline String version() const { return system_option_.version; }
+    [[nodiscard]] inline std::string version() const { return system_option_.version; }
 
-    [[nodiscard]] inline String time_zone() const { return system_option_.time_zone; }
+    [[nodiscard]] inline std::string time_zone() const { return system_option_.time_zone; }
 
     [[nodiscard]] inline i32 time_zone_bias() const { return system_option_.time_zone_bias; }
 
@@ -48,7 +49,7 @@ public:
 
     [[nodiscard]] inline u64 query_memory_limit() const { return system_option_.query_memory_limit; }
 
-    [[nodiscard]] inline String listen_address() const { return system_option_.listen_address; }
+    [[nodiscard]] inline std::string listen_address() const { return system_option_.listen_address; }
 
     [[nodiscard]] inline u16 pg_port() const { return system_option_.pg_port; }
 
@@ -62,11 +63,11 @@ public:
     [[nodiscard]] inline SizeT profile_record_capacity() const { return system_option_.profile_record_capacity; }
 
     // Log
-    [[nodiscard]] inline SharedPtr<String> log_filename() const { return system_option_.log_filename; }
+    [[nodiscard]] inline std::shared_ptr<std::string> log_filename() const { return system_option_.log_filename; }
 
-    [[nodiscard]] inline SharedPtr<String> log_dir() const { return system_option_.log_dir; }
+    [[nodiscard]] inline std::shared_ptr<std::string> log_dir() const { return system_option_.log_dir; }
 
-    [[nodiscard]] inline SharedPtr<String> log_file_path() const { return system_option_.log_file_path; }
+    [[nodiscard]] inline std::shared_ptr<std::string> log_file_path() const { return system_option_.log_file_path; }
 
     [[nodiscard]] inline bool log_to_stdout() const { return system_option_.log_to_stdout; }
 
@@ -77,15 +78,15 @@ public:
     [[nodiscard]] inline LogLevel log_level() const { return system_option_.log_level; }
 
     // Storage
-    [[nodiscard]] inline SharedPtr<String> data_dir() const { return system_option_.data_dir; }
+    [[nodiscard]] inline std::shared_ptr<std::string> data_dir() const { return system_option_.data_dir; }
 
-    [[nodiscard]] inline SharedPtr<String> wal_dir() const { return system_option_.wal_dir; }
+    [[nodiscard]] inline std::shared_ptr<std::string> wal_dir() const { return system_option_.wal_dir; }
 
     [[nodiscard]] inline u64 default_row_size() const { return system_option_.default_row_size; }
 
     [[nodiscard]] inline u64 buffer_pool_size() const { return system_option_.buffer_pool_size; }
 
-    [[nodiscard]] inline SharedPtr<String> temp_dir() const { return system_option_.temp_dir; }
+    [[nodiscard]] inline std::shared_ptr<std::string> temp_dir() const { return system_option_.temp_dir; }
 
     // Wal
     [[nodiscard]] inline u64 full_checkpoint_interval_sec() const { return system_option_.full_checkpoint_interval_sec_; }
@@ -99,12 +100,12 @@ public:
     [[nodiscard]] inline u64 wal_size_threshold() const { return system_option_.wal_size_threshold_; }
 
     // Resource
-    [[nodiscard]] inline String resource_dict_path() const { return system_option_.resource_dict_path_; }
+    [[nodiscard]] inline std::string resource_dict_path() const { return system_option_.resource_dict_path_; }
 
 private:
-    static void ParseTimeZoneStr(const String &time_zone_str, String &parsed_time_zone, i32 &parsed_time_zone_bias);
+    static void ParseTimeZoneStr(const std::string &time_zone_str, std::string &parsed_time_zone, i32 &parsed_time_zone_bias);
 
-    static SharedPtr<String> ParseByteSize(const String &byte_size_str, u64 &byte_size);
+    static std::shared_ptr<std::string> ParseByteSize(const std::string &byte_size_str, u64 &byte_size);
 
     static u64 GetAvailableMem();
 
