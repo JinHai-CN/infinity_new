@@ -22,28 +22,29 @@ import third_party;
 import db_server;
 import infinity_exception;
 import infinity_context;
+import type_alias;
 
 namespace {
 
 infinity::DBServer db_server;
 
-//infinity::Thread threaded_thrift_thread;
+//std::thread threaded_thrift_thread;
 //infinity::ThreadedThriftServer threaded_thrift_server;
 
-infinity::Thread pool_thrift_thread;
+std::thread pool_thrift_thread;
 infinity::PoolThriftServer pool_thrift_server;
 //infinity::NonBlockPoolThriftServer non_block_pool_thrift_server;
 
-infinity::Mutex server_mutex;
-infinity::CondVar server_cv;
+std::mutex server_mutex;
+std::condition_variable server_cv;
 
 bool server_running = false;
 
-infinity::Thread shut_down_thread;
+std::thread shut_down_thread;
 
 void ShutdownServer() {
 
-    infinity::UniqueLock<infinity::Mutex> lock(server_mutex);
+    std::unique_lock<std::mutex> lock(server_mutex);
     server_running = true;
     server_cv.wait(lock, [&]{ return !server_running; });
 
@@ -65,7 +66,7 @@ void SignalHandler(int signal_number, siginfo_t *, void *) {
         case SIGQUIT:
         case SIGTERM: {
 
-            infinity::UniqueLock<infinity::Mutex> lock(server_mutex);
+            std::unique_lock<std::mutex> lock(server_mutex);
             server_running = false;
             server_cv.notify_one();
 
@@ -118,7 +119,7 @@ void ParseArguments(int argc, char **argv, StartupParameter &parameters) {
 
     std::string config_path = result["config"].as<std::string>();
     if (!config_path.empty()) {
-        parameters.config_path = MakeShared<std::string>(config_path);
+        parameters.config_path = std::make_shared<std::string>(config_path);
     }
 }
 
@@ -153,15 +154,15 @@ auto main(int argc, char **argv) -> int {
     InfinityContext::instance().config()->PrintAll();
 
 //    threaded_thrift_server.Init(9090);
-//    threaded_thrift_thread = infinity::Thread([&]() { threaded_thrift_server.Start(); });
+//    threaded_thrift_thread = std::thread([&]() { threaded_thrift_server.Start(); });
     u32 thrift_server_port = InfinityContext::instance().config()->sdk_port();
 
     pool_thrift_server.Init(thrift_server_port, 128);
-    pool_thrift_thread = infinity::Thread([&]() { pool_thrift_server.Start(); });
+    pool_thrift_thread = std::thread([&]() { pool_thrift_server.Start(); });
 
 //    non_block_pool_thrift_server.Init(9070, 64);
 //    non_block_pool_thrift_server.Start();
-    shut_down_thread = infinity::Thread([&]() { ShutdownServer(); });
+    shut_down_thread = std::thread([&]() { ShutdownServer(); });
     db_server.Run();
 
     shut_down_thread.join();
