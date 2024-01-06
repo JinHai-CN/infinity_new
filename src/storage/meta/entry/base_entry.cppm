@@ -16,7 +16,8 @@ module;
 
 export module catalog:base_entry;
 
-import stl;
+import type_alias;
+import std;
 import default_values;
 
 namespace infinity {
@@ -58,15 +59,15 @@ public:
     [[nodiscard]] inline bool Committed() const { return commit_ts_ != UNCOMMIT_TS; }
 
 public:
-    atomic_u64 txn_id_{0};
+    std::atomic<u64> txn_id_{0};
     TxnTimeStamp begin_ts_{0};
-    atomic_u64 commit_ts_{UNCOMMIT_TS};
+    std::atomic<u64> commit_ts_{UNCOMMIT_TS};
     bool deleted_{false};
 
     EntryType entry_type_{EntryType::kDummy};
 };
 
 // Merge two reverse-ordered list inplace.
-export void MergeLists(List<UniquePtr<BaseEntry>> &list1, List<UniquePtr<BaseEntry>> &list2);
+export void MergeLists(std::list<std::unique_ptr<BaseEntry>> &list1, std::list<std::unique_ptr<BaseEntry>> &list2);
 
 } // namespace infinity

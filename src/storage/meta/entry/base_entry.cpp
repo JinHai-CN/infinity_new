@@ -16,14 +16,14 @@ module;
 
 module catalog;
 
-import stl;
+import std;
 
 import infinity_exception;
 
 namespace infinity {
 
 // Merge two reverse-ordered list inplace.
-void MergeLists(List<UniquePtr<BaseEntry>> &list1, List<UniquePtr<BaseEntry>> &list2) {
+void MergeLists(std::list<std::unique_ptr<BaseEntry>> &list1, std::list<std::unique_ptr<BaseEntry>> &list2) {
     auto it1 = list1.begin();
     auto it2 = list2.begin();
 

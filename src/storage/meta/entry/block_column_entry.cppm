@@ -18,7 +18,8 @@ export module catalog:block_column_entry;
 
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import buffer_obj;
 import parser;
 import third_party;
@@ -39,36 +40,36 @@ export struct SegmentEntry;
 export struct BlockColumnEntry : public BaseEntry {
     friend struct BlockEntry;
 public:
-    static UniquePtr<BlockColumnEntry>
+    static std::unique_ptr<BlockColumnEntry>
     MakeNewBlockColumnEntry(const BlockEntry *block_entry, u64 column_id, BufferManager *buffer_manager, bool is_replay = false);
 
-    inline explicit BlockColumnEntry(const BlockEntry *block_entry, u64 column_id, const SharedPtr<String> &base_dir_ref)
+    inline explicit BlockColumnEntry(const BlockEntry *block_entry, u64 column_id, const std::shared_ptr<std::string> &base_dir_ref)
         : BaseEntry(EntryType::kBlockColumn), block_entry_(block_entry), column_id_(column_id), base_dir_(base_dir_ref) {}
 
     Json Serialize();
 
-    static UniquePtr<BlockColumnEntry> Deserialize(const Json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr);
+    static std::unique_ptr<BlockColumnEntry> Deserialize(const Json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr);
 
 public:
     // Getter
-    inline const SharedPtr<DataType> &column_type() const { return column_type_; }
+    inline const std::shared_ptr<DataType> &column_type() const { return column_type_; }
     inline BufferObj *buffer() const { return buffer_; }
     inline u64 column_id() const { return column_id_; }
-    inline const SharedPtr<String> &base_dir() const { return base_dir_; }
+    inline const std::shared_ptr<std::string> &base_dir() const { return base_dir_; }
     inline const BlockEntry *block_entry() const { return block_entry_; }
 
-    static SharedPtr<String> OutlineFilename(u64 column_id, SizeT file_idx) {
-        return MakeShared<String>(Format("col_{}_out_{}", column_id, file_idx));
+    static std::shared_ptr<std::string> OutlineFilename(u64 column_id, SizeT file_idx) {
+        return std::make_shared<std::string>(Format("col_{}_out_{}", column_id, file_idx));
     }
 
-    String FilePath() { return LocalFileSystem::ConcatenateFilePath(*base_dir_, *file_name_); }
-    Vector<String> OutlinePaths() const;
+    std::string FilePath() { return LocalFileSystem::ConcatenateFilePath(*base_dir_, *file_name_); }
+    std::vector<std::string> OutlinePaths() const;
 
     ColumnBuffer GetColumnData(BufferManager *buffer_manager);
 
     // Append used in import and wal_replay
     void
-    AppendRaw(SizeT dst_offset, const_ptr_t src_ptr, SizeT data_size, SharedPtr<VectorBuffer> vector_buffer);
+    AppendRaw(SizeT dst_offset, const_ptr_t src_ptr, SizeT data_size, std::shared_ptr<VectorBuffer> vector_buffer);
 
 protected:
 
@@ -81,13 +82,13 @@ protected:
 protected:
     const BlockEntry *block_entry_{nullptr};
     u64 column_id_{};
-    SharedPtr<DataType> column_type_{};
+    std::shared_ptr<DataType> column_type_{};
     BufferObj *buffer_{};
 
-    SharedPtr<String> base_dir_{};
-    SharedPtr<String> file_name_{};
+    std::shared_ptr<std::string> base_dir_{};
+    std::shared_ptr<std::string> file_name_{};
 
-    UniquePtr<OutlineInfo> outline_info_{};
+    std::unique_ptr<OutlineInfo> outline_info_{};
 };
 
 } // namespace infinity

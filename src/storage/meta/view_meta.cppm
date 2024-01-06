@@ -18,7 +18,8 @@ export module catalog:view_meta;
 
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import parser;
 import status;
 
@@ -30,37 +31,35 @@ class DBEntry;
 
 export struct ViewMeta {
 public:
-    explicit ViewMeta(SharedPtr<String> name, DBEntry *db_entry) : view_name_(Move(name)), db_entry_(db_entry) {}
+    explicit ViewMeta(std::shared_ptr<std::string> name, DBEntry *db_entry) : view_name_(std::move(name)), db_entry_(db_entry) {}
 
 public:
     static Status CreateNewEntry(ViewMeta *table_meta,
-                                      const SharedPtr<String> &view_name,
-                                      const Vector<SharedPtr<ColumnDef>> &columns,
-                                      u64 txn_id,
-                                      TxnTimeStamp begin_ts,
-                                      TxnManager *txn_mgr);
+                                 const std::shared_ptr<std::string> &view_name,
+                                 const std::vector<std::shared_ptr<ColumnDef>> &columns,
+                                 u64 txn_id,
+                                 TxnTimeStamp begin_ts,
+                                 TxnManager *txn_mgr);
 
-    static SharedPtr<String> ToString(ViewMeta *table_meta);
-
-
+    static std::shared_ptr<std::string> ToString(ViewMeta *table_meta);
 
 private:
-    Status DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name);
+    Status DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const std::string &table_name);
 
     void DeleteNewEntry(u64 txn_id, TxnManager *txn_mgr);
 
     Status GetEntry(u64 txn_id, TxnTimeStamp begin_ts);
 
     inline void *GetDBEntry() { return this->db_entry_; }
-    
+
 private:
-    RWMutex rw_locker_{};
-    SharedPtr<String> view_name_{};
+    std::shared_mutex rw_locker_{};
+    std::shared_ptr<std::string> view_name_{};
 
     DBEntry *db_entry_{};
 
     // Ordered by commit_ts from latest to oldest.
-    List<UniquePtr<BaseEntry>> entry_list_{};
+    std::list<std::unique_ptr<BaseEntry>> entry_list_{};
 };
 
 } // namespace infinity

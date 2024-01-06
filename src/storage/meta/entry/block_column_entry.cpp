@@ -18,7 +18,8 @@ module;
 
 module catalog;
 
-import stl;
+import std;
+import type_alias;
 import buffer_manager;
 import outline_info;
 import parser;
@@ -37,11 +38,11 @@ import data_file_worker;
 
 namespace infinity {
 
-UniquePtr<BlockColumnEntry>
+std::unique_ptr<BlockColumnEntry>
 BlockColumnEntry::MakeNewBlockColumnEntry(const BlockEntry *block_entry, u64 column_id, BufferManager *buffer_manager, bool is_replay) {
-    UniquePtr<BlockColumnEntry> block_column_entry = MakeUnique<BlockColumnEntry>(block_entry, column_id, block_entry->base_dir());
+    std::unique_ptr<BlockColumnEntry> block_column_entry = MakeUnique<BlockColumnEntry>(block_entry, column_id, block_entry->base_dir());
 
-    block_column_entry->file_name_ = MakeShared<String>(ToStr(column_id) + ".col");
+    block_column_entry->file_name_ = std::make_shared<String>(ToStr(column_id) + ".col");
 
     block_column_entry->column_type_ = block_entry->GetColumnType(column_id);
     DataType *column_type = block_column_entry->column_type_.get();
@@ -269,9 +270,9 @@ Json BlockColumnEntry::Serialize() {
     return json_res;
 }
 
-UniquePtr<BlockColumnEntry> BlockColumnEntry::Deserialize(const Json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr) {
+std::unique_ptr<BlockColumnEntry> BlockColumnEntry::Deserialize(const Json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr) {
     u64 column_id = column_data_json["column_id"];
-    UniquePtr<BlockColumnEntry> block_column_entry = MakeNewBlockColumnEntry(block_entry, column_id, buffer_mgr, true);
+    std::unique_ptr<BlockColumnEntry> block_column_entry = MakeNewBlockColumnEntry(block_entry, column_id, buffer_mgr, true);
     if (block_column_entry->outline_info_.get() != nullptr) {
         auto outline_info = block_column_entry->outline_info_.get();
         outline_info->next_file_idx = column_data_json["next_outline_idx"];
