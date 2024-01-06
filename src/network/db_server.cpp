@@ -20,7 +20,7 @@ module;
 
 module db_server;
 import infinity_context;
-import stl;
+import type_alias;
 import boost;
 import third_party;
 import infinity_exception;
@@ -37,7 +37,7 @@ void DBServer::Run() {
     initialized = true;
 
     u16 pg_port = InfinityContext::instance().config()->pg_port();
-    const String &pg_listen_addr = InfinityContext::instance().config()->listen_address();
+    const std::string &pg_listen_addr = InfinityContext::instance().config()->listen_address();
 
     boost::system::error_code error;
     boost::asio::ip::address address = boost::asio::ip::make_address(pg_listen_addr, error);
@@ -47,7 +47,7 @@ void DBServer::Run() {
         return ;
     }
 
-    acceptor_ptr_ = MakeUnique<boost::asio::ip::tcp::acceptor>(io_service_, boost::asio::ip::tcp::endpoint(address, pg_port));
+    acceptor_ptr_ = std::make_unique<boost::asio::ip::tcp::acceptor>(io_service_, boost::asio::ip::tcp::endpoint(address, pg_port));
     CreateConnection();
 
     Printf("Run 'psql -h {} -p {}' to connect to the server.\n", pg_listen_addr, pg_port);
@@ -71,12 +71,12 @@ void DBServer::Shutdown() {
 }
 
 void DBServer::CreateConnection() {
-    SharedPtr<Connection> connection_ptr = MakeShared<Connection>(io_service_);
+    std::shared_ptr<Connection> connection_ptr = std::make_shared<Connection>(io_service_);
     acceptor_ptr_->async_accept(*(connection_ptr->socket()), boost::bind(&DBServer::StartConnection, this, connection_ptr));
 }
 
-void DBServer::StartConnection(SharedPtr<Connection> &connection) {
-    Thread connection_thread([connection = connection, &num_running_connections = this->running_connection_count_]() mutable {
+void DBServer::StartConnection(std::shared_ptr<Connection> &connection) {
+    std::thread connection_thread([connection = connection, &num_running_connections = this->running_connection_count_]() mutable {
         ++num_running_connections;
         connection->Run();
 

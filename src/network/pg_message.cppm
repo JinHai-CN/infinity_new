@@ -14,7 +14,7 @@
 
 module;
 
-import stl;
+import std;
 
 export module pg_message;
 
