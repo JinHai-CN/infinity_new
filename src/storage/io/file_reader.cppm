@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import file_system;
 import file_system_type;
 
@@ -24,19 +25,19 @@ namespace infinity {
 
 export class FileReader {
 public:
-    explicit FileReader(FileSystem &fs, const String &path, SizeT buffer_size);
+    explicit FileReader(FileSystem &fs, const std::string &path, SizeT buffer_size);
 
     FileReader(const FileReader &other);
 
     FileSystem &fs_;
-    String path_{};
-    UniquePtr<char_t[]> data_{};
+    std::string path_{};
+    std::unique_ptr<char_t[]> data_{};
     u64 buffer_offset_{};
     u64 already_read_size_{};
     SizeT buffer_start_{};
     SizeT buffer_size_{};
     SizeT file_size_{};
-    UniquePtr<FileHandler> file_handler_{};
+    std::unique_ptr<FileHandler> file_handler_{};
 
 public:
     u8 ReadByte();

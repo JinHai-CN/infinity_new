@@ -1,6 +1,7 @@
 module;
 
-import stl;
+import std;
+import type_alias;
 import byte_slice;
 import memory_chunk;
 import memory_pool;
@@ -49,7 +50,7 @@ public:
 
     const ByteSliceList *GetByteSliceList() const { return slice_list_; }
 
-    void Dump(const SharedPtr<FileWriter> &file);
+    void Dump(const std::shared_ptr<FileWriter> &file);
 
     void Reset();
 

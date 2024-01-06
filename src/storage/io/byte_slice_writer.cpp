@@ -1,6 +1,7 @@
 module;
 
-import stl;
+import std;
+import type_alias;
 import byte_slice;
 import memory_pool;
 import file_writer;
@@ -29,7 +30,7 @@ ByteSlice *ByteSliceWriter::CreateSlice(u32 size) {
 
 SizeT ByteSliceWriter::GetSize() const { return SizeT(slice_list_->GetTotalSize()); }
 
-void ByteSliceWriter::Dump(const SharedPtr<FileWriter> &file) {
+void ByteSliceWriter::Dump(const std::shared_ptr<FileWriter> &file) {
     ByteSlice *slice = slice_list_->GetHead();
     while (slice != nullptr) {
         file->Write((char *)(slice->data_), slice->size_);
@@ -65,7 +66,7 @@ void ByteSliceWriter::Write(const void *value, SizeT len) {
             slice_list_->Add(slice);
         }
         u32 copy_len = (last_slice_size_ - slice->size_) > left ? left : (last_slice_size_ - slice->size_);
-        Memcpy(slice->data_ + slice->size_, data, copy_len);
+        std::memcpy(slice->data_ + slice->size_, data, copy_len);
         data += copy_len;
         left -= copy_len;
         slice->size_ = slice->size_ + copy_len;

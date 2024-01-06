@@ -16,7 +16,8 @@ module;
 
 #include <algorithm>
 
-import stl;
+import std;
+import type_alias;
 import file_system;
 import file_system_type;
 
@@ -27,15 +28,15 @@ module file_reader;
 
 namespace infinity {
 
-FileReader::FileReader(FileSystem &fs, const String &path, SizeT buffer_size)
-    : fs_(fs), path_(path), data_(MakeUnique<char_t[]>(buffer_size)), buffer_offset_(0), buffer_start_(0), buffer_size_(buffer_size) {
+FileReader::FileReader(FileSystem &fs, const std::string &path, SizeT buffer_size)
+    : fs_(fs), path_(path), data_(std::make_unique<char_t[]>(buffer_size)), buffer_offset_(0), buffer_start_(0), buffer_size_(buffer_size) {
     // Fixme: These two functions might throw exception
     file_handler_ = fs_.OpenFile(path, FileFlags::READ_FLAG, FileLockType::kReadLock);
     file_size_ = fs_.GetFileSize(*file_handler_);
 }
 
 FileReader::FileReader(const FileReader &other)
-    : fs_(other.fs_), path_(other.path_), data_(MakeUnique<char_t[]>(buffer_size_)), buffer_size_(other.buffer_size_) {}
+    : fs_(other.fs_), path_(other.path_), data_(std::make_unique<char_t[]>(buffer_size_)), buffer_size_(other.buffer_size_) {}
 
 u8 FileReader::ReadByte() {
     if (buffer_offset_ >= buffer_size_) {
@@ -89,9 +90,9 @@ void FileReader::Read(char_t *buffer, SizeT read_size) {
     while (true) {
         i64 byte_count1 = end_pos - buffer;
         i64 byte_count2 = already_read_size_ - buffer_offset_;
-        i64 to_read = Min(byte_count1, byte_count2);
+        i64 to_read = std::min(byte_count1, byte_count2);
         if (to_read > 0) {
-            Memcpy(buffer, data_.get() + buffer_offset_, to_read);
+            std::memcpy(buffer, data_.get() + buffer_offset_, to_read);
             buffer_offset_ += to_read;
             start_pos += to_read;
         }
