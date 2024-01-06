@@ -14,10 +14,13 @@
 
 #include <csignal>
 #include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <condition_variable>
 #include "network/thrift_server.h"
 
 import compilation_config;
-import std;
+//import std;
 import third_party;
 import db_server;
 import infinity_exception;

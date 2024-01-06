@@ -16,7 +16,8 @@ module;
 
 export module block_column_iter;
 
-import stl;
+import std;
+import type_alias;
 import buffer_handle;
 import catalog;
 
@@ -27,9 +28,9 @@ public:
     BlockColumnIter(BlockColumnEntry *entry, u16 row_count)
         : buffer_handle_(entry->buffer()->Load()), ele_size_(entry->column_type()->Size()), row_count_(row_count), offset_(0) {}
 
-    Optional<const void *> Next() {
+    std::optional<const void *> Next() {
         if (offset_ >= row_count_) {
-            return None;
+            return std::nullopt;
         }
         auto ret = static_cast<const char *>(buffer_handle_.GetData()) + offset_ * ele_size_;
         ++offset_;

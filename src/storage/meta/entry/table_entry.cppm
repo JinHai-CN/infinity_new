@@ -21,7 +21,8 @@ import :block_entry;
 import :table_index_meta;
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import parser;
 import txn_store;
 import buffer_manager;
@@ -46,28 +47,28 @@ public:
     // for iterator unit test.
     explicit TableEntry() : BaseEntry(EntryType::kTable) {}
 
-    explicit TableEntry(const SharedPtr<String> &db_entry_dir,
-                        SharedPtr<String> table_collection_name,
-                        const Vector<SharedPtr<ColumnDef>> &columns,
+    explicit TableEntry(const std::shared_ptr<std::string> &db_entry_dir,
+                        std::shared_ptr<std::string> table_collection_name,
+                        const std::vector<std::shared_ptr<ColumnDef>> &columns,
                         TableEntryType table_entry_type,
                         TableMeta *table_meta,
                         u64 txn_id,
                         TxnTimeStamp begin_ts);
 
 private:
-    Tuple<TableIndexEntry *, Status>
-    CreateIndex(const SharedPtr<IndexDef> &index_def, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+    std::tuple<TableIndexEntry *, Status>
+    CreateIndex(const std::shared_ptr<IndexDef> &index_def, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
 
-    Tuple<TableIndexEntry *, Status>
-    DropIndex(const String &index_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+    std::tuple<TableIndexEntry *, Status>
+    DropIndex(const std::string &index_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
 
-    Tuple<TableIndexEntry *, Status> GetIndex(const String &index_name, u64 txn_id, TxnTimeStamp begin_ts);
+    std::tuple<TableIndexEntry *, Status> GetIndex(const std::string &index_name, u64 txn_id, TxnTimeStamp begin_ts);
 
-    void RemoveIndexEntry(const String &index_name, u64 txn_id, TxnManager *txn_mgr);
+    void RemoveIndexEntry(const std::string &index_name, u64 txn_id, TxnManager *txn_mgr);
 
     void CreateIndexFile(void *txn_store, TableIndexEntry *table_index_entry, TxnTimeStamp begin_ts, BufferManager *buffer_mgr, bool prepare);
 
-    static void CommitCreateIndex(HashMap<String, TxnIndexStore> &txn_indexes_store_);
+    static void CommitCreateIndex(std::unordered_map<std::string, TxnIndexStore> &txn_indexes_store_);
 
     TableMeta *GetTableMeta() const { return table_meta_; }
 
@@ -83,7 +84,7 @@ private:
 
     Status RollbackDelete(u64 txn_id, DeleteState &append_state, BufferManager *buffer_mgr);
 
-    Status ImportSegment(TxnTimeStamp commit_ts, SharedPtr<SegmentEntry> segment);
+    Status ImportSegment(TxnTimeStamp commit_ts, std::shared_ptr<SegmentEntry> segment);
 
     static inline u32 GetNextSegmentID(TableEntry *table_entry) { return table_entry->next_segment_id_++; }
 
@@ -94,9 +95,9 @@ private:
 public:
     // Getter
 
-    const SharedPtr<String> &GetDBName() const;
+    const std::shared_ptr<std::string> &GetDBName() const;
 
-    inline const SharedPtr<String> &GetTableName() const { return table_name_; }
+    inline const std::shared_ptr<std::string> &GetTableName() const { return table_name_; }
 
     const BlockEntry *GetBlockEntryByID(u32 seg_id, u16 block_id) const;
 
@@ -104,55 +105,55 @@ public:
 
     inline SizeT ColumnCount() const { return columns_.size(); }
 
-    const SharedPtr<String> &TableEntryDir() const { return table_entry_dir_; }
+    const std::shared_ptr<std::string> &TableEntryDir() const { return table_entry_dir_; }
 
     inline SizeT row_count() const { return row_count_; }
 
     inline TableEntryType EntryType() const { return table_entry_type_; }
 
-    Pair<SizeT, Status> GetSegmentRowCountBySegmentID(u32 seg_id);
+    std::pair<SizeT, Status> GetSegmentRowCountBySegmentID(u32 seg_id);
 
-    SharedPtr<BlockIndex> GetBlockIndex(u64 txn_id, TxnTimeStamp begin_ts);
+    std::shared_ptr<BlockIndex> GetBlockIndex(u64 txn_id, TxnTimeStamp begin_ts);
 
-    void GetFullTextAnalyzers(u64 txn_id, TxnTimeStamp begin_ts, SharedPtr<IrsIndexEntry> &irs_index_entry, Map<String, String> &column2analyzer);
+    void GetFullTextAnalyzers(u64 txn_id, TxnTimeStamp begin_ts, std::shared_ptr<IrsIndexEntry> &irs_index_entry, std::map<std::string, std::string> &column2analyzer);
 
 public:
     Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
 
-    static UniquePtr<TableEntry> Deserialize(const Json &table_entry_json, TableMeta *table_meta, BufferManager *buffer_mgr);
+    static std::unique_ptr<TableEntry> Deserialize(const Json &table_entry_json, TableMeta *table_meta, BufferManager *buffer_mgr);
 
     virtual void MergeFrom(BaseEntry &other);
 
 public:
-    u64 GetColumnIdByName(const String &column_name) const;
+    u64 GetColumnIdByName(const std::string &column_name) const;
 
-    Map<u32, SharedPtr<SegmentEntry>> &segment_map() { return segment_map_; }
+    std::map<u32, std::shared_ptr<SegmentEntry>> &segment_map() { return segment_map_; }
 
-    HashMap<String, UniquePtr<TableIndexMeta>> &index_meta_map() { return index_meta_map_; }
+    std::unordered_map<std::string, std::unique_ptr<TableIndexMeta>> &index_meta_map() { return index_meta_map_; }
 
 protected:
-    HashMap<String, u64> column_name2column_id_;
+    std::unordered_map<std::string, u64> column_name2column_id_;
 
-    RWMutex rw_locker_{};
+    std::shared_mutex rw_locker_{};
 
-    SharedPtr<String> table_entry_dir_{};
+    std::shared_ptr<std::string> table_entry_dir_{};
 
-    SharedPtr<String> table_name_{};
+    std::shared_ptr<std::string> table_name_{};
 
-    Vector<SharedPtr<ColumnDef>> columns_{};
+    std::vector<std::shared_ptr<ColumnDef>> columns_{};
 
     TableEntryType table_entry_type_{TableEntryType::kTableEntry};
 
     TableMeta *table_meta_{};
 
     // From data table
-    Atomic<SizeT> row_count_{};
-    Map<u32, SharedPtr<SegmentEntry>> segment_map_{};
+    std::atomic<SizeT> row_count_{};
+    std::map<u32, std::shared_ptr<SegmentEntry>> segment_map_{};
     SegmentEntry *unsealed_segment_{};
-    atomic_u32 next_segment_id_{};
+    std::atomic<u32> next_segment_id_{};
 
     // Index definition
-    HashMap<String, UniquePtr<TableIndexMeta>> index_meta_map_{};
+    std::unordered_map<std::string, std::unique_ptr<TableIndexMeta>> index_meta_map_{};
 };
 
 } // namespace infinity

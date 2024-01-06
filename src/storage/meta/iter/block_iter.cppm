@@ -14,11 +14,10 @@
 
 module;
 
-#include <vector>
-
 export module block_iter;
 
-import stl;
+import std;
+import type_alias;
 import catalog;
 import block_column_iter;
 
@@ -26,20 +25,20 @@ namespace infinity {
 
 export class BlockIter {
 public:
-    BlockIter(const BlockEntry *entry, const Vector<SizeT> &column_ids) {
-        Vector<BlockColumnIter> column_iters;
+    BlockIter(const BlockEntry *entry, const std::vector<SizeT> &column_ids) {
+        std::vector<BlockColumnIter> column_iters;
         for (auto column_id : column_ids) {
             column_iters.emplace_back(entry->GetColumnDataByID(column_id), entry->row_count());
         }
         column_iters_ = column_iters;
     }
 
-    Optional<Vector<const void *>> Next() {
-        Vector<const void *> rets;
+    std::optional<std::vector<const void *>> Next() {
+        std::vector<const void *> rets;
         for (auto &column_iter : column_iters_) {
             auto ret = column_iter.Next();
             if (!ret) {
-                return None;
+                return std::nullopt;
             }
             rets.emplace_back(*ret);
         }
@@ -47,7 +46,7 @@ public:
     }
 
 private:
-    Vector<BlockColumnIter> column_iters_{};
+    std::vector<BlockColumnIter> column_iters_{};
 };
 
 } // namespace infinity

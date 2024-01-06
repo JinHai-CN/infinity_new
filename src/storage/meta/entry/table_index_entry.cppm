@@ -21,7 +21,8 @@ import :segment_column_index_entry;
 import :irs_index_entry;
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import index_def;
 import third_party;
 import status;
@@ -37,49 +38,49 @@ struct TableIndexEntry : public BaseEntry {
     friend struct TableEntry;
 
 public:
-    TableIndexEntry(const SharedPtr<IndexDef> &index_def,
+    TableIndexEntry(const std::shared_ptr<IndexDef> &index_def,
                     TableIndexMeta *table_index_meta,
-                    SharedPtr<String> index_dir,
+                    std::shared_ptr<std::string> index_dir,
                     u64 txn_id,
                     TxnTimeStamp begin_ts,
                     bool replay = false);
 
     TableIndexEntry(TableIndexMeta *table_index_meta, u64 txn_id, TxnTimeStamp begin_ts);
 
-    static UniquePtr<TableIndexEntry>
-    NewTableIndexEntry(const SharedPtr<IndexDef> &index_def, TableIndexMeta *table_index_meta, u64 txn_id, TxnTimeStamp begin_ts);
+    static std::unique_ptr<TableIndexEntry>
+    NewTableIndexEntry(const std::shared_ptr<IndexDef> &index_def, TableIndexMeta *table_index_meta, u64 txn_id, TxnTimeStamp begin_ts);
 
-    static UniquePtr<TableIndexEntry> NewDropTableIndexEntry(TableIndexMeta *table_index_meta, u64 txn_id, TxnTimeStamp begin_ts);
+    static std::unique_ptr<TableIndexEntry> NewDropTableIndexEntry(TableIndexMeta *table_index_meta, u64 txn_id, TxnTimeStamp begin_ts);
 
     Json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<TableIndexEntry>
+    static std::unique_ptr<TableIndexEntry>
     Deserialize(const Json &index_def_entry_json, TableIndexMeta *table_index_meta, BufferManager *buffer_mgr, TableEntry *table_entry);
 
 public:
     // Getter
     inline const TableIndexMeta *table_index_meta() const { return table_index_meta_; }
     inline const IndexDef *index_def() const { return index_def_.get(); }
-    const SharedPtr<IrsIndexEntry> &irs_index_entry() const { return irs_index_entry_; }
-    HashMap<u64, UniquePtr<ColumnIndexEntry>> &column_index_map() { return column_index_map_; }
+    const std::shared_ptr<IrsIndexEntry> &irs_index_entry() const { return irs_index_entry_; }
+    std::unordered_map<u64, std::unique_ptr<ColumnIndexEntry>> &column_index_map() { return column_index_map_; }
 
-    Status CreateIndexDo(const TableEntry *table_entry, HashMap<u32, atomic_u64> &create_index_idxes);
-
-private:
-    static SharedPtr<String> DetermineIndexDir(const String &parent_dir, const String &index_name);
-
-    void CommitCreateIndex(u64 column_id, u32 segment_id, SharedPtr<SegmentColumnIndexEntry> index_entry);
-    void CommitCreateIndex(const SharedPtr<IrsIndexEntry> &irs_index_entry);
+    Status CreateIndexDo(const TableEntry *table_entry, std::unordered_map<u32, std::atomic<u64>> &create_index_idxes);
 
 private:
-    RWMutex rw_locker_{};
+    static std::shared_ptr<std::string> DetermineIndexDir(const std::string &parent_dir, const std::string &index_name);
+
+    void CommitCreateIndex(u64 column_id, u32 segment_id, std::shared_ptr<SegmentColumnIndexEntry> index_entry);
+    void CommitCreateIndex(const std::shared_ptr<IrsIndexEntry> &irs_index_entry);
+
+private:
+    std::shared_mutex rw_locker_{};
     TableIndexMeta *table_index_meta_{};
-    const SharedPtr<IndexDef> index_def_{};
-    SharedPtr<String> index_dir_{};
+    const std::shared_ptr<IndexDef> index_def_{};
+    std::shared_ptr<std::string> index_dir_{};
 
-    HashMap<u64, UniquePtr<ColumnIndexEntry>> column_index_map_{};
+    std::unordered_map<u64, std::unique_ptr<ColumnIndexEntry>> column_index_map_{};
 
-    SharedPtr<IrsIndexEntry> irs_index_entry_{};
+    std::shared_ptr<IrsIndexEntry> irs_index_entry_{};
 };
 
 } // namespace infinity

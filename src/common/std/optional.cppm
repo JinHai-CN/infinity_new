@@ -4,4 +4,5 @@ module;
 export module std:optional;
 export namespace std {
     using std::optional;
+    using std::nullopt;
 }

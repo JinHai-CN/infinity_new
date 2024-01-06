@@ -16,7 +16,8 @@ module;
 
 export module outline_info;
 
-import stl;
+import std;
+import type_alias;
 
 namespace infinity {
 
@@ -25,7 +26,7 @@ class BufferObj;
 class BufferManager;
 
 export struct OutlineInfo {
-    Vector<Pair<BufferObj *, SizeT>> written_buffers_{};
+    std::vector<std::pair<BufferObj *, SizeT>> written_buffers_{};
 
     BufferManager *buffer_mgr_{};
 

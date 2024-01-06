@@ -16,7 +16,8 @@ module;
 
 export module table_entry_type;
 
-import stl;
+import std;
+import type_alias;
 
 import infinity_exception;
 
@@ -27,7 +28,7 @@ export enum TableEntryType : i8 {
     kCollectionEntry,
 };
 
-export inline String ToString(TableEntryType type) {
+export inline std::string ToString(TableEntryType type) {
     switch (type) {
         case TableEntryType::kTableEntry: {
             return "Table";
