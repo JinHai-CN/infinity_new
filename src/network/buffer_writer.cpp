@@ -17,7 +17,8 @@ module;
 #include <arpa/inet.h>
 #include <boost/asio/write.hpp>
 
-import stl;
+import std;
+import type_alias;
 import pg_message;
 import ring_buffer_iterator;
 
@@ -33,17 +34,17 @@ SizeT BufferWriter::size() const {
     return (current_size < 0) ? (current_size + PG_MSG_BUFFER_SIZE) : current_size;
 }
 
-void BufferWriter::send_string(const String &value, NullTerminator null_terminator) {
+void BufferWriter::send_string(const std::string &value, NullTerminator null_terminator) {
     auto position_in_string = 0u;
 
     if (!full()) {
-        position_in_string = static_cast<u32>(Min(max_capacity() - size(), value.size()));
+        position_in_string = static_cast<u32>(std::min(max_capacity() - size(), value.size()));
         RingBufferIterator::CopyN(value.c_str(), position_in_string, current_pos_);
         current_pos_.increment(position_in_string);
     }
 
     while (position_in_string < value.size()) {
-        const auto bytes_to_transfer = Min(max_capacity(), value.size() - position_in_string);
+        const auto bytes_to_transfer = std::min(max_capacity(), value.size() - position_in_string);
         try_flush(bytes_to_transfer);
         RingBufferIterator::CopyN(value.c_str() + position_in_string, bytes_to_transfer, current_pos_);
         current_pos_.increment(bytes_to_transfer);

@@ -15,6 +15,8 @@
 #include "thrift_server.h"
 
 #include <memory>
+#include <filesystem>
+#include <unordered_set>
 #include <thrift/TToString.h>
 #include <thrift/concurrency/ThreadFactory.h>
 #include <thrift/concurrency/ThreadManager.h>
@@ -31,7 +33,8 @@
 #include "infinity_thrift/infinity_types.h"
 
 import infinity;
-import stl;
+// import std;
+import type_alias;
 import infinity_exception;
 import logger;
 import query_result;
@@ -63,7 +66,7 @@ public:
             response.error_msg = "Connect failed";
             LOG_ERROR(Format("THRIFT ERROR: Connect failed"));
         } else {
-            std::lock_guard<Mutex> lock(infinity_session_map_mutex_);
+            std::lock_guard<std::mutex> lock(infinity_session_map_mutex_);
             infinity_session_map_.emplace(infinity->GetSessionId(), infinity);
             response.session_id = infinity->GetSessionId();
             response.success = true;
@@ -79,7 +82,7 @@ public:
         } else {
             auto session_id = infinity->GetSessionId();
             infinity->RemoteDisconnect();
-            std::lock_guard<Mutex> lock(infinity_session_map_mutex_);
+            std::lock_guard<std::mutex> lock(infinity_session_map_mutex_);
             infinity_session_map_.erase(session_id);
             LOG_TRACE(Format("THRIFT : Disconnect success"));
             response.success = true;
@@ -99,7 +102,7 @@ public:
     }
 
     void CreateTable(infinity_thrift_rpc::CommonResponse &response, const infinity_thrift_rpc::CreateTableRequest &request) override {
-        Vector<ColumnDef *> column_defs;
+        std::vector<ColumnDef *> column_defs;
 
         for (auto &proto_column_def : request.column_defs) {
             auto column_def = GetColumnDefFromProto(proto_column_def);
@@ -113,7 +116,7 @@ public:
             Error<NetworkException>("Database is null");
         }
 
-        auto result = database->CreateTable(request.table_name, column_defs, Vector<TableConstraint *>(), create_table_opts);
+        auto result = database->CreateTable(request.table_name, column_defs, std::vector<TableConstraint *>(), create_table_opts);
         ProcessCommonResult(response, result);
     }
 
@@ -141,18 +144,18 @@ public:
         auto infinity = GetInfinityBySessionID(request.session_id);
         auto database = infinity->GetDatabase(request.db_name);
         auto table = database->GetTable(request.table_name);
-        auto columns = new Vector<String>();
+        auto columns = new std::vector<std::string>();
         columns->reserve(request.column_names.size());
 
         for (auto &column : request.column_names) {
             columns->emplace_back(column);
         }
 
-        Vector<Vector<ParsedExpr *> *> *values = new Vector<Vector<ParsedExpr *> *>();
+        std::vector<std::vector<ParsedExpr *> *> *values = new std::vector<std::vector<ParsedExpr *> *>();
         values->reserve(request.fields.size());
 
         for (auto &value : request.fields) {
-            auto value_list = new Vector<ParsedExpr *>();
+            auto value_list = new std::vector<ParsedExpr *>();
             value_list->reserve(value.parse_exprs.size());
             for (auto &expr : value.parse_exprs) {
                 auto parsed_expr = GetConstantFromProto(*expr.type.constant_expr);
@@ -184,7 +187,7 @@ public:
         auto database = infinity->GetDatabase(request.db_name);
         auto table = database->GetTable(request.table_name);
 
-        Path path(
+        std::filesystem::path path(
             Format("{}_{}_{}_{}", *InfinityContext::instance().config()->temp_dir().get(), request.db_name, request.table_name, request.file_name));
 
         ImportOptions import_options;
@@ -196,7 +199,7 @@ public:
 
     void UploadFileChunk(infinity_thrift_rpc::UploadResponse &response, const infinity_thrift_rpc::FileChunk &request) override {
         LocalFileSystem fs;
-        Path path(
+        std::filesystem::path path(
             Format("{}_{}_{}_{}", *InfinityContext::instance().config()->temp_dir().get(), request.db_name, request.table_name, request.file_name));
         if (request.index != 0) {
             FileWriter file_writer(fs, path.c_str(), request.data.size(), FileFlags::WRITE_FLAG | FileFlags::APPEND_FLAG);
@@ -226,8 +229,8 @@ public:
 
     void HandleColumnDef(infinity_thrift_rpc::SelectResponse &response,
                          SizeT column_count,
-                         SharedPtr<TableDef> table_def,
-                         Vector<infinity_thrift_rpc::ColumnField> &all_column_vectors) {
+                         std::shared_ptr<TableDef> table_def,
+                         std::vector<infinity_thrift_rpc::ColumnField> &all_column_vectors) {
         if (column_count != all_column_vectors.size()) {
             Error<NetworkException>("Column count not match");
         }
@@ -247,16 +250,16 @@ public:
     static void
     HandlePodType(infinity_thrift_rpc::ColumnField &output_column_field, SizeT row_count, const std::shared_ptr<ColumnVector> &column_vector) {
         auto size = column_vector->data_type()->Size() * row_count;
-        String dst;
+        std::string dst;
         dst.resize(size);
-        Memcpy(dst.data(), column_vector->data(), size);
-        output_column_field.column_vectors.emplace_back(Move(dst));
+        memcpy(dst.data(), column_vector->data(), size);
+        output_column_field.column_vectors.emplace_back(std::move(dst));
     }
 
     void
     HandleVarcharType(infinity_thrift_rpc::ColumnField &output_column_field, SizeT row_count, const std::shared_ptr<ColumnVector> &column_vector) {
 
-        String dst;
+        std::string dst;
         SizeT total_varchar_data_size = 0;
         for (SizeT index = 0; index < row_count; ++index) {
             VarcharT &varchar = ((VarcharT *)column_vector->data())[index];
@@ -271,16 +274,16 @@ public:
             VarcharT &varchar = ((VarcharT *)column_vector->data())[index];
             i32 length = varchar.length_;
             if (varchar.IsInlined()) {
-                Memcpy(dst.data() + current_offset, &length, sizeof(i32));
-                Memcpy(dst.data() + current_offset + sizeof(i32), varchar.short_.data_, varchar.length_);
+                memcpy(dst.data() + current_offset, &length, sizeof(i32));
+                memcpy(dst.data() + current_offset + sizeof(i32), varchar.short_.data_, varchar.length_);
             } else {
-                auto varchar_ptr = MakeUnique<char[]>(varchar.length_ + 1);
+                auto varchar_ptr = std::make_unique<char[]>(varchar.length_ + 1);
                 column_vector->buffer_->fix_heap_mgr_->ReadFromHeap(varchar_ptr.get(),
                                                                     varchar.vector_.chunk_id_,
                                                                     varchar.vector_.chunk_offset_,
                                                                     varchar.length_);
-                Memcpy(dst.data() + current_offset, &length, sizeof(i32));
-                Memcpy(dst.data() + current_offset + sizeof(i32), varchar_ptr.get(), varchar.length_);
+                memcpy(dst.data() + current_offset, &length, sizeof(i32));
+                memcpy(dst.data() + current_offset + sizeof(i32), varchar_ptr.get(), varchar.length_);
             }
             current_offset += sizeof(i32) + varchar.length_;
         }
@@ -289,26 +292,26 @@ public:
             Error<NetworkException>("Bug");
         }
 
-        output_column_field.column_vectors.emplace_back(Move(dst));
+        output_column_field.column_vectors.emplace_back(std::move(dst));
         output_column_field.__set_column_type(DataTypeToProtoColumnType(column_vector->data_type()));
     }
 
     void
     HandleEmbeddingType(infinity_thrift_rpc::ColumnField &output_column_field, SizeT row_count, const std::shared_ptr<ColumnVector> &column_vector) {
         auto size = column_vector->data_type()->Size() * row_count;
-        String dst;
+        std::string dst;
         dst.resize(size);
-        Memcpy(dst.data(), column_vector->data(), size);
-        output_column_field.column_vectors.emplace_back(Move(dst));
+        memcpy(dst.data(), column_vector->data(), size);
+        output_column_field.column_vectors.emplace_back(std::move(dst));
         output_column_field.__set_column_type(DataTypeToProtoColumnType(column_vector->data_type()));
     }
 
     void HandleRowIDType(infinity_thrift_rpc::ColumnField &output_column_field, SizeT row_count, const std::shared_ptr<ColumnVector> &column_vector) {
         auto size = column_vector->data_type()->Size() * row_count;
-        String dst;
+        std::string dst;
         dst.resize(size);
-        Memcpy(dst.data(), column_vector->data(), size);
-        output_column_field.column_vectors.emplace_back(Move(dst));
+        memcpy(dst.data(), column_vector->data(), size);
+        output_column_field.column_vectors.emplace_back(std::move(dst));
         output_column_field.__set_column_type(DataTypeToProtoColumnType(column_vector->data_type()));
     }
 
@@ -331,7 +334,7 @@ public:
             Error<NetworkException>("Select list is empty");
         }
 
-        Vector<ParsedExpr *> *output_columns = new Vector<ParsedExpr *>();
+        std::vector<ParsedExpr *> *output_columns = new std::vector<ParsedExpr *>();
         output_columns->reserve(request.select_list.size());
 
         for (auto &expr : request.select_list) {
@@ -343,7 +346,7 @@ public:
         SearchExpr *search_expr = nullptr;
         if (request.__isset.search_expr) {
             search_expr = new SearchExpr();
-            auto search_expr_list = new Vector<ParsedExpr *>();
+            auto search_expr_list = new std::vector<ParsedExpr *>();
             SizeT knn_expr_count = request.search_expr.knn_exprs.size();
             SizeT match_expr_count = request.search_expr.match_exprs.size();
             bool fusion_expr_exists = request.search_expr.__isset.fusion_expr;
@@ -378,10 +381,10 @@ public:
         // offset = new ParsedExpr();
 
         // limit
-//        ParsedExpr *limit = nullptr;
-//        if (request.__isset.limit_expr == true) {
-//            limit = GetParsedExprFromProto(request.limit_expr);
-//        }
+        //        ParsedExpr *limit = nullptr;
+        //        if (request.__isset.limit_expr == true) {
+        //            limit = GetParsedExprFromProto(request.limit_expr);
+        //        }
 
         // auto end2 = std::chrono::steady_clock::now();
         // phase_2_duration_ += end2 - start2;
@@ -399,7 +402,7 @@ public:
         if (result.IsOk()) {
             auto data_block_count = result.result_table_->DataBlockCount();
             auto column_count = result.result_table_->ColumnCount();
-            Vector<infinity_thrift_rpc::ColumnField> &all_column_vectors = response.column_fields;
+            std::vector<infinity_thrift_rpc::ColumnField> &all_column_vectors = response.column_fields;
 
             all_column_vectors.resize(column_count);
 
@@ -518,12 +521,12 @@ public:
         auto result = infinity->ListDatabases();
 
         if (result.IsOk()) {
-            SharedPtr<DataBlock> data_block = result.result_table_->GetDataBlockById(0);
+            std::shared_ptr<DataBlock> data_block = result.result_table_->GetDataBlockById(0);
             auto row_count = data_block->row_count();
 
             for (int i = 0; i < row_count; ++i) {
                 Value value = data_block->GetValue(0, i);
-                const String &db_name = value.GetVarchar();
+                const std::string &db_name = value.GetVarchar();
                 response.db_names.emplace_back(db_name);
             }
 
@@ -540,12 +543,12 @@ public:
         auto database = infinity->GetDatabase(request.db_name);
         auto result = database->ListTables();
         if (result.IsOk()) {
-            SharedPtr<DataBlock> data_block = result.result_table_->GetDataBlockById(0);
+            std::shared_ptr<DataBlock> data_block = result.result_table_->GetDataBlockById(0);
 
             auto row_count = data_block->row_count();
             for (int i = 0; i < row_count; ++i) {
                 Value value = data_block->GetValue(1, i);
-                const String &table_name = value.GetVarchar();
+                const std::string &table_name = value.GetVarchar();
                 response.table_names.emplace_back(table_name);
             }
 
@@ -596,16 +599,16 @@ public:
         auto database = infinity->GetDatabase(request.db_name);
         auto table = database->GetTable(request.table_name);
 
-        String index_name = request.index_name;
+        std::string index_name = request.index_name;
 
-        auto *index_info_list_to_use = new Vector<IndexInfo *>();
+        auto *index_info_list_to_use = new std::vector<IndexInfo *>();
 
         for (auto &index_info : request.index_info_list) {
             auto index_info_to_use = new IndexInfo();
             index_info_to_use->index_type_ = GetIndexTypeFromProto(index_info.index_type);
             index_info_to_use->column_name_ = index_info.column_name;
 
-            auto *index_param_list = new Vector<InitParameter *>();
+            auto *index_param_list = new std::vector<InitParameter *>();
             for (auto &index_param : index_info.index_param_list) {
                 auto init_parameter = new InitParameter();
                 init_parameter->param_name_ = index_param.param_name;
@@ -632,8 +635,8 @@ public:
     }
 
 private:
-    Mutex infinity_session_map_mutex_{};
-    HashMap<u64, SharedPtr<Infinity>> infinity_session_map_{};
+    std::mutex infinity_session_map_mutex_{};
+    std::unordered_map<u64, std::shared_ptr<Infinity>> infinity_session_map_{};
 
     // SizeT count_ = 0;
     // std::chrono::duration<double> phase_1_duration_{};
@@ -642,8 +645,8 @@ private:
     // std::chrono::duration<double> phase_4_duration_{};
 
 private:
-    SharedPtr<Infinity> GetInfinityBySessionID(i64 session_id) {
-        std::lock_guard<Mutex> lock(infinity_session_map_mutex_);
+    std::shared_ptr<Infinity> GetInfinityBySessionID(i64 session_id) {
+        std::lock_guard<std::mutex> lock(infinity_session_map_mutex_);
         if (infinity_session_map_.count(session_id) > 0) {
             return infinity_session_map_[session_id];
         } else {
@@ -664,7 +667,7 @@ private:
 
     static ColumnDef *GetColumnDefFromProto(const infinity_thrift_rpc::ColumnDef &column_def) {
         auto column_def_data_type_ptr = GetColumnTypeFromProto(column_def.data_type);
-        auto constraints = HashSet<ConstraintType>();
+        auto constraints = std::unordered_set<ConstraintType>();
 
         for (auto constraint : column_def.constraints) {
             auto type = GetConstraintTypeFromProto(constraint);
@@ -676,33 +679,33 @@ private:
         return col_def;
     }
 
-    static SharedPtr<DataType> GetColumnTypeFromProto(const infinity_thrift_rpc::DataType &type) {
+    static std::shared_ptr<DataType> GetColumnTypeFromProto(const infinity_thrift_rpc::DataType &type) {
         switch (type.logic_type) {
             case infinity_thrift_rpc::LogicType::Boolean:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kBoolean);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kBoolean);
             case infinity_thrift_rpc::LogicType::TinyInt:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kTinyInt);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kTinyInt);
             case infinity_thrift_rpc::LogicType::SmallInt:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kSmallInt);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kSmallInt);
             case infinity_thrift_rpc::LogicType::Integer:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kInteger);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kInteger);
             case infinity_thrift_rpc::LogicType::BigInt:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kBigInt);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kBigInt);
             case infinity_thrift_rpc::LogicType::HugeInt:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kHugeInt);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kHugeInt);
             case infinity_thrift_rpc::LogicType::Decimal:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kDecimal);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kDecimal);
             case infinity_thrift_rpc::LogicType::Float:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kFloat);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kFloat);
             case infinity_thrift_rpc::LogicType::Double:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kDouble);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kDouble);
             case infinity_thrift_rpc::LogicType::Embedding: {
                 auto embedding_type = GetEmbeddingDataTypeFromProto(type.physical_type.embedding_type.element_type);
                 auto embedding_info = EmbeddingInfo::Make(embedding_type, type.physical_type.embedding_type.dimension);
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kEmbedding, embedding_info);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kEmbedding, embedding_info);
             };
             case infinity_thrift_rpc::LogicType::Varchar:
-                return MakeShared<infinity::DataType>(infinity::LogicalType::kVarchar);
+                return std::make_shared<infinity::DataType>(infinity::LogicalType::kVarchar);
             default:
                 Error<TypeException>("Invalid data type");
         }
@@ -821,8 +824,8 @@ private:
     static FunctionExpr *GetFunctionExprFromProto(const infinity_thrift_rpc::FunctionExpr &function_expr) {
         auto *parsed_expr = new FunctionExpr();
         parsed_expr->func_name_ = function_expr.function_name;
-        Vector<ParsedExpr *> *arguments;
-        arguments = new Vector<ParsedExpr *>();
+        std::vector<ParsedExpr *> *arguments;
+        arguments = new std::vector<ParsedExpr *>();
         arguments->reserve(function_expr.arguments.size());
 
         for (auto &args : function_expr.arguments) {
@@ -840,7 +843,7 @@ private:
         knn_expr->embedding_data_type_ = GetEmbeddingDataTypeFromProto(expr.embedding_data_type);
         std::tie(knn_expr->embedding_data_ptr_, knn_expr->dimension_) = GetEmbeddingDataTypeDataPtrFromProto(expr.embedding_data);
         knn_expr->topn_ = expr.topn;
-        knn_expr->opt_params_ = new Vector<InitParameter *>();
+        knn_expr->opt_params_ = new std::vector<InitParameter *>();
         for (auto &param : expr.opt_params) {
             auto init_parameter = new InitParameter();
             init_parameter->param_name_ = param.param_name;
@@ -936,7 +939,7 @@ private:
         return up_expr;
     }
 
-    static infinity_thrift_rpc::ColumnType::type DataTypeToProtoColumnType(const SharedPtr<DataType> &data_type) {
+    static infinity_thrift_rpc::ColumnType::type DataTypeToProtoColumnType(const std::shared_ptr<DataType> &data_type) {
         switch (data_type->type()) {
             case LogicalType::kBoolean:
                 return infinity_thrift_rpc::ColumnType::ColumnBool;
@@ -964,45 +967,45 @@ private:
         return infinity_thrift_rpc::ColumnType::ColumnInvalid;
     }
 
-    UniquePtr<infinity_thrift_rpc::DataType> DataTypeToProtoDataType(const SharedPtr<DataType> &data_type) {
+    std::unique_ptr<infinity_thrift_rpc::DataType> DataTypeToProtoDataType(const std::shared_ptr<DataType> &data_type) {
         switch (data_type->type()) {
             case LogicalType::kBoolean: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::Boolean);
                 return data_type_proto;
             }
             case LogicalType::kTinyInt: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::TinyInt);
                 return data_type_proto;
             }
             case LogicalType::kSmallInt: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::SmallInt);
                 return data_type_proto;
             }
             case LogicalType::kInteger: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::Integer);
                 return data_type_proto;
             }
             case LogicalType::kBigInt: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::BigInt);
                 return data_type_proto;
             }
             case LogicalType::kFloat: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::Float);
                 return data_type_proto;
             }
             case LogicalType::kDouble: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::Double);
                 return data_type_proto;
             }
             case LogicalType::kVarchar: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 infinity_thrift_rpc::VarcharType varchar_type;
                 data_type_proto->__set_logic_type(infinity_thrift_rpc::LogicType::Varchar);
                 infinity_thrift_rpc::PhysicalType physical_type;
@@ -1011,7 +1014,7 @@ private:
                 return data_type_proto;
             }
             case LogicalType::kEmbedding: {
-                auto data_type_proto = MakeUnique<infinity_thrift_rpc::DataType>();
+                auto data_type_proto = std::make_unique<infinity_thrift_rpc::DataType>();
                 infinity_thrift_rpc::EmbeddingType embedding_type;
                 auto embedding_info = static_cast<EmbeddingInfo *>(data_type->type_info().get());
                 embedding_type.__set_dimension(embedding_info->Dimension());
@@ -1059,7 +1062,7 @@ public:
     ~InfinityServiceCloneFactory() override = default;
 
     infinity_thrift_rpc::InfinityServiceIf *getHandler(const ::apache::thrift::TConnectionInfo &connInfo) override {
-        SharedPtr<TSocket> sock = std::dynamic_pointer_cast<TSocket>(connInfo.transport);
+        std::shared_ptr<TSocket> sock = std::dynamic_pointer_cast<TSocket>(connInfo.transport);
 
         LOG_TRACE(Format("Incoming connection, SocketInfo: {}, PeerHost: {}, PeerAddress: {}, PeerPort: {}",
                          sock->getSocketInfo(),
@@ -1078,10 +1081,11 @@ public:
 void ThreadedThriftServer::Init(i32 port_no) {
 
     std::cout << "Thrift server listen on: 0.0.0.0:" << port_no << std::endl;
-    server = MakeUnique<TThreadedServer>(MakeShared<infinity_thrift_rpc::InfinityServiceProcessorFactory>(MakeShared<InfinityServiceCloneFactory>()),
-                                         MakeShared<TServerSocket>(port_no), // port
-                                         MakeShared<TBufferedTransportFactory>(),
-                                         MakeShared<TBinaryProtocolFactory>());
+    server =
+        std::make_unique<TThreadedServer>(std::make_shared<infinity_thrift_rpc::InfinityServiceProcessorFactory>(std::make_shared<InfinityServiceCloneFactory>()),
+                                          std::make_shared<TServerSocket>(port_no), // port
+                                          std::make_shared<TBufferedTransportFactory>(),
+                                          std::make_shared<TBinaryProtocolFactory>());
 }
 
 void ThreadedThriftServer::Start() { server->serve(); }
@@ -1090,20 +1094,20 @@ void ThreadedThriftServer::Shutdown() { server->stop(); }
 
 void PoolThriftServer::Init(i32 port_no, i32 pool_size) {
 
-    SharedPtr<ThreadFactory> threadFactory = MakeShared<ThreadFactory>();
+    std::shared_ptr<ThreadFactory> threadFactory = std::make_shared<ThreadFactory>();
 
-    SharedPtr<ThreadManager> threadManager = ThreadManager::newSimpleThreadManager(pool_size);
+    std::shared_ptr<ThreadManager> threadManager = ThreadManager::newSimpleThreadManager(pool_size);
     threadManager->threadFactory(threadFactory);
     threadManager->start();
 
     std::cout << "API server listen on: 0.0.0.0:" << port_no << ", thread pool: " << pool_size << std::endl;
 
-    server =
-        MakeUnique<TThreadPoolServer>(MakeShared<infinity_thrift_rpc::InfinityServiceProcessorFactory>(MakeShared<InfinityServiceCloneFactory>()),
-                                      MakeShared<TServerSocket>(port_no),
-                                      MakeShared<TBufferedTransportFactory>(),
-                                      MakeShared<TBinaryProtocolFactory>(),
-                                      threadManager);
+    server = std::make_unique<TThreadPoolServer>(
+        std::make_shared<infinity_thrift_rpc::InfinityServiceProcessorFactory>(std::make_shared<InfinityServiceCloneFactory>()),
+        std::make_shared<TServerSocket>(port_no),
+        std::make_shared<TBufferedTransportFactory>(),
+        std::make_shared<TBinaryProtocolFactory>(),
+        threadManager);
 }
 
 void PoolThriftServer::Start() { server->serve(); }
@@ -1112,29 +1116,29 @@ void PoolThriftServer::Shutdown() { server->stop(); }
 
 void NonBlockPoolThriftServer::Init(i32 port_no, i32 pool_size) {
 
-    SharedPtr<ThreadFactory> thread_factory = MakeShared<ThreadFactory>();
-    service_handler_ = MakeShared<InfinityServiceHandler>();
-    SharedPtr<infinity_thrift_rpc::InfinityServiceProcessor> service_processor =
-        MakeShared<infinity_thrift_rpc::InfinityServiceProcessor>(service_handler_);
-    SharedPtr<TProtocolFactory> protocol_factory = MakeShared<TBinaryProtocolFactory>();
+    std::shared_ptr<ThreadFactory> thread_factory = std::make_shared<ThreadFactory>();
+    service_handler_ = std::make_shared<InfinityServiceHandler>();
+    std::shared_ptr<infinity_thrift_rpc::InfinityServiceProcessor> service_processor =
+        std::make_shared<infinity_thrift_rpc::InfinityServiceProcessor>(service_handler_);
+    std::shared_ptr<TProtocolFactory> protocol_factory = std::make_shared<TBinaryProtocolFactory>();
 
-    SharedPtr<ThreadManager> threadManager = ThreadManager::newSimpleThreadManager(pool_size);
+    std::shared_ptr<ThreadManager> threadManager = ThreadManager::newSimpleThreadManager(pool_size);
     threadManager->threadFactory(thread_factory);
     threadManager->start();
 
     std::cout << "Non-block pooled thrift server listen on: 0.0.0.0:" << port_no << ", pool size: " << pool_size << std::endl;
 
-    SharedPtr<TNonblockingServerSocket> non_block_socket = MakeShared<TNonblockingServerSocket>(port_no);
+    std::shared_ptr<TNonblockingServerSocket> non_block_socket = std::make_shared<TNonblockingServerSocket>(port_no);
 
     //    server_thread_ = thread_factory->newThread(std::shared_ptr<TServer>(
     //        new TNonblockingServer(serviceProcessor, protocolFactory, nbSocket1, threadManager)));
 
-    server_thread_ = thread_factory->newThread(MakeShared<TNonblockingServer>(service_processor, protocol_factory, non_block_socket, threadManager));
+    server_thread_ = thread_factory->newThread(std::make_shared<TNonblockingServer>(service_processor, protocol_factory, non_block_socket, threadManager));
 
-    //    server = MakeUnique<TThreadPoolServer>(MakeShared<InfinityServiceProcessorFactory>(MakeShared<InfinityServiceCloneFactory>()),
-    //                                           MakeShared<TServerSocket>(port_no),
-    //                                           MakeShared<TBufferedTransportFactory>(),
-    //                                           MakeShared<TBinaryProtocolFactory>(),
+    //    server = std::make_unique<TThreadPoolServer>(std::make_shared<InfinityServiceProcessorFactory>(std::make_shared<InfinityServiceCloneFactory>()),
+    //                                           std::make_shared<TServerSocket>(port_no),
+    //                                           std::make_shared<TBufferedTransportFactory>(),
+    //                                           std::make_shared<TBinaryProtocolFactory>(),
     //                                           threadManager);
 }
 

@@ -17,7 +17,8 @@ module;
 #include <arpa/inet.h>
 #include <boost/asio/read.hpp>
 
-import stl;
+import std;
+import type_alias;
 import pg_message;
 import ring_buffer_iterator;
 
@@ -33,9 +34,9 @@ SizeT BufferReader::size() const {
     return (current_size < 0) ? (current_size + PG_MSG_BUFFER_SIZE) : current_size;
 }
 
-String BufferReader::read_string() {
+std::string BufferReader::read_string() {
     auto end_pos = RingBufferIterator(data_);
-    String result;
+    std::string result;
 
     if (size() != 0) {
         end_pos = RingBufferIterator::Find(start_pos_, current_pos_, NULL_END);
@@ -113,17 +114,17 @@ u32 BufferReader::read_value_u32() {
     return ntohl(network_value);
 }
 
-String BufferReader::read_string(const SizeT string_length, NullTerminator null_terminator) {
-    String result;
+std::string BufferReader::read_string(const SizeT string_length, NullTerminator null_terminator) {
+    std::string result;
     result.reserve(string_length);
 
     if (size() != 0) {
-        RingBufferIterator::CopyN(start_pos_, Min(string_length, size()), result);
+        RingBufferIterator::CopyN(start_pos_, std::min(string_length, size()), result);
         start_pos_.increment(result.size());
     }
 
     while (result.size() < string_length) {
-        const auto substring_length = Min(string_length - result.size(), max_capacity());
+        const auto substring_length = std::min(string_length - result.size(), max_capacity());
         receive_more(substring_length);
         RingBufferIterator::CopyN(start_pos_, substring_length, result);
         start_pos_.increment(substring_length);

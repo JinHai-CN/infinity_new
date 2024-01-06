@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import default_values;
 
 export module ring_buffer_iterator;
@@ -23,7 +24,7 @@ namespace infinity {
 
 export class RingBufferIterator {
 public:
-    explicit RingBufferIterator(Array<char, PG_MSG_BUFFER_SIZE> &data, SizeT position = 0) : data_(data), position_(position) {}
+    explicit RingBufferIterator(std::array<char, PG_MSG_BUFFER_SIZE> &data, SizeT position = 0) : data_(data), position_(position) {}
 
     RingBufferIterator(const RingBufferIterator &other) : data_(other.data_), position_(other.position_) {}
 
@@ -60,7 +61,7 @@ public:
         return iter;
     }
 
-    static inline void Copy(const RingBufferIterator &begin_iter, const RingBufferIterator &end_iter, String &output) {
+    static inline void Copy(const RingBufferIterator &begin_iter, const RingBufferIterator &end_iter, std::string &output) {
         SizeT size = Distance(begin_iter, end_iter);
         output.reserve(size);
         RingBufferIterator iter = begin_iter;
@@ -78,7 +79,7 @@ public:
         }
     }
 
-    static inline void CopyN(const RingBufferIterator &begin_iter, SizeT len, String &result) {
+    static inline void CopyN(const RingBufferIterator &begin_iter, SizeT len, std::string &result) {
         RingBufferIterator iter = begin_iter;
         for (SizeT idx = 0; idx < len; ++idx) {
             result.push_back(iter.dereference());
@@ -92,7 +93,7 @@ public:
         }
     }
 
-    Array<char, PG_MSG_BUFFER_SIZE> &data_;
+    std::array<char, PG_MSG_BUFFER_SIZE> &data_;
     u32 position_;
 };
 
