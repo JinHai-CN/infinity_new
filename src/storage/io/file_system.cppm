@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import file_system_type;
 
 export module file_system;
@@ -25,7 +26,7 @@ export class FileSystem;
 
 export class FileHandler {
 public:
-    FileHandler(FileSystem &file_system, String path) : file_system_(file_system), path_(Move(path)) {}
+    FileHandler(FileSystem &file_system, std::string path) : file_system_(file_system), path_(std::move(path)) {}
 
     FileHandler(const FileHandler &) = delete;
 
@@ -41,7 +42,7 @@ public:
 
 public:
     FileSystem &file_system_;
-    Path path_;
+    std::filesystem::path path_;
 };
 
 class FileSystem {
@@ -51,36 +52,35 @@ public:
     virtual ~FileSystem() = default;
 
     // File related methods
-    virtual UniquePtr<FileHandler> OpenFile(const String &path, u8 flags, FileLockType lock_type) = 0;
+    virtual std::unique_ptr<FileHandler> OpenFile(const std::string &path, u8 flags, FileLockType lock_type) = 0;
 
     virtual i64 Read(FileHandler &file_handler, void *data, u64 nbytes) = 0;
 
     virtual i64 Write(FileHandler &file_handler, const void *data, u64 nbytes) = 0;
 
-    virtual void Rename(const String &old_path, const String &new_path) = 0;
+    virtual void Rename(const std::string &old_path, const std::string &new_path) = 0;
 
     virtual void Seek(FileHandler &file_handler, i64 pos) = 0;
 
     virtual SizeT GetFileSize(FileHandler &file_handler) = 0;
 
-    virtual void DeleteFile(const String &file_name) = 0;
+    virtual void DeleteFile(const std::string &file_name) = 0;
 
     virtual void SyncFile(FileHandler &file_handler) = 0;
 
     virtual void Close(FileHandler &file_handler) = 0;
 
     // Directory related methods
-    virtual bool Exists(const String &path) = 0; // if file or directory exists
+    virtual bool Exists(const std::string &path) = 0; // if file or directory exists
 
-    virtual void CreateDirectory(const String &path) = 0;
+    virtual void CreateDirectory(const std::string &path) = 0;
 
-    virtual u64 DeleteDirectory(const String &path) = 0;
+    virtual u64 DeleteDirectory(const std::string &path) = 0;
 
-    virtual Vector<SharedPtr<DirEntry>> ListDirectory(const String &path) = 0;
+    virtual std::vector<std::shared_ptr<std::filesystem::directory_entry>> ListDirectory(const std::string &path) = 0;
 
-    inline FileSystemType file_system_type() const {
-        return file_system_type_;
-    }
+    inline FileSystemType file_system_type() const { return file_system_type_; }
+
 private:
     FileSystemType file_system_type_{FileSystemType::kPosix};
 };

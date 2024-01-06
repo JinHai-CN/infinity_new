@@ -1,4 +1,5 @@
-#include "dictionary.h"
+
+module;
 #include "common/utility/builtin.h"
 
 #include <fst/matcher.h>
@@ -13,6 +14,8 @@
 #include "storage/invertedindex/common/openfst/fst_string_weight.h"
 #include "storage/invertedindex/common/openfst/fst_stringref_weight.h"
 #include "storage/invertedindex/common/openfst/fst_table_matcher.h"
+
+module dictionary;
 
 import term_meta;
 import vbyte_compressor;

@@ -1,4 +1,6 @@
-#pragma once
+module;
+
+export module dictionary;
 
 import file_writer;
 
