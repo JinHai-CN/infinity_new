@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import table_entry_type;
 
 export module table_detail;
@@ -22,8 +23,8 @@ export module table_detail;
 namespace infinity {
 
 export struct TableDetail {
-    SharedPtr<String> db_name_{};
-    SharedPtr<String> table_name_{};
+    std::shared_ptr<std::string> db_name_{};
+    std::shared_ptr<std::string> table_name_{};
     TableEntryType table_entry_type_;
     i64 column_count_{};
     i64 row_count_{};
@@ -33,8 +34,8 @@ export struct TableDetail {
 };
 
 export struct ViewDetail {
-    SharedPtr<String> db_name_{};
-    SharedPtr<String> view_name_{};
+    std::shared_ptr<std::string> db_name_{};
+    std::shared_ptr<std::string> view_name_{};
     i64 column_count_{};
 };
 

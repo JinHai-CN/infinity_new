@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import global_block_id;
 
 export module block_index;
@@ -35,10 +36,10 @@ export struct BlockIndex {
 
     BlockEntry *GetBlockEntry(u32 segment_id, u16 block_id) const;
 
-    Vector<SegmentEntry *> segments_;
-    HashMap<u32, SegmentEntry *> segment_index_;
-    HashMap<u32, HashMap<u16, BlockEntry *>> segment_block_index_;
-    Vector<GlobalBlockID> global_blocks_;
+    std::vector<SegmentEntry *> segments_;
+    std::unordered_map<u32, SegmentEntry *> segment_index_;
+    std::unordered_map<u32, std::unordered_map<u16, BlockEntry *>> segment_block_index_;
+    std::vector<GlobalBlockID> global_blocks_;
 };
 
 } // namespace infinity

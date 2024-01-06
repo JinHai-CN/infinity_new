@@ -2,7 +2,6 @@ module;
 
 export module int_encoder;
 
-
 import byte_slice_reader;
 import byte_slice_writer;
 

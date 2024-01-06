@@ -14,7 +14,7 @@
 
 module;
 
-import stl;
+import type_alias;
 
 export module global_block_id;
 

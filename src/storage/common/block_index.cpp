@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import catalog;
 import global_block_id;
 
