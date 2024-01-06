@@ -19,7 +19,8 @@ export module catalog:db_entry;
 import :table_meta;
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import table_entry_type;
 import parser;
 import third_party;
@@ -33,51 +34,50 @@ class DBEntry : public BaseEntry {
     friend struct NewCatalog;
 
 public:
-    inline explicit DBEntry(const SharedPtr<String> &data_dir, SharedPtr<String> db_name, u64 txn_id, TxnTimeStamp begin_ts)
-        : BaseEntry(EntryType::kDatabase), db_entry_dir_(MakeShared<String>(Format("{}/{}/txn_{}", *data_dir, *db_name, txn_id))),
-          db_name_(Move(db_name)) {
+    inline explicit DBEntry(const std::shared_ptr<std::string> &data_dir, std::shared_ptr<std::string> db_name, u64 txn_id, TxnTimeStamp begin_ts)
+        : BaseEntry(EntryType::kDatabase), db_entry_dir_(std::make_shared<std::string>(Format("{}/{}/txn_{}", *data_dir, *db_name, txn_id))),
+          db_name_(std::move(db_name)) {
         begin_ts_ = begin_ts;
         txn_id_ = txn_id;
     }
 
 public:
-
-    SharedPtr<String> ToString();
+    std::shared_ptr<std::string> ToString();
 
     Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
 
-    static UniquePtr<DBEntry> Deserialize(const Json &db_entry_json, BufferManager *buffer_mgr);
+    static std::unique_ptr<DBEntry> Deserialize(const Json &db_entry_json, BufferManager *buffer_mgr);
 
     virtual void MergeFrom(BaseEntry &other);
 
-    [[nodiscard]] const String& db_name() const { return *db_name_; }
+    [[nodiscard]] const std::string &db_name() const { return *db_name_; }
 
-    [[nodiscard]] const SharedPtr<String>& db_name_ptr() const { return db_name_; }
-
-private:
-    Tuple<TableEntry *, Status> CreateTable(TableEntryType table_entry_type,
-                                            const SharedPtr<String> &table_collection_name,
-                                            const Vector<SharedPtr<ColumnDef>> &columns,
-                                            u64 txn_id,
-                                            TxnTimeStamp begin_ts,
-                                            TxnManager *txn_mgr);
-
-    Tuple<TableEntry *, Status>
-    DropTable(const String &table_collection_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
-
-    Tuple<TableEntry *, Status> GetTableCollection(const String &table_name, u64 txn_id, TxnTimeStamp begin_ts);
-
-    void RemoveTableEntry(const String &table_collection_name, u64 txn_id, TxnManager *txn_mgr);
-
-    Vector<TableEntry *> TableCollections(u64 txn_id, TxnTimeStamp begin_ts);
-
-    Status GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, Vector<TableDetail> &output_table_array);
+    [[nodiscard]] const std::shared_ptr<std::string> &db_name_ptr() const { return db_name_; }
 
 private:
-    RWMutex rw_locker_{};
-    SharedPtr<String> db_entry_dir_{};
-    SharedPtr<String> db_name_{};
-    HashMap<String, UniquePtr<TableMeta>> tables_{}; // NOTE : can use SharedPtr<String> as key.
+    std::tuple<TableEntry *, Status> CreateTable(TableEntryType table_entry_type,
+                                                 const std::shared_ptr<std::string> &table_collection_name,
+                                                 const std::vector<std::shared_ptr<ColumnDef>> &columns,
+                                                 u64 txn_id,
+                                                 TxnTimeStamp begin_ts,
+                                                 TxnManager *txn_mgr);
+
+    std::tuple<TableEntry *, Status>
+    DropTable(const std::string &table_collection_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+
+    std::tuple<TableEntry *, Status> GetTableCollection(const std::string &table_name, u64 txn_id, TxnTimeStamp begin_ts);
+
+    void RemoveTableEntry(const std::string &table_collection_name, u64 txn_id, TxnManager *txn_mgr);
+
+    std::vector<TableEntry *> TableCollections(u64 txn_id, TxnTimeStamp begin_ts);
+
+    Status GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, std::vector<TableDetail> &output_table_array);
+
+private:
+    std::shared_mutex rw_locker_{};
+    std::shared_ptr<std::string> db_entry_dir_{};
+    std::shared_ptr<std::string> db_name_{};
+    std::unordered_map<std::string, std::unique_ptr<TableMeta>> tables_{}; // NOTE : can use std::shared_ptr<std::string> as key.
 };
 
 } // namespace infinity

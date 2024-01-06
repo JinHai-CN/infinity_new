@@ -21,7 +21,8 @@ import :column_index_entry;
 import :segment_column_index_entry;
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import default_values;
 import third_party;
 import buffer_manager;
@@ -42,23 +43,23 @@ struct SegmentEntry : public BaseEntry {
 public:
     explicit SegmentEntry(const TableEntry *table_entry);
 
-    static SharedPtr<SegmentEntry> MakeNewSegmentEntry(const TableEntry *table_entry, u32 segment_id, BufferManager *buffer_mgr);
+    static std::shared_ptr<SegmentEntry> MakeNewSegmentEntry(const TableEntry *table_entry, u32 segment_id, BufferManager *buffer_mgr);
 
-    static SharedPtr<SegmentEntry>
-    MakeReplaySegmentEntry(const TableEntry *table_entry, u32 segment_id, SharedPtr<String> segment_dir, TxnTimeStamp commit_ts);
+    static std::shared_ptr<SegmentEntry>
+    MakeReplaySegmentEntry(const TableEntry *table_entry, u32 segment_id, std::shared_ptr<std::string> segment_dir, TxnTimeStamp commit_ts);
 
-    static UniquePtr<CreateIndexParam> GetCreateIndexParam(SizeT seg_row_count, const IndexBase *index_base, const ColumnDef *column_def);
+    static std::unique_ptr<CreateIndexParam> GetCreateIndexParam(SizeT seg_row_count, const IndexBase *index_base, const ColumnDef *column_def);
 
     Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
 
-    static SharedPtr<SegmentEntry> Deserialize(const Json &table_entry_json, TableEntry *table_entry, BufferManager *buffer_mgr);
+    static std::shared_ptr<SegmentEntry> Deserialize(const Json &table_entry_json, TableEntry *table_entry, BufferManager *buffer_mgr);
 
     void MergeFrom(infinity::BaseEntry &other) override;
 
 public:
-    const String &DirPath() { return *segment_dir_; }
+    const std::string &DirPath() { return *segment_dir_; }
 
-    inline const Vector<SharedPtr<BlockEntry>> &block_entries() const { return block_entries_; }
+    inline const std::vector<std::shared_ptr<BlockEntry>> &block_entries() const { return block_entries_; }
 
     inline TxnTimeStamp min_row_ts() const { return min_row_ts_; }
 
@@ -68,7 +69,7 @@ public:
 
     BlockEntry *GetBlockEntryByID(u16 block_id) const;
 
-    inline const SharedPtr<String> &segment_dir() const { return segment_dir_; }
+    inline const std::shared_ptr<std::string> &segment_dir() const { return segment_dir_; }
 
     inline SizeT row_count() const { return row_count_; }
 
@@ -76,7 +77,7 @@ public:
 
 public:
     // Used in WAL replay & Physical Import
-    inline void AppendBlockEntry(UniquePtr<BlockEntry> block_entry) { block_entries_.emplace_back(Move(block_entry)); }
+    inline void AppendBlockEntry(std::unique_ptr<BlockEntry> block_entry) { block_entries_.emplace_back(std::move(block_entry)); }
 
     inline void IncreaseRowCount(SizeT increased_row_count) { row_count_ += increased_row_count; }
 
@@ -92,10 +93,10 @@ public:
 protected:
     u64 AppendData(u64 txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr);
 
-    void DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, Vector<RowID>> &block_row_hashmap);
+    void DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const std::unordered_map<u16, std::vector<RowID>> &block_row_hashmap);
 
-    SharedPtr<SegmentColumnIndexEntry> CreateIndexFile(ColumnIndexEntry *column_index_entry,
-                                                       SharedPtr<ColumnDef> column_def,
+    std::shared_ptr<SegmentColumnIndexEntry> CreateIndexFile(ColumnIndexEntry *column_index_entry,
+                                                       std::shared_ptr<ColumnDef> column_def,
                                                        TxnTimeStamp create_ts,
                                                        BufferManager *buffer_mgr,
                                                        TxnTableStore *txn_store,
@@ -103,17 +104,17 @@ protected:
 
     void CommitAppend(u64 txn_id, TxnTimeStamp commit_ts, u16 block_id, u16 start_pos, u16 row_count);
 
-    void CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, Vector<RowID>> &block_row_hashmap);
+    void CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const std::unordered_map<u16, std::vector<RowID>> &block_row_hashmap);
 
 private:
-    static SharedPtr<String> DetermineSegmentDir(const String &parent_dir, u32 seg_id);
+    static std::shared_ptr<std::string> DetermineSegmentDir(const std::string &parent_dir, u32 seg_id);
 
 protected:
-    RWMutex rw_locker_{};
+    std::shared_mutex rw_locker_{};
 
     const TableEntry *table_entry_{};
 
-    SharedPtr<String> segment_dir_{};
+    std::shared_ptr<std::string> segment_dir_{};
     u32 segment_id_{};
 
     SizeT row_count_{};
@@ -123,7 +124,7 @@ protected:
     TxnTimeStamp min_row_ts_{0}; // Indicate the commit_ts which create this SegmentEntry
     TxnTimeStamp max_row_ts_{0}; // Indicate the max commit_ts which create/update/delete data inside this SegmentEntry
 
-    Vector<SharedPtr<BlockEntry>> block_entries_{};
+    std::vector<std::shared_ptr<BlockEntry>> block_entries_{};
 };
 
 } // namespace infinity

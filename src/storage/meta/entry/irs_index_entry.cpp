@@ -28,7 +28,7 @@ import logger;
 
 namespace infinity {
 
-IrsIndexEntry::IrsIndexEntry(TableIndexEntry *, std::shared_ptr<String> index_dir, u64 txn_id, TxnTimeStamp begin_ts)
+IrsIndexEntry::IrsIndexEntry(TableIndexEntry *, std::shared_ptr<std::string> index_dir, u64 txn_id, TxnTimeStamp begin_ts)
     : BaseEntry(EntryType::kIRSIndex), index_dir_(Move(index_dir)) {
     txn_id_ = txn_id;
     begin_ts_ = begin_ts;
@@ -48,7 +48,7 @@ std::shared_ptr<IrsIndexEntry> IrsIndexEntry::Deserialize(const Json &index_def_
     u64 txn_id = index_def_entry_json["txn_id"];
     TxnTimeStamp begin_ts = index_def_entry_json["begin_ts"];
     TxnTimeStamp commit_ts = index_def_entry_json["commit_ts"];
-    auto index_dir = MakeShared<String>(index_def_entry_json["index_dir"]);
+    auto index_dir = std::make_shared<std::string>(index_def_entry_json["index_dir"]);
 
     auto irs_index_entry = NewIrsIndexEntry(table_index_entry, txn_id, index_dir, begin_ts);
     irs_index_entry->commit_ts_.store(commit_ts);
@@ -59,15 +59,15 @@ std::shared_ptr<IrsIndexEntry> IrsIndexEntry::Deserialize(const Json &index_def_
     return irs_index_entry;
 }
 
-std::shared_ptr<String> IrsIndexEntry::DetermineIndexDir(const String &, const String &) {
+std::shared_ptr<std::string> IrsIndexEntry::DetermineIndexDir(const std::string &, const std::string &) {
     Error<StorageException>("Not implemented");
     return nullptr;
 }
 
 std::shared_ptr<IrsIndexEntry>
-IrsIndexEntry::NewIrsIndexEntry(TableIndexEntry *table_index_entry, u64 txn_id, std::shared_ptr<String> index_dir, TxnTimeStamp begin_ts) {
-    auto irs_index_entry = MakeShared<IrsIndexEntry>(table_index_entry, index_dir, txn_id, begin_ts);
-    irs_index_entry->irs_index_ = MakeShared<IRSDataStore>(*(table_index_entry->table_index_meta()->GetTableEntry()->GetTableName()), *(index_dir));
+IrsIndexEntry::NewIrsIndexEntry(TableIndexEntry *table_index_entry, u64 txn_id, std::shared_ptr<std::string> index_dir, TxnTimeStamp begin_ts) {
+    auto irs_index_entry = std::make_shared<IrsIndexEntry>(table_index_entry, index_dir, txn_id, begin_ts);
+    irs_index_entry->irs_index_ = std::make_shared<IRSDataStore>(*(table_index_entry->table_index_meta()->GetTableEntry()->GetTableName()), *(index_dir));
     return irs_index_entry;
 }
 

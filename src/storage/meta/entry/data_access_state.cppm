@@ -16,7 +16,8 @@ module;
 
 export module data_access_state;
 
-import stl;
+import std;
+import type_alias;
 import data_block;
 import column_vector;
 import parser;
@@ -34,33 +35,35 @@ export struct AppendRange {
 };
 
 export struct AppendState {
-    explicit AppendState(const Vector<SharedPtr<DataBlock>> &blocks) : blocks_(blocks), current_count_(0) {
+    explicit AppendState(const std::vector<std::shared_ptr<DataBlock>> &blocks) : blocks_(blocks), current_count_(0) {
         SizeT block_count = blocks.size();
         for (SizeT idx = 0; idx < block_count; ++idx) {
             total_count_ += blocks[idx]->row_count();
         }
     }
 
-    const Vector<SharedPtr<DataBlock>> &blocks_{};
+    const std::vector<std::shared_ptr<DataBlock>> &blocks_{};
     SizeT total_count_{};
     SizeT current_count_{};
 
     u64 current_block_{}; // block count in append state may larger than u16::max, since these blocks may not be in one segment.
     u16 current_block_offset_{};
 
-    Vector<AppendRange> append_ranges_{};
+    std::vector<AppendRange> append_ranges_{};
 
     [[nodiscard]] inline bool Finished() const { return current_count_ == total_count_; }
 };
 
 export struct ImportState {
-    Vector<void *> segments_ptr_;
+    std::vector<void *> segments_ptr_;
 };
 
 export struct DeleteState {
-//    HashMap<u64, Vector<RowID>> rows_; // key is pair<segment_id, block_id>
-    // HashMap<<segment, block_id>, block_offset>
-    HashMap<u32, HashMap<u16, Vector<RowID>>> rows_; // use segment id, as the first level key, block id as the second level key
+    //    std::unordered_map<u64, std::vector<RowID>> rows_; // key is pair<segment_id, block_id>
+    // std::unordered_map<<segment, block_id>, block_offset>
+
+    // use segment id, as the first level key, block id as the second level key
+    std::unordered_map<u32, std::unordered_map<u16, std::vector<RowID>>> rows_;
 };
 
 export struct GetState {};

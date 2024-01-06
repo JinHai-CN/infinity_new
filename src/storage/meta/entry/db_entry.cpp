@@ -14,14 +14,15 @@
 
 module;
 
-#include <vector>
+#include <tuple>
 
 module catalog;
 
 import :base_entry;
 
 import table_entry_type;
-import stl;
+import std;
+import type_alias;
 import parser;
 import txn_manager;
 import table_detail;
@@ -35,13 +36,13 @@ import status;
 
 namespace infinity {
 
-Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type,
-                                                 const SharedPtr<String> &table_collection_name,
-                                                 const Vector<SharedPtr<ColumnDef>> &columns,
+std::tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type,
+                                                 const std::shared_ptr<std::string> &table_collection_name,
+                                                 const std::vector<std::shared_ptr<ColumnDef>> &columns,
                                                  u64 txn_id,
                                                  TxnTimeStamp begin_ts,
                                                  TxnManager *txn_mgr) {
-    const String &table_name = *table_collection_name;
+    const std::string &table_name = *table_collection_name;
 
     // Check if there is table_meta with the table_name
     TableMeta *table_meta{nullptr};
@@ -57,7 +58,7 @@ Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type
         this->rw_locker_.unlock_shared();
 
         LOG_TRACE(Format("Create new table/collection: {}", table_name));
-        UniquePtr<TableMeta> new_table_meta = MakeUnique<TableMeta>(this->db_entry_dir_, table_collection_name, this);
+        std::unique_ptr<TableMeta> new_table_meta = std::make_unique<TableMeta>(this->db_entry_dir_, table_collection_name, this);
         table_meta = new_table_meta.get();
 
         this->rw_locker_.lock();
@@ -75,8 +76,8 @@ Tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry_type
     return table_meta->CreateNewEntry(table_entry_type, table_collection_name, columns, txn_id, begin_ts, txn_mgr);
 }
 
-Tuple<TableEntry *, Status>
-DBEntry::DropTable(const String &table_collection_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr) {
+std::tuple<TableEntry *, Status>
+DBEntry::DropTable(const std::string &table_collection_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr) {
     this->rw_locker_.lock_shared();
 
     TableMeta *table_meta{nullptr};
@@ -90,7 +91,8 @@ DBEntry::DropTable(const String &table_collection_name, ConflictType conflict_ty
             return {nullptr, Status::OK()};
         }
 
-        UniquePtr<String> err_msg = MakeUnique<String>(Format("Attempt to drop not existed table/collection entry {}", table_collection_name));
+        std::unique_ptr<std::string> err_msg =
+            std::make_unique<std::string>(Format("Attempt to drop not existed table/collection entry {}", table_collection_name));
         LOG_ERROR(*err_msg);
         return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
     }
@@ -99,7 +101,7 @@ DBEntry::DropTable(const String &table_collection_name, ConflictType conflict_ty
     return table_meta->DropNewEntry(txn_id, begin_ts, txn_mgr, table_collection_name, conflict_type);
 }
 
-Tuple<TableEntry *, Status> DBEntry::GetTableCollection(const String &table_collection_name, u64 txn_id, TxnTimeStamp begin_ts) {
+std::tuple<TableEntry *, Status> DBEntry::GetTableCollection(const std::string &table_collection_name, u64 txn_id, TxnTimeStamp begin_ts) {
     this->rw_locker_.lock_shared();
 
     TableMeta *table_meta{nullptr};
@@ -110,14 +112,14 @@ Tuple<TableEntry *, Status> DBEntry::GetTableCollection(const String &table_coll
 
     //    LOG_TRACE("Get a table entry {}", table_name);
     if (table_meta == nullptr) {
-        UniquePtr<String> err_msg = MakeUnique<String>("No valid db meta.");
+        std::unique_ptr<std::string> err_msg = std::make_unique<std::string>("No valid db meta.");
         LOG_ERROR(*err_msg);
         return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
     }
     return table_meta->GetEntry(txn_id, begin_ts);
 }
 
-void DBEntry::RemoveTableEntry(const String &table_collection_name, u64 txn_id, TxnManager *txn_mgr) {
+void DBEntry::RemoveTableEntry(const std::string &table_collection_name, u64 txn_id, TxnManager *txn_mgr) {
     this->rw_locker_.lock_shared();
 
     TableMeta *table_meta{nullptr};
@@ -130,8 +132,8 @@ void DBEntry::RemoveTableEntry(const String &table_collection_name, u64 txn_id, 
     table_meta->DeleteNewEntry(txn_id, txn_mgr);
 }
 
-Vector<TableEntry *> DBEntry::TableCollections(u64 txn_id, TxnTimeStamp begin_ts) {
-    Vector<TableEntry *> results;
+std::vector<TableEntry *> DBEntry::TableCollections(u64 txn_id, TxnTimeStamp begin_ts) {
+    std::vector<TableEntry *> results;
 
     this->rw_locker_.lock_shared();
 
@@ -150,8 +152,8 @@ Vector<TableEntry *> DBEntry::TableCollections(u64 txn_id, TxnTimeStamp begin_ts
     return results;
 }
 
-Status DBEntry::GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, Vector<TableDetail> &output_table_array) {
-    Vector<TableEntry *> table_collection_entries = this->TableCollections(txn_id, begin_ts);
+Status DBEntry::GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, std::vector<TableDetail> &output_table_array) {
+    std::vector<TableEntry *> table_collection_entries = this->TableCollections(txn_id, begin_ts);
     output_table_array.reserve(table_collection_entries.size());
     for (TableEntry *table_entry : table_collection_entries) {
         TableDetail table_detail;
@@ -162,7 +164,7 @@ Status DBEntry::GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, Vector<TableD
         table_detail.row_count_ = table_entry->row_count();
         table_detail.segment_capacity_ = DEFAULT_SEGMENT_CAPACITY;
 
-        SharedPtr<BlockIndex> segment_index = table_entry->GetBlockIndex(txn_id, begin_ts);
+        std::shared_ptr<BlockIndex> segment_index = table_entry->GetBlockIndex(txn_id, begin_ts);
 
         table_detail.segment_count_ = segment_index->SegmentCount();
         table_detail.block_count_ = segment_index->BlockCount();
@@ -171,17 +173,17 @@ Status DBEntry::GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, Vector<TableD
     return Status::OK();
 }
 
-SharedPtr<String> DBEntry::ToString() {
+std::shared_ptr<std::string> DBEntry::ToString() {
     SharedLock<RWMutex> r_locker(rw_locker_);
-    SharedPtr<String> res =
-        MakeShared<String>(Format("DBEntry, db_entry_dir: {}, txn id: {}, table count: ", *db_entry_dir_, txn_id_, tables_.size()));
+    std::shared_ptr<std::string> res =
+        std::make_shared<std::string>(Format("DBEntry, db_entry_dir: {}, txn id: {}, table count: ", *db_entry_dir_, txn_id_, tables_.size()));
     return res;
 }
 
 Json DBEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     Json json_res;
 
-    Vector<TableMeta *> table_metas;
+    std::vector<TableMeta *> table_metas;
     {
         SharedLock<RWMutex> lck(this->rw_locker_);
         json_res["db_entry_dir"] = *this->db_entry_dir_;
@@ -202,14 +204,14 @@ Json DBEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     return json_res;
 }
 
-UniquePtr<DBEntry> DBEntry::Deserialize(const Json &db_entry_json, BufferManager *buffer_mgr) {
+std::unique_ptr<DBEntry> DBEntry::Deserialize(const Json &db_entry_json, BufferManager *buffer_mgr) {
     Json json_res;
 
-    SharedPtr<String> db_entry_dir = MakeShared<String>(db_entry_json["db_entry_dir"]);
-    SharedPtr<String> db_name = MakeShared<String>(db_entry_json["db_name"]);
+    std::shared_ptr<std::string> db_entry_dir = std::make_shared<std::string>(db_entry_json["db_entry_dir"]);
+    std::shared_ptr<std::string> db_name = std::make_shared<std::string>(db_entry_json["db_name"]);
     u64 txn_id = db_entry_json["txn_id"];
     u64 begin_ts = db_entry_json["begin_ts"];
-    UniquePtr<DBEntry> res = MakeUnique<DBEntry>(db_entry_dir, db_name, txn_id, begin_ts);
+    std::unique_ptr<DBEntry> res = std::make_unique<DBEntry>(db_entry_dir, db_name, txn_id, begin_ts);
 
     u64 commit_ts = db_entry_json["commit_ts"];
     bool deleted = db_entry_json["deleted"];
@@ -221,7 +223,7 @@ UniquePtr<DBEntry> DBEntry::Deserialize(const Json &db_entry_json, BufferManager
 
     if (db_entry_json.contains("tables")) {
         for (const auto &table_meta_json : db_entry_json["tables"]) {
-            UniquePtr<TableMeta> table_meta = TableMeta::Deserialize(table_meta_json, res.get(), buffer_mgr);
+            std::unique_ptr<TableMeta> table_meta = TableMeta::Deserialize(table_meta_json, res.get(), buffer_mgr);
             res->tables_.emplace(*table_meta->table_name_, Move(table_meta));
         }
     }

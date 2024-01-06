@@ -14,13 +14,10 @@
 
 module;
 
-#include <ctime>
-#include <string>
-#include <vector>
-
 module catalog;
 
-import stl;
+import std;
+import type_alias;
 import third_party;
 import buffer_manager;
 import default_values;
@@ -52,8 +49,8 @@ namespace infinity {
 
 SegmentEntry::SegmentEntry(const TableEntry *table_entry) : BaseEntry(EntryType::kSegment), table_entry_(table_entry) {}
 
-SharedPtr<SegmentEntry> SegmentEntry::MakeNewSegmentEntry(const TableEntry *table_entry, u32 segment_id, BufferManager *buffer_mgr) {
-    SharedPtr<SegmentEntry> new_entry = MakeShared<SegmentEntry>(table_entry);
+std::shared_ptr<SegmentEntry> SegmentEntry::MakeNewSegmentEntry(const TableEntry *table_entry, u32 segment_id, BufferManager *buffer_mgr) {
+    std::shared_ptr<SegmentEntry> new_entry = std::make_shared<SegmentEntry>(table_entry);
     new_entry->row_count_ = 0;
     new_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
     new_entry->segment_id_ = segment_id;
@@ -66,15 +63,17 @@ SharedPtr<SegmentEntry> SegmentEntry::MakeNewSegmentEntry(const TableEntry *tabl
     new_entry->segment_dir_ = SegmentEntry::DetermineSegmentDir(*table_entry->TableEntryDir(), segment_id);
     if (new_entry->block_entries_.empty()) {
         new_entry->block_entries_.emplace_back(
-            MakeUnique<BlockEntry>(new_entry.get(), new_entry->block_entries_.size(), 0, new_entry->column_count_, buffer_mgr));
+            std::make_unique<BlockEntry>(new_entry.get(), new_entry->block_entries_.size(), 0, new_entry->column_count_, buffer_mgr));
     }
     return new_entry;
 }
 
-SharedPtr<SegmentEntry>
-SegmentEntry::MakeReplaySegmentEntry(const TableEntry *table_entry, u32 segment_id, SharedPtr<String> segment_dir, TxnTimeStamp commit_ts) {
+std::shared_ptr<SegmentEntry> SegmentEntry::MakeReplaySegmentEntry(const TableEntry *table_entry,
+                                                                   u32 segment_id,
+                                                                   std::shared_ptr<std::string> segment_dir,
+                                                                   TxnTimeStamp commit_ts) {
 
-    auto new_entry = MakeShared<SegmentEntry>(table_entry);
+    auto new_entry = std::make_shared<SegmentEntry>(table_entry);
     new_entry->row_capacity_ = DEFAULT_SEGMENT_CAPACITY;
     new_entry->segment_id_ = segment_id;
     new_entry->min_row_ts_ = commit_ts;
@@ -87,12 +86,12 @@ SegmentEntry::MakeReplaySegmentEntry(const TableEntry *table_entry, u32 segment_
 }
 
 int SegmentEntry::Room() {
-    SharedLock<RWMutex> lck(rw_locker_);
+    std::shared_lock<std::shared_mutex> lck(rw_locker_);
     return this->row_capacity_ - this->row_count_;
 }
 
 u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr) {
-    UniqueLock<RWMutex> lck(this->rw_locker_);
+    UniqueLock<std::shared_mutex> lck(this->rw_locker_);
     if (this->row_capacity_ - this->row_count_ <= 0)
         return 0;
     //    SizeT start_row = this->row_count_;
@@ -107,7 +106,8 @@ u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferMa
             // Append to_append_rows into block
             BlockEntry *last_block_entry = this->block_entries_.back().get();
             if (last_block_entry->GetAvailableCapacity() <= 0) {
-                this->block_entries_.emplace_back(MakeUnique<BlockEntry>(this, this->block_entries_.size(), 0, this->column_count_, buffer_mgr));
+                this->block_entries_.emplace_back(
+                    std::make_unique<BlockEntry>(this, this->block_entries_.size(), 0, this->column_count_, buffer_mgr));
                 last_block_entry = this->block_entries_.back().get();
             }
 
@@ -136,8 +136,8 @@ u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferMa
     return total_copied;
 }
 
-void SegmentEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, Vector<RowID>> &block_row_hashmap) {
-    UniqueLock<RWMutex> lck(this->rw_locker_);
+void SegmentEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, std::vector<RowID>> &block_row_hashmap) {
+    UniqueLock<std::shared_mutex> lck(this->rw_locker_);
 
     for (const auto &row_hash_map : block_row_hashmap) {
         u16 block_id = row_hash_map.first;
@@ -146,23 +146,23 @@ void SegmentEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<
             Error<StorageException>(Format("The segment doesn't contain the given block: {}.", block_id));
         }
 
-        const Vector<RowID> &rows = row_hash_map.second;
+        const std::vector<RowID> &rows = row_hash_map.second;
         block_entry->DeleteData(txn_id, commit_ts, rows);
     }
 }
 
-SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntry *column_index_entry,
-                                                                 SharedPtr<ColumnDef> column_def,
-                                                                 TxnTimeStamp create_ts,
-                                                                 BufferManager *buffer_mgr,
-                                                                 TxnTableStore *txn_store,
-                                                                 bool prepare) {
+std::shared_ptr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntry *column_index_entry,
+                                                                       std::shared_ptr<ColumnDef> column_def,
+                                                                       TxnTimeStamp create_ts,
+                                                                       BufferManager *buffer_mgr,
+                                                                       TxnTableStore *txn_store,
+                                                                       bool prepare) {
     u64 column_id = column_def->id();
-    //    SharedPtr<IndexDef> index_def = index_def_entry->index_def_;
+    //    std::shared_ptr<IndexDef> index_def = index_def_entry->index_def_;
     const IndexBase *index_base = column_index_entry->index_base_ptr();
-    //    UniquePtr<CreateIndexParam> create_index_param = MakeUnique<CreateIndexParam>(index_base, column_def.get());
-    UniquePtr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(this->row_count_, index_base, column_def.get());
-    SharedPtr<SegmentColumnIndexEntry> segment_column_index_entry =
+    //    std::unique_ptr<CreateIndexParam> create_index_param = std::make_unique<CreateIndexParam>(index_base, column_def.get());
+    std::unique_ptr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(this->row_count_, index_base, column_def.get());
+    std::shared_ptr<SegmentColumnIndexEntry> segment_column_index_entry =
         SegmentColumnIndexEntry::NewIndexEntry(column_index_entry, this->segment_id_, create_ts, buffer_mgr, create_index_param.get());
     switch (index_base->index_type_) {
 
@@ -178,7 +178,7 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
                 case kElemFloat: {
                     auto annivfflat_index = static_cast<AnnIVFFlatIndexData<f32> *>(buffer_handle.GetDataMut());
                     // TODO: How to select training data?
-                    Vector<f32> segment_column_data;
+                    std::vector<f32> segment_column_data;
                     segment_column_data.reserve(this->row_count_ * dimension);
                     for (const auto &block_entry : this->block_entries_) {
                         BlockColumnEntry *block_column_entry = block_entry->GetColumnBlockEntry(column_id);
@@ -211,7 +211,7 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
             BufferHandle buffer_handle = segment_column_index_entry->GetIndex();
             auto InsertHnsw = [&](auto &hnsw_index) {
                 u32 segment_offset = 0;
-                Vector<u64> row_ids;
+                std::vector<u64> row_ids;
                 for (const auto &block_entry : this->block_entries_) {
                     SizeT block_row_cnt = block_entry->row_count();
 
@@ -287,12 +287,14 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
             break;
         }
         case IndexType::kIRSFullText: {
-            UniquePtr<String> err_msg = MakeUnique<String>(Format("Invalid index type: {}", IndexInfo::IndexTypeToString(index_base->index_type_)));
+            std::unique_ptr<std::string> err_msg =
+                std::make_unique<std::string>(Format("Invalid index type: {}", IndexInfo::IndexTypeToString(index_base->index_type_)));
             LOG_ERROR(*err_msg);
             Error<StorageException>(*err_msg);
         }
         default: {
-            UniquePtr<String> err_msg = MakeUnique<String>(Format("Invalid index type: {}", IndexInfo::IndexTypeToString(index_base->index_type_)));
+            std::unique_ptr<std::string> err_msg =
+                std::make_unique<std::string>(Format("Invalid index type: {}", IndexInfo::IndexTypeToString(index_base->index_type_)));
             LOG_ERROR(*err_msg);
             Error<StorageException>(*err_msg);
         }
@@ -302,9 +304,9 @@ SharedPtr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnIndexEntr
 }
 
 void SegmentEntry::CommitAppend(u64 txn_id, TxnTimeStamp commit_ts, u16 block_id, u16, u16) {
-    SharedPtr<BlockEntry> block_entry;
+    std::shared_ptr<BlockEntry> block_entry;
     {
-        UniqueLock<RWMutex> lck(this->rw_locker_);
+        UniqueLock<std::shared_mutex> lck(this->rw_locker_);
         if (this->min_row_ts_ == 0) {
             this->min_row_ts_ = commit_ts;
         }
@@ -314,8 +316,8 @@ void SegmentEntry::CommitAppend(u64 txn_id, TxnTimeStamp commit_ts, u16 block_id
     block_entry->CommitAppend(txn_id, commit_ts);
 }
 
-void SegmentEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, Vector<RowID>> &block_row_hashmap) {
-    UniqueLock<RWMutex> lck(this->rw_locker_);
+void SegmentEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, std::vector<RowID>> &block_row_hashmap) {
+    UniqueLock<std::shared_mutex> lck(this->rw_locker_);
 
     for (const auto &row_hash_map : block_row_hashmap) {
         u16 block_id = row_hash_map.first;
@@ -340,9 +342,9 @@ BlockEntry *SegmentEntry::GetBlockEntryByID(u16 block_id) const {
 
 Json SegmentEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
     Json json_res;
-    Vector<BlockEntry *> block_entries;
+    std::vector<BlockEntry *> block_entries;
     {
-        SharedLock<RWMutex> lck(this->rw_locker_);
+        std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
         json_res["segment_dir"] = *this->segment_dir_;
         json_res["row_capacity"] = this->row_capacity_;
         json_res["segment_id"] = this->segment_id_;
@@ -378,10 +380,10 @@ Json SegmentEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint
     return json_res;
 }
 
-SharedPtr<SegmentEntry> SegmentEntry::Deserialize(const Json &segment_entry_json, TableEntry *table_entry, BufferManager *buffer_mgr) {
-    SharedPtr<SegmentEntry> segment_entry = MakeShared<SegmentEntry>(table_entry);
+std::shared_ptr<SegmentEntry> SegmentEntry::Deserialize(const Json &segment_entry_json, TableEntry *table_entry, BufferManager *buffer_mgr) {
+    std::shared_ptr<SegmentEntry> segment_entry = std::make_shared<SegmentEntry>(table_entry);
 
-    segment_entry->segment_dir_ = MakeShared<String>(segment_entry_json["segment_dir"]);
+    segment_entry->segment_dir_ = std::make_shared<std::string>(segment_entry_json["segment_dir"]);
     segment_entry->row_capacity_ = segment_entry_json["row_capacity"];
 
     segment_entry->segment_id_ = segment_entry_json["segment_id"];
@@ -394,7 +396,7 @@ SharedPtr<SegmentEntry> SegmentEntry::Deserialize(const Json &segment_entry_json
 
     if (segment_entry_json.contains("block_entries")) {
         for (const auto &block_json : segment_entry_json["block_entries"]) {
-            UniquePtr<BlockEntry> block_entry = BlockEntry::Deserialize(block_json, segment_entry.get(), buffer_mgr);
+            std::unique_ptr<BlockEntry> block_entry = BlockEntry::Deserialize(block_json, segment_entry.get(), buffer_mgr);
             auto block_entries_size = segment_entry->block_entries_.size();
             segment_entry->block_entries_.resize(Max(block_entries_size, static_cast<SizeT>(block_entry->block_id() + 1)));
             segment_entry->block_entries_[block_entry->block_id()] = Move(block_entry);
@@ -405,12 +407,12 @@ SharedPtr<SegmentEntry> SegmentEntry::Deserialize(const Json &segment_entry_json
     return segment_entry;
 }
 
-SharedPtr<String> SegmentEntry::DetermineSegmentDir(const String &parent_dir, u32 seg_id) {
+std::shared_ptr<std::string> SegmentEntry::DetermineSegmentDir(const std::string &parent_dir, u32 seg_id) {
     LocalFileSystem fs;
-    SharedPtr<String> segment_dir;
+    std::shared_ptr<std::string> segment_dir;
     do {
-        u32 seed = time(nullptr);
-        segment_dir = MakeShared<String>(parent_dir + '/' + RandomString(DEFAULT_RANDOM_NAME_LEN, seed) + "_seg_" + ToStr(seg_id));
+        u32 seed = std::time(nullptr);
+        segment_dir = std::make_shared<std::string>(parent_dir + '/' + RandomString(DEFAULT_RANDOM_NAME_LEN, seed) + "_seg_" + ToStr(seg_id));
     } while (!fs.CreateDirectoryNoExp(*segment_dir));
     return segment_dir;
 }
@@ -469,20 +471,21 @@ void SegmentEntry::MergeFrom(BaseEntry &other) {
     // }
 }
 
-UniquePtr<CreateIndexParam> SegmentEntry::GetCreateIndexParam(SizeT seg_row_count, const IndexBase *index_base, const ColumnDef *column_def) {
+std::unique_ptr<CreateIndexParam> SegmentEntry::GetCreateIndexParam(SizeT seg_row_count, const IndexBase *index_base, const ColumnDef *column_def) {
     switch (index_base->index_type_) {
         case IndexType::kIVFFlat: {
-            return MakeUnique<CreateAnnIVFFlatParam>(index_base, column_def, seg_row_count);
+            return std::make_unique<CreateAnnIVFFlatParam>(index_base, column_def, seg_row_count);
         }
         case IndexType::kHnsw: {
             SizeT max_element = seg_row_count;
-            return MakeUnique<CreateHnswParam>(index_base, column_def, max_element);
+            return std::make_unique<CreateHnswParam>(index_base, column_def, max_element);
         }
         case IndexType::kIRSFullText: {
-            return MakeUnique<CreateFullTextParam>(index_base, column_def);
+            return std::make_unique<CreateFullTextParam>(index_base, column_def);
         }
         default: {
-            UniquePtr<String> err_msg = MakeUnique<String>(Format("Invalid index type: {}", IndexInfo::IndexTypeToString(index_base->index_type_)));
+            std::unique_ptr<std::string> err_msg =
+                std::make_unique<std::string>(Format("Invalid index type: {}", IndexInfo::IndexTypeToString(index_base->index_type_)));
             LOG_ERROR(*err_msg);
             Error<StorageException>(*err_msg);
         }
