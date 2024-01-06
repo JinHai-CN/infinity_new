@@ -1,11 +1,13 @@
 module;
 
-import stl;
+export module posting_value;
+
+import std;
+import type_alias;
 import int_encoder;
 import byte_slice_reader;
 import byte_slice_writer;
-
-export module posting_value;
+import new_pfordelta_compressor;
 
 namespace infinity {
 
@@ -99,7 +101,7 @@ export struct PostingValues {
 
     void AddValue(PostingValue *value) { values_.push_back(value); }
 
-    Vector<PostingValue *> values_;
+    std::vector<PostingValue *> values_;
 };
 
 } // namespace infinity
