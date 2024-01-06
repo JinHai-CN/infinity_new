@@ -35,35 +35,35 @@ namespace infinity {
 SegmentColumnIndexEntry::SegmentColumnIndexEntry(ColumnIndexEntry *column_index_entry, u32 segment_id, BufferObj *buffer)
     : BaseEntry(EntryType::kSegmentColumnIndex), column_index_entry_(column_index_entry), segment_id_(segment_id), buffer_(buffer){};
 
-SharedPtr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::NewIndexEntry(ColumnIndexEntry *column_index_entry,
-                                                                          u32 segment_id,
-                                                                          TxnTimeStamp create_ts,
-                                                                          BufferManager *buffer_manager,
-                                                                          CreateIndexParam *param) {
+std::shared_ptr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::NewIndexEntry(ColumnIndexEntry *column_index_entry,
+                                                                                u32 segment_id,
+                                                                                TxnTimeStamp create_ts,
+                                                                                BufferManager *buffer_manager,
+                                                                                CreateIndexParam *param) {
     // FIXME: estimate index size.
-    UniquePtr<IndexFileWorker> file_worker = column_index_entry->CreateFileWorker(param, segment_id);
-    auto buffer = buffer_manager->Allocate(Move(file_worker));
-    auto segment_column_index_entry = SharedPtr<SegmentColumnIndexEntry>(new SegmentColumnIndexEntry(column_index_entry, segment_id, buffer));
+    std::unique_ptr<IndexFileWorker> file_worker = column_index_entry->CreateFileWorker(param, segment_id);
+    auto buffer = buffer_manager->Allocate(std::move(file_worker));
+    auto segment_column_index_entry = std::shared_ptr<SegmentColumnIndexEntry>(new SegmentColumnIndexEntry(column_index_entry, segment_id, buffer));
     segment_column_index_entry->min_ts_ = create_ts;
     segment_column_index_entry->max_ts_ = create_ts;
     return segment_column_index_entry;
 }
 
-UniquePtr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::LoadIndexEntry(ColumnIndexEntry *column_index_entry,
-                                                                           u32 segment_id,
-                                                                           BufferManager *buffer_manager,
-                                                                           CreateIndexParam *param) {
-    UniquePtr<IndexFileWorker> file_worker = column_index_entry->CreateFileWorker(param, segment_id);
-    auto buffer = buffer_manager->Get(Move(file_worker));
-    return UniquePtr<SegmentColumnIndexEntry>(new SegmentColumnIndexEntry(column_index_entry, segment_id, buffer));
+std::unique_ptr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::LoadIndexEntry(ColumnIndexEntry *column_index_entry,
+                                                                                 u32 segment_id,
+                                                                                 BufferManager *buffer_manager,
+                                                                                 CreateIndexParam *param) {
+    std::unique_ptr<IndexFileWorker> file_worker = column_index_entry->CreateFileWorker(param, segment_id);
+    auto buffer = buffer_manager->Get(std::move(file_worker));
+    return std::unique_ptr<SegmentColumnIndexEntry>(new SegmentColumnIndexEntry(column_index_entry, segment_id, buffer));
 }
 
 BufferHandle SegmentColumnIndexEntry::GetIndex() { return buffer_->Load(); }
 
-Status SegmentColumnIndexEntry::CreateIndexDo(IndexBase *index_base, const ColumnDef *column_def, atomic_u64 &create_index_idx) {
+Status SegmentColumnIndexEntry::CreateIndexDo(IndexBase *index_base, const ColumnDef *column_def, std::atomic<u64> &create_index_idx) {
     switch (index_base->index_type_) {
         case IndexType::kHnsw: {
-            auto InsertHnswDo = [&](auto *hnsw_index, atomic_u64 &create_index_idx) {
+            auto InsertHnswDo = [&](auto *hnsw_index, std::atomic<u64> &create_index_idx) {
                 SizeT vertex_n = hnsw_index->GetVertexNum();
                 while (true) {
                     SizeT idx = create_index_idx.fetch_add(1);
@@ -152,7 +152,7 @@ Status SegmentColumnIndexEntry::CreateIndexDo(IndexBase *index_base, const Colum
 void SegmentColumnIndexEntry::UpdateIndex(TxnTimeStamp, FaissIndexPtr *, BufferManager *) { Error<NotImplementException>("Not implemented"); }
 
 bool SegmentColumnIndexEntry::Flush(TxnTimeStamp checkpoint_ts) {
-    String &index_name = *this->column_index_entry_->index_dir();
+    std::string &index_name = *this->column_index_entry_->index_dir();
     u64 segment_id = this->segment_id_;
     LOG_TRACE(Format("Segment: {}, Index: {} is being flushing", segment_id, index_name));
     if (this->max_ts_ <= this->checkpoint_ts_ || this->min_ts_ > checkpoint_ts) {
@@ -182,7 +182,7 @@ Json SegmentColumnIndexEntry::Serialize() {
 
     Json index_entry_json;
     {
-        SharedLock<RWMutex> lck(this->rw_locker_);
+        std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
         index_entry_json["segment_id"] = this->segment_id_;
         index_entry_json["min_ts"] = this->min_ts_;
         index_entry_json["max_ts"] = this->max_ts_;
@@ -192,10 +192,10 @@ Json SegmentColumnIndexEntry::Serialize() {
     return index_entry_json;
 }
 
-UniquePtr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::Deserialize(const Json &index_entry_json,
-                                                                        ColumnIndexEntry *column_index_entry,
-                                                                        BufferManager *buffer_mgr,
-                                                                        TableEntry *table_entry) {
+std::unique_ptr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::Deserialize(const Json &index_entry_json,
+                                                                              ColumnIndexEntry *column_index_entry,
+                                                                              BufferManager *buffer_mgr,
+                                                                              TableEntry *table_entry) {
     u32 segment_id = index_entry_json["segment_id"];
     auto [segment_row_count, status] = table_entry->GetSegmentRowCountBySegmentID(segment_id);
 
@@ -204,10 +204,10 @@ UniquePtr<SegmentColumnIndexEntry> SegmentColumnIndexEntry::Deserialize(const Js
         return nullptr;
     }
     u64 column_id = column_index_entry->column_id();
-    UniquePtr<CreateIndexParam> create_index_param =
+    std::unique_ptr<CreateIndexParam> create_index_param =
         SegmentEntry::GetCreateIndexParam(segment_row_count, column_index_entry->index_base_ptr(), table_entry->GetColumnDefByID(column_id));
     // TODO: need to get create index param;
-    //    UniquePtr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(segment_entry, index_base, column_def.get());
+    //    std::unique_ptr<CreateIndexParam> create_index_param = SegmentEntry::GetCreateIndexParam(segment_entry, index_base, column_def.get());
     auto segment_column_index_entry = LoadIndexEntry(column_index_entry, segment_id, buffer_mgr, create_index_param.get());
     if (segment_column_index_entry.get() == nullptr) {
         Error<StorageException>("Failed to load index entry");

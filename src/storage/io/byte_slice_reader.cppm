@@ -1,6 +1,6 @@
 module;
 
-import stl;
+import type_alias;
 import byte_slice;
 
 import infinity_exception;

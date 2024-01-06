@@ -14,6 +14,8 @@
 
 module;
 
+#include <algorithm>
+
 module catalog;
 
 import std;
@@ -81,7 +83,7 @@ std::shared_ptr<SegmentEntry> SegmentEntry::MakeReplaySegmentEntry(const TableEn
 
     const auto *table_ptr = (const TableEntry *)table_entry;
     new_entry->column_count_ = table_ptr->ColumnCount();
-    new_entry->segment_dir_ = Move(segment_dir);
+    new_entry->segment_dir_ = std::move(segment_dir);
     return new_entry;
 }
 
@@ -91,7 +93,7 @@ int SegmentEntry::Room() {
 }
 
 u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferManager *buffer_mgr) {
-    UniqueLock<std::shared_mutex> lck(this->rw_locker_);
+    std::unique_lock<std::shared_mutex> lck(this->rw_locker_);
     if (this->row_capacity_ - this->row_count_ <= 0)
         return 0;
     //    SizeT start_row = this->row_count_;
@@ -136,8 +138,8 @@ u64 SegmentEntry::AppendData(u64 txn_id, AppendState *append_state_ptr, BufferMa
     return total_copied;
 }
 
-void SegmentEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, std::vector<RowID>> &block_row_hashmap) {
-    UniqueLock<std::shared_mutex> lck(this->rw_locker_);
+void SegmentEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const std::unordered_map<u16, std::vector<RowID>> &block_row_hashmap) {
+    std::unique_lock<std::shared_mutex> lck(this->rw_locker_);
 
     for (const auto &row_hash_map : block_row_hashmap) {
         u16 block_id = row_hash_map.first;
@@ -306,18 +308,18 @@ std::shared_ptr<SegmentColumnIndexEntry> SegmentEntry::CreateIndexFile(ColumnInd
 void SegmentEntry::CommitAppend(u64 txn_id, TxnTimeStamp commit_ts, u16 block_id, u16, u16) {
     std::shared_ptr<BlockEntry> block_entry;
     {
-        UniqueLock<std::shared_mutex> lck(this->rw_locker_);
+        std::unique_lock<std::shared_mutex> lck(this->rw_locker_);
         if (this->min_row_ts_ == 0) {
             this->min_row_ts_ = commit_ts;
         }
-        this->max_row_ts_ = Max(this->max_row_ts_, commit_ts);
+        this->max_row_ts_ = std::max(this->max_row_ts_, commit_ts);
         block_entry = this->block_entries_[block_id];
     }
     block_entry->CommitAppend(txn_id, commit_ts);
 }
 
-void SegmentEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const HashMap<u16, std::vector<RowID>> &block_row_hashmap) {
-    UniqueLock<std::shared_mutex> lck(this->rw_locker_);
+void SegmentEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const std::unordered_map<u16, std::vector<RowID>> &block_row_hashmap) {
+    std::unique_lock<std::shared_mutex> lck(this->rw_locker_);
 
     for (const auto &row_hash_map : block_row_hashmap) {
         u16 block_id = row_hash_map.first;
@@ -328,7 +330,7 @@ void SegmentEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const HashMa
         }
 
         block_entry->CommitDelete(txn_id, commit_ts);
-        this->max_row_ts_ = Max(this->max_row_ts_, commit_ts);
+        this->max_row_ts_ = std::max(this->max_row_ts_, commit_ts);
     }
 }
 
@@ -398,8 +400,8 @@ std::shared_ptr<SegmentEntry> SegmentEntry::Deserialize(const Json &segment_entr
         for (const auto &block_json : segment_entry_json["block_entries"]) {
             std::unique_ptr<BlockEntry> block_entry = BlockEntry::Deserialize(block_json, segment_entry.get(), buffer_mgr);
             auto block_entries_size = segment_entry->block_entries_.size();
-            segment_entry->block_entries_.resize(Max(block_entries_size, static_cast<SizeT>(block_entry->block_id() + 1)));
-            segment_entry->block_entries_[block_entry->block_id()] = Move(block_entry);
+            segment_entry->block_entries_.resize(std::max(block_entries_size, static_cast<SizeT>(block_entry->block_id() + 1)));
+            segment_entry->block_entries_[block_entry->block_id()] = std::move(block_entry);
         }
     }
     LOG_TRACE(Format("Segment: {}, Block count: {}", segment_entry->segment_id_, segment_entry->block_entries_.size()));
@@ -412,7 +414,8 @@ std::shared_ptr<std::string> SegmentEntry::DetermineSegmentDir(const std::string
     std::shared_ptr<std::string> segment_dir;
     do {
         u32 seed = std::time(nullptr);
-        segment_dir = std::make_shared<std::string>(parent_dir + '/' + RandomString(DEFAULT_RANDOM_NAME_LEN, seed) + "_seg_" + ToStr(seg_id));
+        segment_dir =
+            std::make_shared<std::string>(parent_dir + '/' + RandomString(DEFAULT_RANDOM_NAME_LEN, seed) + "_seg_" + std::to_string(seg_id));
     } while (!fs.CreateDirectoryNoExp(*segment_dir));
     return segment_dir;
 }
@@ -441,9 +444,9 @@ void SegmentEntry::MergeFrom(BaseEntry &other) {
         Error<StorageException>("SegmentEntry::MergeFrom requires source segment entry blocks not more than segment entry blocks");
     }
 
-    this->row_count_ = Max(this->row_count_, segment_entry2->row_count_);
-    this->max_row_ts_ = Max(this->max_row_ts_, segment_entry2->max_row_ts_);
-    this->row_capacity_ = Max(this->row_capacity_, segment_entry2->row_capacity_);
+    this->row_count_ = std::max(this->row_count_, segment_entry2->row_count_);
+    this->max_row_ts_ = std::max(this->max_row_ts_, segment_entry2->max_row_ts_);
+    this->row_capacity_ = std::max(this->row_capacity_, segment_entry2->row_capacity_);
 
     SizeT block_count = this->block_entries_.size();
     SizeT idx = 0;

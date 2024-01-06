@@ -29,7 +29,7 @@ import logger;
 namespace infinity {
 
 IrsIndexEntry::IrsIndexEntry(TableIndexEntry *, std::shared_ptr<std::string> index_dir, u64 txn_id, TxnTimeStamp begin_ts)
-    : BaseEntry(EntryType::kIRSIndex), index_dir_(Move(index_dir)) {
+    : BaseEntry(EntryType::kIRSIndex), index_dir_(std::move(index_dir)) {
     txn_id_ = txn_id;
     begin_ts_ = begin_ts;
 }

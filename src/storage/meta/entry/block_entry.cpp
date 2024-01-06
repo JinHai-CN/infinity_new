@@ -14,7 +14,7 @@
 
 module;
 
-//#include <cstring>
+// #include <cstring>
 #include <iostream>
 
 module catalog;
@@ -67,7 +67,7 @@ void BlockVersion::LoadFromFile(const std::string &version_path) {
         return;
     }
     int buf_len = std::filesystem::file_size(version_path);
-    Vector<char> buf(buf_len);
+    std::vector<char> buf(buf_len);
     ifs.read(buf.data(), buf_len);
     ifs.close();
     char *ptr = buf.data();
@@ -87,7 +87,7 @@ void BlockVersion::LoadFromFile(const std::string &version_path) {
 void BlockVersion::SaveToFile(const std::string &version_path) {
     i32 exp_size = sizeof(i32) + created_.size() * sizeof(CreateField);
     exp_size += sizeof(i32) + deleted_.size() * sizeof(TxnTimeStamp);
-    Vector<char> buf(exp_size, 0);
+    std::vector<char> buf(exp_size, 0);
     char *ptr = buf.data();
     WriteBufAdv<i32>(ptr, i32(created_.size()));
     WriteBufAdv<i32>(ptr, i32(deleted_.size()));
@@ -116,7 +116,7 @@ BlockEntry::BlockEntry(const SegmentEntry *segment_entry, u16 block_id, TxnTimeS
         columns_.emplace_back(BlockColumnEntry::MakeNewBlockColumnEntry(this, column_id, buffer_mgr));
     }
 
-    block_version_ = MakeUnique<BlockVersion>(row_capacity_);
+    block_version_ = std::make_unique<BlockVersion>(row_capacity_);
 }
 
 BlockEntry::BlockEntry(const SegmentEntry *segment_entry,
@@ -138,11 +138,11 @@ BlockEntry::BlockEntry(const SegmentEntry *segment_entry,
         columns_.emplace_back(BlockColumnEntry::MakeNewBlockColumnEntry(this, column_id, buffer_mgr, true));
     }
 
-    block_version_ = MakeUnique<BlockVersion>(row_capacity_);
+    block_version_ = std::make_unique<BlockVersion>(row_capacity_);
     block_version_->created_.emplace_back((TxnTimeStamp)min_row_ts_, (i32)row_count_);
 }
 
-Pair<u16, u16> BlockEntry::GetVisibleRange(TxnTimeStamp begin_ts, u16 block_offset_begin) const {
+std::pair<u16, u16> BlockEntry::GetVisibleRange(TxnTimeStamp begin_ts, u16 block_offset_begin) const {
     auto &block_version = this->block_version_;
     auto &deleted = block_version->deleted_;
     u16 block_offset_end = block_version->GetRowCount(begin_ts);
@@ -190,7 +190,7 @@ u16 BlockEntry::AppendData(u64 txn_id, DataBlock *input_data_block, u16 input_bl
     return actual_copied;
 }
 
-void BlockEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const Vector<RowID> &rows) {
+void BlockEntry::DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const std::vector<RowID> &rows) {
     std::unique_lock<std::shared_mutex> lck(this->rw_locker_);
     if (this->using_txn_id_ != 0 && this->using_txn_id_ != txn_id) {
         Error<StorageException>(
@@ -222,7 +222,7 @@ void BlockEntry::CommitAppend(u64 txn_id, TxnTimeStamp commit_ts) {
     if (this->min_row_ts_ == 0) {
         this->min_row_ts_ = commit_ts;
     }
-    this->max_row_ts_ = Max(this->max_row_ts_, commit_ts);
+    this->max_row_ts_ = std::max(this->max_row_ts_, commit_ts);
 
     auto &block_version = this->block_version_;
     block_version->created_.push_back({commit_ts, i32(this->row_count_)});
@@ -244,7 +244,7 @@ void BlockEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts) {
     if (this->min_row_ts_ == 0) {
         this->min_row_ts_ = commit_ts;
     }
-    this->max_row_ts_ = Max(this->max_row_ts_, commit_ts);
+    this->max_row_ts_ = std::max(this->max_row_ts_, commit_ts);
 }
 
 void BlockEntry::FlushData(i64 checkpoint_row_count) {
@@ -279,7 +279,7 @@ void BlockEntry::Flush(TxnTimeStamp checkpoint_ts) {
         if (checkpoint_row_count == 0) {
             Error<StorageException>("BlockEntry is empty at checkpoint_ts!");
         }
-        const Vector<TxnTimeStamp> &deleted = this->block_version_->deleted_;
+        const std::vector<TxnTimeStamp> &deleted = this->block_version_->deleted_;
         if (checkpoint_row_count <= this->checkpoint_row_count_) {
             // BlockEntry doesn't append rows between the previous checkpoint and checkpoint_ts.
             bool deleted_between = false;
@@ -328,10 +328,10 @@ Json BlockEntry::Serialize(TxnTimeStamp) {
     return json_res;
 }
 
-UniquePtr<BlockEntry> BlockEntry::Deserialize(const Json &block_entry_json, SegmentEntry *segment_entry, BufferManager *buffer_mgr) {
+std::unique_ptr<BlockEntry> BlockEntry::Deserialize(const Json &block_entry_json, SegmentEntry *segment_entry, BufferManager *buffer_mgr) {
     u64 block_id = block_entry_json["block_id"];
     TxnTimeStamp checkpoint_ts = block_entry_json["checkpoint_ts"];
-    UniquePtr<BlockEntry> block_entry = MakeUnique<BlockEntry>(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr);
+    std::unique_ptr<BlockEntry> block_entry = std::make_unique<BlockEntry>(segment_entry, block_id, checkpoint_ts, 0, buffer_mgr);
 
     *block_entry->base_dir_ = block_entry_json["block_dir"];
     block_entry->row_capacity_ = block_entry_json["row_capacity"];
@@ -362,7 +362,7 @@ i32 BlockEntry::GetAvailableCapacity() {
 std::shared_ptr<std::string> BlockEntry::DetermineDir(const std::string &parent_dir, u64 block_id) {
     LocalFileSystem fs;
     std::shared_ptr<std::string> base_dir;
-    base_dir = MakeShared<std::string>(Format("{}/blk_{}", parent_dir, block_id));
+    base_dir = std::make_shared<std::string>(Format("{}/blk_{}", parent_dir, block_id));
     fs.CreateDirectoryNoExp(*base_dir);
     return base_dir;
 }

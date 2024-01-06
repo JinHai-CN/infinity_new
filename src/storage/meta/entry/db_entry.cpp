@@ -66,7 +66,7 @@ std::tuple<TableEntry *, Status> DBEntry::CreateTable(TableEntryType table_entry
         if (table_iter2 != this->tables_.end()) {
             table_meta = table_iter2->second.get();
         } else {
-            this->tables_[table_name] = Move(new_table_meta);
+            this->tables_[table_name] = std::move(new_table_meta);
         }
         this->rw_locker_.unlock();
 
@@ -94,7 +94,7 @@ DBEntry::DropTable(const std::string &table_collection_name, ConflictType confli
         std::unique_ptr<std::string> err_msg =
             std::make_unique<std::string>(Format("Attempt to drop not existed table/collection entry {}", table_collection_name));
         LOG_ERROR(*err_msg);
-        return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
+        return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
     }
 
     LOG_TRACE(Format("Drop a table/collection entry {}", table_collection_name));
@@ -114,7 +114,7 @@ std::tuple<TableEntry *, Status> DBEntry::GetTableCollection(const std::string &
     if (table_meta == nullptr) {
         std::unique_ptr<std::string> err_msg = std::make_unique<std::string>("No valid db meta.");
         LOG_ERROR(*err_msg);
-        return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
+        return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
     }
     return table_meta->GetEntry(txn_id, begin_ts);
 }
@@ -174,7 +174,7 @@ Status DBEntry::GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, std::vector<T
 }
 
 std::shared_ptr<std::string> DBEntry::ToString() {
-    SharedLock<RWMutex> r_locker(rw_locker_);
+    std::shared_lock<std::shared_mutex> r_locker(rw_locker_);
     std::shared_ptr<std::string> res =
         std::make_shared<std::string>(Format("DBEntry, db_entry_dir: {}, txn id: {}, table count: ", *db_entry_dir_, txn_id_, tables_.size()));
     return res;
@@ -185,7 +185,7 @@ Json DBEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
 
     std::vector<TableMeta *> table_metas;
     {
-        SharedLock<RWMutex> lck(this->rw_locker_);
+        std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
         json_res["db_entry_dir"] = *this->db_entry_dir_;
         json_res["db_name"] = *this->db_name_;
         json_res["txn_id"] = this->txn_id_.load();
@@ -224,7 +224,7 @@ std::unique_ptr<DBEntry> DBEntry::Deserialize(const Json &db_entry_json, BufferM
     if (db_entry_json.contains("tables")) {
         for (const auto &table_meta_json : db_entry_json["tables"]) {
             std::unique_ptr<TableMeta> table_meta = TableMeta::Deserialize(table_meta_json, res.get(), buffer_mgr);
-            res->tables_.emplace(*table_meta->table_name_, Move(table_meta));
+            res->tables_.emplace(*table_meta->table_name_, std::move(table_meta));
         }
     }
 
@@ -238,17 +238,17 @@ void DBEntry::MergeFrom(BaseEntry &other) {
     DBEntry *db_entry2 = static_cast<DBEntry *>(&other);
 
     // No locking here since only the load stage needs MergeFrom.
-    if (!IsEqual(*this->db_name_, *db_entry2->db_name_)) {
+    if (*this->db_name_ != *db_entry2->db_name_) {
         Error<StorageException>("DBEntry::MergeFrom requires db_name_ match");
     }
-    if (!IsEqual(*this->db_entry_dir_, *db_entry2->db_entry_dir_)) {
+    if (*this->db_entry_dir_ != *db_entry2->db_entry_dir_) {
         Error<StorageException>("DBEntry::MergeFrom requires db_entry_dir_ match");
     }
     for (auto &[table_name, table_meta2] : db_entry2->tables_) {
         auto it = this->tables_.find(table_name);
         if (it == this->tables_.end()) {
             table_meta2->db_entry_ = this;
-            this->tables_.emplace(table_name, Move(table_meta2));
+            this->tables_.emplace(table_name, std::move(table_meta2));
         } else {
             it->second->MergeFrom(*table_meta2.get());
         }

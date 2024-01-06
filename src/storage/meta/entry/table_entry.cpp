@@ -15,7 +15,7 @@
 module;
 
 // #include <iostream>
-// #include <memory>
+#include <algorithm>
 #include <tuple>
 
 module catalog;
@@ -49,8 +49,9 @@ TableEntry::TableEntry(const std::shared_ptr<std::string> &db_entry_dir,
                        TableMeta *table_meta,
                        u64 txn_id,
                        TxnTimeStamp begin_ts)
-    : BaseEntry(EntryType::kTable), table_entry_dir_(MakeShared<std::string>(Format("{}/{}/txn_{}", *db_entry_dir, *table_collection_name, txn_id))),
-      table_name_(Move(table_collection_name)), columns_(columns), table_entry_type_(table_entry_type), table_meta_(table_meta) {
+    : BaseEntry(EntryType::kTable),
+      table_entry_dir_(std::make_shared<std::string>(Format("{}/{}/txn_{}", *db_entry_dir, *table_collection_name, txn_id))),
+      table_name_(std::move(table_collection_name)), columns_(columns), table_entry_type_(table_entry_type), table_meta_(table_meta) {
     SizeT column_count = columns.size();
     for (SizeT idx = 0; idx < column_count; ++idx) {
         column_name2column_id_[columns[idx]->name()] = idx;
@@ -60,11 +61,11 @@ TableEntry::TableEntry(const std::shared_ptr<std::string> &db_entry_dir,
     txn_id_ = txn_id;
 }
 
-Tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const std::shared_ptr<IndexDef> &index_def,
-                                                         ConflictType conflict_type,
-                                                         u64 txn_id,
-                                                         TxnTimeStamp begin_ts,
-                                                         TxnManager *txn_mgr) {
+std::tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const std::shared_ptr<IndexDef> &index_def,
+                                                              ConflictType conflict_type,
+                                                              u64 txn_id,
+                                                              TxnTimeStamp begin_ts,
+                                                              TxnManager *txn_mgr) {
     if (index_def->index_name_->empty()) {
         // Index name shouldn't be empty
         Error<StorageException>("Attempt to create no name index.");
@@ -81,7 +82,7 @@ Tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const std::shared_ptr<I
 
     if (table_index_meta == nullptr) {
 
-        auto new_table_index_meta = MakeUnique<TableIndexMeta>(this, index_def->index_name_);
+        auto new_table_index_meta = std::make_unique<TableIndexMeta>(this, index_def->index_name_);
         table_index_meta = new_table_index_meta.get();
 
         this->rw_locker_.lock();
@@ -90,7 +91,7 @@ Tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const std::shared_ptr<I
             table_index_meta = iter->second.get();
         } else {
 
-            this->index_meta_map_[*index_def->index_name_] = Move(new_table_index_meta);
+            this->index_meta_map_[*index_def->index_name_] = std::move(new_table_index_meta);
         }
         this->rw_locker_.unlock();
     }
@@ -99,7 +100,7 @@ Tuple<TableIndexEntry *, Status> TableEntry::CreateIndex(const std::shared_ptr<I
     return table_index_meta->CreateTableIndexEntry(index_def, conflict_type, txn_id, begin_ts, txn_mgr);
 }
 
-Tuple<TableIndexEntry *, Status>
+std::tuple<TableIndexEntry *, Status>
 TableEntry::DropIndex(const std::string &index_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr) {
     this->rw_locker_.lock_shared();
 
@@ -129,13 +130,13 @@ TableEntry::DropIndex(const std::string &index_name, ConflictType conflict_type,
     return index_meta->DropTableIndexEntry(conflict_type, txn_id, begin_ts, txn_mgr);
 }
 
-Tuple<TableIndexEntry *, Status> TableEntry::GetIndex(const std::string &index_name, u64 txn_id, TxnTimeStamp begin_ts) {
+std::tuple<TableIndexEntry *, Status> TableEntry::GetIndex(const std::string &index_name, u64 txn_id, TxnTimeStamp begin_ts) {
     if (auto iter = this->index_meta_map_.find(index_name); iter != this->index_meta_map_.end()) {
         return iter->second->GetEntry(txn_id, begin_ts);
     }
-    UniquePtr<std::string> err_msg = MakeUnique<std::string>("Cannot find index def");
+    std::unique_ptr<std::string> err_msg = std::make_unique<std::string>("Cannot find index def");
     LOG_ERROR(*err_msg);
-    return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
+    return {nullptr, Status(ErrorCode::kNotFound, std::move(err_msg))};
 }
 
 void TableEntry::RemoveIndexEntry(const std::string &index_name, u64 txn_id, TxnManager *txn_mgr) {
@@ -154,7 +155,7 @@ void TableEntry::RemoveIndexEntry(const std::string &index_name, u64 txn_id, Txn
 void TableEntry::GetFullTextAnalyzers(u64 txn_id,
                                       TxnTimeStamp begin_ts,
                                       std::shared_ptr<IrsIndexEntry> &irs_index_entry,
-                                      Map<std::string, std::string> &column2analyzer) {
+                                      std::map<std::string, std::string> &column2analyzer) {
     column2analyzer.clear();
     for (auto &[_, table_index_meta] : this->index_meta_map_) {
         auto [table_index_entry, status] = table_index_meta->GetEntry(txn_id, begin_ts);
@@ -190,7 +191,7 @@ void TableEntry::Append(u64 txn_id, void *txn_store, BufferManager *buffer_mgr) 
 
     while (!append_state_ptr->Finished()) {
         {
-            UniqueLock<RWMutex> rw_locker(this->rw_locker_); // prevent another read conflict with this append operation
+            std::unique_lock<std::shared_mutex> rw_locker(this->rw_locker_); // prevent another read conflict with this append operation
             if (this->unsealed_segment_ == nullptr || unsealed_segment_->Room() <= 0) {
                 // unsealed_segment_ is unpopulated or full
                 u32 new_segment_id = this->next_segment_id_++;
@@ -240,7 +241,7 @@ void TableEntry::CreateIndexFile(void *txn_store,
     }
 }
 
-void TableEntry::CommitCreateIndex(HashMap<std::string, TxnIndexStore> &txn_indexes_store_) {
+void TableEntry::CommitCreateIndex(std::unordered_map<std::string, TxnIndexStore> &txn_indexes_store_) {
     for (auto &[index_name, txn_index_store] : txn_indexes_store_) {
         TableIndexEntry *table_index_entry = txn_index_store.table_index_entry_;
         for (auto &[column_id, segment_index_map] : txn_index_store.index_entry_map_) {
@@ -259,11 +260,11 @@ Status TableEntry::Delete(u64 txn_id, TxnTimeStamp commit_ts, DeleteState &delet
         u32 segment_id = to_delete_seg_rows.first;
         SegmentEntry *segment_entry = TableEntry::GetSegmentByID(this, segment_id);
         if (segment_entry == nullptr) {
-            UniquePtr<std::string> err_msg = MakeUnique<std::string>(Format("Going to delete data in non-exist segment: {}", segment_id));
+            std::unique_ptr<std::string> err_msg = std::make_unique<std::string>(Format("Going to delete data in non-exist segment: {}", segment_id));
             Error<ExecutorException>(*err_msg);
-            return Status(ErrorCode::kNotFound, Move(err_msg));
+            return Status(ErrorCode::kNotFound, std::move(err_msg));
         }
-        const HashMap<u16, std::vector<RowID>> &block_row_hashmap = to_delete_seg_rows.second;
+        const std::unordered_map<u16, std::vector<RowID>> &block_row_hashmap = to_delete_seg_rows.second;
         segment_entry->DeleteData(txn_id, commit_ts, block_row_hashmap);
     }
     return Status::OK();
@@ -298,7 +299,7 @@ void TableEntry::CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const DeleteSt
         if (segment == nullptr) {
             Error<ExecutorException>(Format("Going to commit delete data in non-exist segment: {}", segment_id));
         }
-        const HashMap<u16, std::vector<RowID>> &block_row_hashmap = to_delete_seg_rows.second;
+        const std::unordered_map<u16, std::vector<RowID>> &block_row_hashmap = to_delete_seg_rows.second;
         segment->CommitDelete(txn_id, commit_ts, block_row_hashmap);
         row_count += block_row_hashmap.size();
     }
@@ -312,9 +313,9 @@ Status TableEntry::RollbackDelete(u64 txn_id, DeleteState &, BufferManager *) {
 
 Status TableEntry::ImportSegment(TxnTimeStamp commit_ts, std::shared_ptr<SegmentEntry> segment) {
     if (this->deleted_) {
-        UniquePtr<std::string> err_msg = MakeUnique<std::string>(Format("Table {} is deleted.", *this->GetTableName()));
+        std::unique_ptr<std::string> err_msg = std::make_unique<std::string>(Format("Table {} is deleted.", *this->GetTableName()));
         Error<ExecutorException>(*err_msg);
-        return Status(ErrorCode::kNotFound, Move(err_msg));
+        return Status(ErrorCode::kNotFound, std::move(err_msg));
     }
 
     segment->min_row_ts_ = commit_ts;
@@ -329,9 +330,9 @@ Status TableEntry::ImportSegment(TxnTimeStamp commit_ts, std::shared_ptr<Segment
         block_entry->block_version_->created_.emplace_back(commit_ts, block_entry->row_count());
     }
 
-    UniqueLock<RWMutex> rw_locker(this->rw_locker_);
+    std::unique_lock<std::shared_mutex> rw_locker(this->rw_locker_);
     this->row_count_ = row_count;
-    this->segment_map_.emplace(segment->segment_id_, Move(segment));
+    this->segment_map_.emplace(segment->segment_id_, std::move(segment));
     return Status::OK();
 }
 
@@ -357,14 +358,14 @@ const BlockEntry *TableEntry::GetBlockEntryByID(u32 seg_id, u16 block_id) const 
     return block_entry;
 }
 
-Pair<SizeT, Status> TableEntry::GetSegmentRowCountBySegmentID(u32 seg_id) {
+std::pair<SizeT, Status> TableEntry::GetSegmentRowCountBySegmentID(u32 seg_id) {
     auto iter = this->segment_map_.find(seg_id);
     if (iter != this->segment_map_.end()) {
         return {iter->second->row_count(), Status::OK()};
     } else {
-        UniquePtr<std::string> err_msg = MakeUnique<std::string>(Format("No segment id: {}.", seg_id));
+        std::unique_ptr<std::string> err_msg = std::make_unique<std::string>(Format("No segment id: {}.", seg_id));
         LOG_ERROR(*err_msg);
-        return {0, Status(ErrorCode::kNotFound, Move(err_msg))};
+        return {0, Status(ErrorCode::kNotFound, std::move(err_msg))};
     }
 }
 
@@ -376,9 +377,9 @@ Pair<SizeT, Status> TableEntry::GetSegmentRowCountBySegmentID(u32 seg_id) {
 const std::shared_ptr<std::string> &TableEntry::GetDBName() const { return table_meta_->db_name_ptr(); }
 
 std::shared_ptr<BlockIndex> TableEntry::GetBlockIndex(u64, TxnTimeStamp begin_ts) {
-    //    std::shared_ptr<MultiIndex<u64, u64, SegmentEntry*>> result = MakeShared<MultiIndex<u64, u64, SegmentEntry*>>();
-    std::shared_ptr<BlockIndex> result = MakeShared<BlockIndex>();
-    SharedLock<RWMutex> rw_locker(this->rw_locker_);
+    //    std::shared_ptr<MultiIndex<u64, u64, SegmentEntry*>> result = std::make_shared<MultiIndex<u64, u64, SegmentEntry*>>();
+    std::shared_ptr<BlockIndex> result = std::make_shared<BlockIndex>();
+    std::shared_lock<std::shared_mutex> rw_locker(this->rw_locker_);
     result->Reserve(this->segment_map_.size());
 
     for (const auto &segment_pair : this->segment_map_) {
@@ -395,7 +396,7 @@ Json TableEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) 
     std::vector<TableIndexMeta *> table_index_meta_candidates;
     std::vector<std::string> table_index_name_candidates;
     {
-        SharedLock<RWMutex> lck(this->rw_locker_);
+        std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
         json_res["table_entry_dir"] = *this->table_entry_dir_;
         json_res["table_name"] = *this->GetTableName();
         json_res["table_entry_type"] = this->table_entry_type_;
@@ -451,9 +452,9 @@ Json TableEntry::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) 
     return json_res;
 }
 
-UniquePtr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, TableMeta *table_meta, BufferManager *buffer_mgr) {
-    std::shared_ptr<std::string> table_entry_dir = MakeShared<std::string>(table_entry_json["table_entry_dir"]);
-    std::shared_ptr<std::string> table_name = MakeShared<std::string>(table_entry_json["table_name"]);
+std::unique_ptr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, TableMeta *table_meta, BufferManager *buffer_mgr) {
+    std::shared_ptr<std::string> table_entry_dir = std::make_shared<std::string>(table_entry_json["table_entry_dir"]);
+    std::shared_ptr<std::string> table_name = std::make_shared<std::string>(table_entry_json["table_name"]);
     TableEntryType table_entry_type = table_entry_json["table_entry_type"];
     u64 row_count = table_entry_json["row_count"];
 
@@ -467,7 +468,7 @@ UniquePtr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, Tabl
             i64 column_id = column_def_json["column_id"];
             std::string column_name = column_def_json["column_name"];
 
-            HashSet<ConstraintType> constraints;
+            std::unordered_set<ConstraintType> constraints;
             if (column_def_json.contains("constraints")) {
                 for (const auto &column_constraint : column_def_json["constraints"]) {
                     ConstraintType constraint = column_constraint;
@@ -475,7 +476,7 @@ UniquePtr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, Tabl
                 }
             }
 
-            std::shared_ptr<ColumnDef> column_def = MakeShared<ColumnDef>(column_id, data_type, column_name, constraints);
+            std::shared_ptr<ColumnDef> column_def = std::make_shared<ColumnDef>(column_id, data_type, column_name, constraints);
             columns.emplace_back(column_def);
         }
     }
@@ -483,7 +484,8 @@ UniquePtr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, Tabl
     u64 txn_id = table_entry_json["txn_id"];
     TxnTimeStamp begin_ts = table_entry_json["begin_ts"];
 
-    UniquePtr<TableEntry> table_entry = MakeUnique<TableEntry>(table_entry_dir, table_name, columns, table_entry_type, table_meta, txn_id, begin_ts);
+    std::unique_ptr<TableEntry> table_entry =
+        std::make_unique<TableEntry>(table_entry_dir, table_name, columns, table_entry_type, table_meta, txn_id, begin_ts);
     table_entry->row_count_ = row_count;
     table_entry->next_segment_id_ = table_entry_json["next_segment_id"];
     table_entry->table_entry_dir_ = table_entry_dir;
@@ -493,7 +495,7 @@ UniquePtr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, Tabl
         for (const auto &segment_json : table_entry_json["segments"]) {
             std::shared_ptr<SegmentEntry> segment_entry = SegmentEntry::Deserialize(segment_json, table_entry.get(), buffer_mgr);
             table_entry->segment_map_.emplace(segment_entry->segment_id_, segment_entry);
-            max_segment_id = Max(max_segment_id, segment_entry->segment_id_);
+            max_segment_id = std::max(max_segment_id, segment_entry->segment_id_);
         }
         table_entry->unsealed_segment_ = table_entry->segment_map_[max_segment_id].get();
     }
@@ -512,9 +514,9 @@ UniquePtr<TableEntry> TableEntry::Deserialize(const Json &table_entry_json, Tabl
     if (table_entry_json.contains("table_indexes")) {
         for (const auto &index_def_meta_json : table_entry_json["table_indexes"]) {
 
-            UniquePtr<TableIndexMeta> table_index_meta = TableIndexMeta::Deserialize(index_def_meta_json, table_entry.get(), buffer_mgr);
+            std::unique_ptr<TableIndexMeta> table_index_meta = TableIndexMeta::Deserialize(index_def_meta_json, table_entry.get(), buffer_mgr);
             std::string index_name = index_def_meta_json["index_name"];
-            table_entry->index_meta_map_.emplace(Move(index_name), Move(table_index_meta));
+            table_entry->index_meta_map_.emplace(std::move(index_name), std::move(table_index_meta));
         }
     }
 
@@ -545,14 +547,14 @@ void TableEntry::MergeFrom(BaseEntry &other) {
         Error<StorageException>("DBEntry::MergeFrom requires table_entry_dir_ match");
     }
 
-    this->next_segment_id_.store(Max(this->next_segment_id_, table_entry2->next_segment_id_));
-    this->row_count_.store(Max(this->row_count_, table_entry2->row_count_));
+    this->next_segment_id_.store(std::max(this->next_segment_id_, table_entry2->next_segment_id_));
+    this->row_count_.store(std::max(this->row_count_, table_entry2->row_count_));
     u32 max_segment_id = 0;
     for (auto &[seg_id, sgement_entry] : this->segment_map_) {
-        max_segment_id = Max(max_segment_id, seg_id);
+        max_segment_id = std::max(max_segment_id, seg_id);
     }
     for (auto &[seg_id, sgement_entry2] : table_entry2->segment_map_) {
-        max_segment_id = Max(max_segment_id, seg_id);
+        max_segment_id = std::max(max_segment_id, seg_id);
         auto it = this->segment_map_.find(seg_id);
         if (it == this->segment_map_.end()) {
             sgement_entry2->table_entry_ = this;
@@ -572,7 +574,7 @@ void TableEntry::MergeFrom(BaseEntry &other) {
     for (auto &[index_name, table_index_meta] : table_entry2->index_meta_map_) {
         auto it = this->index_meta_map_.find(index_name);
         if (it == this->index_meta_map_.end()) {
-            this->index_meta_map_.emplace(index_name, Move(table_index_meta));
+            this->index_meta_map_.emplace(index_name, std::move(table_index_meta));
         } else {
             it->second->MergeFrom(*table_index_meta.get());
         }

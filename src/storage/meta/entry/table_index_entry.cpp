@@ -39,7 +39,7 @@ TableIndexEntry::TableIndexEntry(const std::shared_ptr<IndexDef> &index_def,
                                  u64 txn_id,
                                  TxnTimeStamp begin_ts,
                                  bool is_replay)
-    : BaseEntry(EntryType::kTableIndex), table_index_meta_(table_index_meta), index_def_(Move(index_def)), index_dir_(Move(index_dir)) {
+    : BaseEntry(EntryType::kTableIndex), table_index_meta_(table_index_meta), index_def_(std::move(index_def)), index_dir_(std::move(index_dir)) {
     begin_ts_ = begin_ts; // TODO:: begin_ts and txn_id should be const and set in BaseEntry
     txn_id_ = txn_id;
 
@@ -60,10 +60,11 @@ TableIndexEntry::TableIndexEntry(const std::shared_ptr<IndexDef> &index_def,
         if (index_base->index_type_ == IndexType::kIRSFullText) {
             index_info_map.emplace(column_id, std::static_pointer_cast<IndexFullText>(index_base));
         } else {
-            std::shared_ptr<std::string> column_index_path = MakeShared<std::string>(Format("{}/{}", *index_dir_, index_base->column_names_[0]));
+            std::shared_ptr<std::string> column_index_path =
+                std::make_shared<std::string>(Format("{}/{}", *index_dir_, index_base->column_names_[0]));
             std::unique_ptr<ColumnIndexEntry> column_index_entry =
                 ColumnIndexEntry::NewColumnIndexEntry(index_base, column_id, this, txn_id, column_index_path, begin_ts);
-            column_index_map_[column_id] = Move(column_index_entry);
+            column_index_map_[column_id] = std::move(column_index_entry);
         }
     }
     if (!index_info_map.empty()) {
@@ -88,7 +89,7 @@ std::unique_ptr<TableIndexEntry> TableIndexEntry::NewDropTableIndexEntry(TableIn
 }
 
 void TableIndexEntry::CommitCreateIndex(u64 column_id, u32 segment_id, std::shared_ptr<SegmentColumnIndexEntry> segment_column_index_entry) {
-    UniqueLock<RWMutex> w_locker(this->rw_locker_);
+    std::unique_lock<std::shared_mutex> w_locker(this->rw_locker_);
     ColumnIndexEntry *column_index_entry = this->column_index_map_[column_id].get();
     column_index_entry->index_by_segment_.emplace(segment_id, segment_column_index_entry);
 }
@@ -98,10 +99,10 @@ void TableIndexEntry::CommitCreateIndex(const std::shared_ptr<IrsIndexEntry> &ir
 Json TableIndexEntry::Serialize(TxnTimeStamp max_commit_ts) {
     Json json;
 
-    Vector<ColumnIndexEntry *> column_index_entry_candidates;
+    std::vector<ColumnIndexEntry *> column_index_entry_candidates;
     IrsIndexEntry *irs_index_entry_candidate_{};
     {
-        SharedLock<RWMutex> lck(this->rw_locker_);
+        std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
         json["txn_id"] = this->txn_id_.load();
         json["begin_ts"] = this->begin_ts_;
         json["commit_ts"] = this->commit_ts_.load();
@@ -146,10 +147,11 @@ TableIndexEntry::Deserialize(const Json &index_def_entry_json, TableIndexMeta *t
         return table_index_entry;
     }
 
-    auto index_dir = MakeShared<std::string>(index_def_entry_json["index_dir"]);
+    auto index_dir = std::make_shared<std::string>(index_def_entry_json["index_dir"]);
     auto index_def = IndexDef::Deserialize(index_def_entry_json["index_def"]);
 
-    std::unique_ptr<TableIndexEntry> table_index_entry = std::make_unique<TableIndexEntry>(index_def, table_index_meta, index_dir, txn_id, begin_ts, true);
+    std::unique_ptr<TableIndexEntry> table_index_entry =
+        std::make_unique<TableIndexEntry>(index_def, table_index_meta, index_dir, txn_id, begin_ts, true);
     table_index_entry->commit_ts_.store(commit_ts);
     table_index_entry->begin_ts_ = begin_ts;
 
@@ -158,7 +160,7 @@ TableIndexEntry::Deserialize(const Json &index_def_entry_json, TableIndexMeta *t
             std::unique_ptr<ColumnIndexEntry> column_index_entry =
                 ColumnIndexEntry::Deserialize(column_index_entry_json, table_index_entry.get(), buffer_mgr, table_entry);
             u64 column_id = column_index_entry->column_id_;
-            table_index_entry->column_index_map_.emplace(column_id, Move(column_index_entry));
+            table_index_entry->column_index_map_.emplace(column_id, std::move(column_index_entry));
         }
     }
 
@@ -174,12 +176,12 @@ std::shared_ptr<std::string> TableIndexEntry::DetermineIndexDir(const std::strin
     std::shared_ptr<std::string> index_dir;
     do {
         u32 seed = std::time(nullptr);
-        index_dir = MakeShared<std::string>(Format("{}/{}_index_{}", parent_dir, RandomString(DEFAULT_RANDOM_NAME_LEN, seed), index_name));
+        index_dir = std::make_shared<std::string>(Format("{}/{}_index_{}", parent_dir, RandomString(DEFAULT_RANDOM_NAME_LEN, seed), index_name));
     } while (!fs.CreateDirectoryNoExp(*index_dir));
     return index_dir;
 }
 
-Status TableIndexEntry::CreateIndexDo(const TableEntry *table_entry, std::unordered_map<u32, atomic_u64> &create_index_idxes) {
+Status TableIndexEntry::CreateIndexDo(const TableEntry *table_entry, std::unordered_map<u32, std::atomic<u64>> &create_index_idxes) {
     if (column_index_map_.size() != 1) {
         // TODO
         Error<NotImplementException>("Not implemented");

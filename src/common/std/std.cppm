@@ -12,6 +12,7 @@ export import :iostream;
 export import :vector;
 export import :thread;
 //export import :chrono;
+export import :cmath;
 export import :map;
 export import :mutex;
 export import :atomic;
