@@ -19,7 +19,8 @@ export module catalog:block_entry;
 import :block_column_entry;
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import default_values;
 import third_party;
 import parser;
@@ -48,18 +49,18 @@ struct CreateField {
 #pragma pack()
 
 export struct BlockVersion {
-    constexpr static String PATH = "version";
+    constexpr static std::string PATH = "version";
 
     explicit BlockVersion(SizeT capacity) : deleted_(capacity, 0) {}
     bool operator==(const BlockVersion &rhs) const;
     bool operator!=(const BlockVersion &rhs) const { return !(*this == rhs); };
     i32 GetRowCount(TxnTimeStamp begin_ts);
-    void LoadFromFile(const String &version_path);
-    void SaveToFile(const String &version_path);
+    void LoadFromFile(const std::string &version_path);
+    void SaveToFile(const std::string &version_path);
 
-    Vector<CreateField> created_{}; // second field width is same as timestamp, otherwise Valgrind will issue BlockVersion::SaveToFile has
+    std::vector<CreateField> created_{}; // second field width is same as timestamp, otherwise Valgrind will issue BlockVersion::SaveToFile has
                                     // risk to write uninitialized buffer. (ts, rows)
-    Vector<TxnTimeStamp> deleted_{};
+    std::vector<TxnTimeStamp> deleted_{};
 };
 
 struct BlockEntry : public BaseEntry {
@@ -91,14 +92,14 @@ public:
 
     Json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<BlockEntry> Deserialize(const Json &table_entry_json, SegmentEntry *table_entry, BufferManager *buffer_mgr);
+    static std::unique_ptr<BlockEntry> Deserialize(const Json &table_entry_json, SegmentEntry *table_entry, BufferManager *buffer_mgr);
 
     void MergeFrom(BaseEntry &other) override;
 
 protected:
     u16 AppendData(u64 txn_id, DataBlock *input_data_block, u16 input_block_offset, u16 append_rows, BufferManager *buffer_mgr);
 
-    void DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const Vector<RowID> &rows);
+    void DeleteData(u64 txn_id, TxnTimeStamp commit_ts, const std::vector<RowID> &rows);
 
     void CommitAppend(u64 txn_id, TxnTimeStamp commit_ts);
 
@@ -108,7 +109,7 @@ protected:
 
     void FlushVersion(BlockVersion &checkpoint_version);
 
-    static SharedPtr<String> DetermineDir(const String &parent_dir, u64 block_id);
+    static std::shared_ptr<std::string> DetermineDir(const std::string &parent_dir, u64 block_id);
 
 public:
     // Getter
@@ -126,39 +127,39 @@ public:
 
     u32 segment_id() const;
 
-    const SharedPtr<String> &base_dir() const { return base_dir_; }
+    const std::shared_ptr<std::string> &base_dir() const { return base_dir_; }
 
     BlockColumnEntry *GetColumnBlockEntry(SizeT column_id) const { return columns_[column_id].get(); }
 
     // Get visible range of the BlockEntry since the given row number for a txn
-    Pair<u16, u16> GetVisibleRange(TxnTimeStamp begin_ts, u16 block_offset_begin = 0) const;
+    std::pair<u16, u16> GetVisibleRange(TxnTimeStamp begin_ts, u16 block_offset_begin = 0) const;
 
     i32 GetAvailableCapacity();
 
-    const String &DirPath() { return *base_dir_; }
+    const std::string &DirPath() { return *base_dir_; }
 
-    String VersionFilePath() { return LocalFileSystem::ConcatenateFilePath(*base_dir_, BlockVersion::PATH); }
+    std::string VersionFilePath() { return LocalFileSystem::ConcatenateFilePath(*base_dir_, BlockVersion::PATH); }
 
-    const SharedPtr<DataType> GetColumnType(u64 column_id) const;
+    const std::shared_ptr<DataType> GetColumnType(u64 column_id) const;
 
 public:
     // Setter
     inline void IncreaseRowCount(SizeT increased_row_count) { row_count_ += increased_row_count; }
 
 protected:
-    RWMutex rw_locker_{};
+    std::shared_mutex rw_locker_{};
 
     const SegmentEntry *segment_entry_{};
 
-    SharedPtr<String> base_dir_{};
+    std::shared_ptr<std::string> base_dir_{};
 
     u16 block_id_{};
     u16 row_count_{};
     u16 row_capacity_{};
 
-    Vector<UniquePtr<BlockColumnEntry>> columns_;
+    std::vector<std::unique_ptr<BlockColumnEntry>> columns_;
 
-    UniquePtr<BlockVersion> block_version_{};
+    std::unique_ptr<BlockVersion> block_version_{};
 
     TxnTimeStamp min_row_ts_{0};    // Indicate the commit_ts which create this BlockEntry
     TxnTimeStamp max_row_ts_{0};    // Indicate the max commit_ts which create/update/delete data inside this BlockEntry

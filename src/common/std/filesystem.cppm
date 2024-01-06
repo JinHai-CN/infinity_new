@@ -10,4 +10,5 @@ export module std:filesystem;
 
 export namespace std::filesystem {
     using std::filesystem::directory_entry;
+    using std::filesystem::file_size;
 }

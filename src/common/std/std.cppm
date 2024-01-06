@@ -7,7 +7,7 @@ module;
 export module std;
 
 export import :string;
-//export import :iostream;
+export import :iostream;
 //export import :numeric;
 export import :vector;
 export import :thread;
@@ -22,7 +22,7 @@ export import :filesystem;
 export import :memory;
 //export import :exception;
 //export import :stdexcept;
-//export import :utility;
+export import :utility;
 //export import :algorithm;
 export import :array;
 //export import :functional;
@@ -42,6 +42,7 @@ export import :unordered_set;
 export import :optional;
 export import :move;
 export import :system_error;
+export import :cstring;
 
 export namespace infinity {
 
