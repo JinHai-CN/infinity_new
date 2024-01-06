@@ -1,9 +1,7 @@
 module;
-#include <algorithm>
+#include <unordered_set>
 # 3 __FILE__ 1 3 // Enter "faked" system files since std is reserved module name
-export module std:algorithm;
+export module std:unordered_set;
 export namespace std {
-    using std::min;
-    using std::max;
-    using std::sort;
+    using std::unordered_set;
 }
