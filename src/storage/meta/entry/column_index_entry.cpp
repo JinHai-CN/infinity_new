@@ -14,12 +14,9 @@
 
 module;
 
-#include <ctime>
-#include <string>
-
 module catalog;
 
-import stl;
+import std;
 import index_base;
 import third_party;
 import local_file_system;
@@ -129,7 +126,7 @@ SharedPtr<String> ColumnIndexEntry::DetermineIndexDir(const String &parent_dir, 
     LocalFileSystem fs;
     SharedPtr<String> index_dir;
     do {
-        u32 seed = time(nullptr);
+        u32 seed = std::time(nullptr);
         index_dir = MakeShared<String>(parent_dir + "/" + RandomString(DEFAULT_RANDOM_NAME_LEN, seed) + "_index_" + index_name);
     } while (!fs.CreateDirectoryNoExp(*index_dir));
     return index_dir;

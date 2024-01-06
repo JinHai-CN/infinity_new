@@ -16,7 +16,8 @@ module;
 
 module catalog;
 
-import stl;
+import std;
+import type_alias;
 import buffer_manager;
 import buffer_handle;
 import buffer_obj;

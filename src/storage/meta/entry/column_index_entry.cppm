@@ -19,7 +19,8 @@ export module catalog:column_index_entry;
 import :base_entry;
 import :segment_column_index_entry;
 
-import stl;
+import std;
+import type_alias;
 import parser;
 import index_base;
 import third_party;
@@ -39,50 +40,50 @@ struct ColumnIndexEntry : public BaseEntry {
     friend struct TableIndexEntry;
 
 public:
-    ColumnIndexEntry(SharedPtr<IndexBase> index_base,
+    ColumnIndexEntry(std::shared_ptr<IndexBase> index_base,
                      TableIndexEntry *table_index_entry,
                      u64 column_id,
-                     SharedPtr<String> index_dir,
+                     std::shared_ptr<std::string> index_dir,
                      u64 txn_id,
                      TxnTimeStamp begin_ts);
 
-    static UniquePtr<ColumnIndexEntry> NewColumnIndexEntry(SharedPtr<IndexBase> index_base,
-                                                           u64 column_id,
-                                                           TableIndexEntry *table_index_entry,
-                                                           u64 txn_id,
-                                                           SharedPtr<String> index_dir,
-                                                           TxnTimeStamp begin_ts);
+    static std::unique_ptr<ColumnIndexEntry> NewColumnIndexEntry(std::shared_ptr<IndexBase> index_base,
+                                                                 u64 column_id,
+                                                                 TableIndexEntry *table_index_entry,
+                                                                 u64 txn_id,
+                                                                 std::shared_ptr<std::string> index_dir,
+                                                                 TxnTimeStamp begin_ts);
 
     Json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<ColumnIndexEntry>
+    static std::unique_ptr<ColumnIndexEntry>
     Deserialize(const Json &column_index_entry_json, TableIndexEntry *table_index_entry, BufferManager *buffer_mgr, TableEntry *table_entry);
 
 public:
     // Getter
-    const SharedPtr<String> &index_dir() const { return index_dir_; }
+    const std::shared_ptr<std::string> &index_dir() const { return index_dir_; }
     u64 column_id() const { return column_id_; }
     const IndexBase *index_base_ptr() const { return index_base_.get(); }
     TableIndexEntry *table_index_entry() const { return table_index_entry_; }
-    const HashMap<u32, SharedPtr<SegmentColumnIndexEntry>>& index_by_segment() const { return index_by_segment_; }
+    const std::unordered_map<u32, std::shared_ptr<SegmentColumnIndexEntry>> &index_by_segment() const { return index_by_segment_; }
 
     // Used in segment column index entry
-    UniquePtr<IndexFileWorker> CreateFileWorker(CreateIndexParam *param, u32 segment_id);
+    std::unique_ptr<IndexFileWorker> CreateFileWorker(CreateIndexParam *param, u32 segment_id);
 
 private:
-    Status CreateIndexDo(const ColumnDef *column_def, HashMap<u32, atomic_u64> &create_index_idxes);
+    Status CreateIndexDo(const ColumnDef *column_def, std::unordered_map<u32, std::atomic<u64>> &create_index_idxes);
 
-    static SharedPtr<String> DetermineIndexDir(const String &parent_dir, const String &index_name);
-    void CommitCreatedIndex(u32 segment_id, UniquePtr<SegmentColumnIndexEntry> index_entry);
-    static String IndexFileName(const String &index_name, u32 segment_id);
+    static std::shared_ptr<std::string> DetermineIndexDir(const std::string &parent_dir, const std::string &index_name);
+    void CommitCreatedIndex(u32 segment_id, std::unique_ptr<SegmentColumnIndexEntry> index_entry);
+    static std::string IndexFileName(const std::string &index_name, u32 segment_id);
 
 private:
-    RWMutex rw_locker_{};
+    std::shared_mutex rw_locker_{};
 
     TableIndexEntry *table_index_entry_{};
     u64 column_id_{};
-    SharedPtr<String> index_dir_{};
-    const SharedPtr<IndexBase> index_base_{};
-    HashMap<u32, SharedPtr<SegmentColumnIndexEntry>> index_by_segment_{};
+    std::shared_ptr<std::string> index_dir_{};
+    const std::shared_ptr<IndexBase> index_base_{};
+    std::unordered_map<u32, std::shared_ptr<SegmentColumnIndexEntry>> index_by_segment_{};
 };
 } // namespace infinity

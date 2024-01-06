@@ -18,7 +18,8 @@ export module catalog:segment_column_index_entry;
 
 import :base_entry;
 
-import stl;
+import std;
+import type_alias;
 import buffer_handle;
 import third_party;
 import buffer_obj;
@@ -41,17 +42,17 @@ export class SegmentColumnIndexEntry : public BaseEntry {
     friend ColumnIndexEntry;
 
 public:
-    static SharedPtr<SegmentColumnIndexEntry> NewIndexEntry(ColumnIndexEntry *column_index_entry,
-                                                            u32 segment_id,
-                                                            TxnTimeStamp create_ts,
-                                                            BufferManager *buffer_manager,
-                                                            CreateIndexParam *create_index_param);
+    static std::shared_ptr<SegmentColumnIndexEntry> NewIndexEntry(ColumnIndexEntry *column_index_entry,
+                                                                  u32 segment_id,
+                                                                  TxnTimeStamp create_ts,
+                                                                  BufferManager *buffer_manager,
+                                                                  CreateIndexParam *create_index_param);
 
     [[nodiscard]] BufferHandle GetIndex();
 
     Json Serialize();
 
-    static UniquePtr<SegmentColumnIndexEntry>
+    static std::unique_ptr<SegmentColumnIndexEntry>
     Deserialize(const Json &index_entry_json, ColumnIndexEntry *column_index_entry, BufferManager *buffer_mgr, TableEntry *table_entry);
 
     void MergeFrom(BaseEntry &other);
@@ -69,10 +70,10 @@ private:
     bool Flush(TxnTimeStamp checkpoint_ts);
 
     // Load from disk. Is called by SegmentColumnIndexEntry::Deserialize.
-    static UniquePtr<SegmentColumnIndexEntry>
+    static std::unique_ptr<SegmentColumnIndexEntry>
     LoadIndexEntry(ColumnIndexEntry *column_index_entry, u32 segment_id, BufferManager *buffer_manager, CreateIndexParam *create_index_param);
 
-    Status CreateIndexDo(IndexBase *index_base, const ColumnDef *column_def, atomic_u64 &create_index_idx);
+    Status CreateIndexDo(IndexBase *index_base, const ColumnDef *column_def, std::atomic<u64> &create_index_idx);
 
 private:
     const ColumnIndexEntry *column_index_entry_{};
@@ -80,7 +81,7 @@ private:
 
     BufferObj *const buffer_{};
 
-    RWMutex rw_locker_{};
+    std::shared_mutex rw_locker_{};
 
     TxnTimeStamp min_ts_{0}; // Indicate the commit_ts which create this SegmentColumnIndexEntry
     TxnTimeStamp max_ts_{0}; // Indicate the max commit_ts which update data inside this SegmentColumnIndexEntry

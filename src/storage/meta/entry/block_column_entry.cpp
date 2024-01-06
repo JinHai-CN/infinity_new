@@ -42,7 +42,7 @@ std::unique_ptr<BlockColumnEntry>
 BlockColumnEntry::MakeNewBlockColumnEntry(const BlockEntry *block_entry, u64 column_id, BufferManager *buffer_manager, bool is_replay) {
     std::unique_ptr<BlockColumnEntry> block_column_entry = MakeUnique<BlockColumnEntry>(block_entry, column_id, block_entry->base_dir());
 
-    block_column_entry->file_name_ = std::make_shared<String>(ToStr(column_id) + ".col");
+    block_column_entry->file_name_ = std::make_shared<String>(std::to_string(column_id) + ".col");
 
     block_column_entry->column_type_ = block_entry->GetColumnType(column_id);
     DataType *column_type = block_column_entry->column_type_.get();

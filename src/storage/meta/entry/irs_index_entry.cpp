@@ -16,7 +16,8 @@ module;
 
 module catalog;
 
-import stl;
+import std;
+import type_alias;
 import third_party;
 import infinity_exception;
 import buffer_manager;
@@ -27,7 +28,7 @@ import logger;
 
 namespace infinity {
 
-IrsIndexEntry::IrsIndexEntry(TableIndexEntry *, SharedPtr<String> index_dir, u64 txn_id, TxnTimeStamp begin_ts)
+IrsIndexEntry::IrsIndexEntry(TableIndexEntry *, std::shared_ptr<String> index_dir, u64 txn_id, TxnTimeStamp begin_ts)
     : BaseEntry(EntryType::kIRSIndex), index_dir_(Move(index_dir)) {
     txn_id_ = txn_id;
     begin_ts_ = begin_ts;
@@ -43,7 +44,7 @@ Json IrsIndexEntry::Serialize(TxnTimeStamp) {
     return json;
 }
 
-SharedPtr<IrsIndexEntry> IrsIndexEntry::Deserialize(const Json &index_def_entry_json, TableIndexEntry *table_index_entry, BufferManager *) {
+std::shared_ptr<IrsIndexEntry> IrsIndexEntry::Deserialize(const Json &index_def_entry_json, TableIndexEntry *table_index_entry, BufferManager *) {
     u64 txn_id = index_def_entry_json["txn_id"];
     TxnTimeStamp begin_ts = index_def_entry_json["begin_ts"];
     TxnTimeStamp commit_ts = index_def_entry_json["commit_ts"];
@@ -58,13 +59,13 @@ SharedPtr<IrsIndexEntry> IrsIndexEntry::Deserialize(const Json &index_def_entry_
     return irs_index_entry;
 }
 
-SharedPtr<String> IrsIndexEntry::DetermineIndexDir(const String &, const String &) {
+std::shared_ptr<String> IrsIndexEntry::DetermineIndexDir(const String &, const String &) {
     Error<StorageException>("Not implemented");
     return nullptr;
 }
 
-SharedPtr<IrsIndexEntry>
-IrsIndexEntry::NewIrsIndexEntry(TableIndexEntry *table_index_entry, u64 txn_id, SharedPtr<String> index_dir, TxnTimeStamp begin_ts) {
+std::shared_ptr<IrsIndexEntry>
+IrsIndexEntry::NewIrsIndexEntry(TableIndexEntry *table_index_entry, u64 txn_id, std::shared_ptr<String> index_dir, TxnTimeStamp begin_ts) {
     auto irs_index_entry = MakeShared<IrsIndexEntry>(table_index_entry, index_dir, txn_id, begin_ts);
     irs_index_entry->irs_index_ = MakeShared<IRSDataStore>(*(table_index_entry->table_index_meta()->GetTableEntry()->GetTableName()), *(index_dir));
     return irs_index_entry;
