@@ -15,7 +15,7 @@
 module;
 
 #include <algorithm>
-#include <cstring>
+//#include <cstring>
 #include <errno.h>
 #include <fcntl.h>
 #include <filesystem>
@@ -39,7 +39,7 @@ LocalFileHandler::~LocalFileHandler() {
     if (fd_ != -1) {
         int ret = close(fd_);
         if (ret != 0) {
-            Error<StorageException>(Format("Close file failed: {}", strerror(errno)));
+            Error<StorageException>(Format("Close file failed: {}", std::strerror(errno)));
         }
         fd_ = -1;
     }
@@ -79,12 +79,12 @@ std::unique_ptr<FileHandler> LocalFileSystem::OpenFile(const std::string &path, 
 
     i32 fd = open(path.c_str(), file_flags, 0666);
     if (fd == -1) {
-        Error<StorageException>(Format("Can't open file: {}: {}", path, strerror(errno)));
+        Error<StorageException>(Format("Can't open file: {}: {}", path, std::strerror(errno)));
     }
 
     if (lock_type != FileLockType::kNoLock) {
         struct flock file_lock {};
-        memset(&file_lock, 0, sizeof(file_lock));
+        std::memset(&file_lock, 0, sizeof(file_lock));
         if (lock_type == FileLockType::kReadLock) {
             file_lock.l_type = F_RDLCK;
         } else {
@@ -94,7 +94,7 @@ std::unique_ptr<FileHandler> LocalFileSystem::OpenFile(const std::string &path, 
         file_lock.l_start = 0;
         file_lock.l_len = 0;
         if (fcntl(fd, F_SETLK, &file_lock) == -1) {
-            Error<StorageException>(Format("Can't lock file: {}: {}", path, strerror(errno)));
+            Error<StorageException>(Format("Can't lock file: {}: {}", path, std::strerror(errno)));
         }
     }
     return std::make_unique<LocalFileHandler>(*this, path, fd);
@@ -106,13 +106,13 @@ void LocalFileSystem::Close(FileHandler &file_handler) {
     // set fd to -1 so that destructor of `LocalFileHandler` will not close the file.
     local_file_handler->fd_ = -1;
     if (close(fd) != 0) {
-        Error<StorageException>(Format("Can't close file: {}: {}", file_handler.path_.string(), strerror(errno)));
+        Error<StorageException>(Format("Can't close file: {}: {}", file_handler.path_.string(), std::strerror(errno)));
     }
 }
 
 void LocalFileSystem::Rename(const std::string &old_path, const std::string &new_path) {
-    if (rename(old_path.c_str(), new_path.c_str()) != 0) {
-        Error<StorageException>(Format("Can't rename file: {}, {}", old_path, strerror(errno)));
+    if (std::rename(old_path.c_str(), new_path.c_str()) != 0) {
+        Error<StorageException>(Format("Can't rename file: {}, {}", old_path, std::strerror(errno)));
     }
 }
 
@@ -120,7 +120,7 @@ i64 LocalFileSystem::Read(FileHandler &file_handler, void *data, u64 nbytes) {
     i32 fd = ((LocalFileHandler &)file_handler).fd_;
     i64 read_count = read(fd, data, nbytes);
     if (read_count == -1) {
-        Error<StorageException>(Format("Can't read file: {}: {}", file_handler.path_.string(), strerror(errno)));
+        Error<StorageException>(Format("Can't read file: {}: {}", file_handler.path_.string(), std::strerror(errno)));
     }
     return read_count;
 }
@@ -129,7 +129,7 @@ i64 LocalFileSystem::Write(FileHandler &file_handler, const void *data, u64 nbyt
     i32 fd = ((LocalFileHandler &)file_handler).fd_;
     i64 write_count = write(fd, data, nbytes);
     if (write_count == -1) {
-        Error<StorageException>(Format("Can't write file: {}: {}. fd: {}", file_handler.path_.string(), strerror(errno), fd));
+        Error<StorageException>(Format("Can't write file: {}: {}. fd: {}", file_handler.path_.string(), std::strerror(errno), fd));
     }
     return write_count;
 }
@@ -137,7 +137,7 @@ i64 LocalFileSystem::Write(FileHandler &file_handler, const void *data, u64 nbyt
 void LocalFileSystem::Seek(FileHandler &file_handler, i64 pos) {
     i32 fd = ((LocalFileHandler &)file_handler).fd_;
     if (0 != lseek(fd, pos, SEEK_SET)) {
-        Error<StorageException>(Format("Can't seek file: {}: {}", file_handler.path_.string(), strerror(errno)));
+        Error<StorageException>(Format("Can't seek file: {}: {}", file_handler.path_.string(), std::strerror(errno)));
     }
 }
 
@@ -156,17 +156,17 @@ void LocalFileSystem::DeleteFile(const std::string &file_name) {
     bool is_deleted = std::filesystem::remove(p, error_code);
     if (error_code.value() == 0) {
         if (!is_deleted) {
-            Error<StorageException>(Format("Can't delete file: {}: {}", file_name, strerror(errno)));
+            Error<StorageException>(Format("Can't delete file: {}: {}", file_name, std::strerror(errno)));
         }
     } else {
-        Error<StorageException>(Format("Delete file {} exception: {}", file_name, strerror(errno)));
+        Error<StorageException>(Format("Delete file {} exception: {}", file_name, std::strerror(errno)));
     }
 }
 
 void LocalFileSystem::SyncFile(FileHandler &file_handler) {
     i32 fd = ((LocalFileHandler &)file_handler).fd_;
     if (fsync(fd) != 0) {
-        Error<StorageException>(Format("fsync failed: {}, {}", file_handler.path_.string(), strerror(errno)));
+        Error<StorageException>(Format("fsync failed: {}, {}", file_handler.path_.string(), std::strerror(errno)));
     }
 }
 
@@ -178,7 +178,7 @@ bool LocalFileSystem::Exists(const std::string &path) {
     if (error_code.value() == 0) {
         return is_exists;
     } else {
-        Error<StorageException>(Format("{} exists exception: {}", path, strerror(errno)));
+        Error<StorageException>(Format("{} exists exception: {}", path, std::strerror(errno)));
     }
     return false;
 }
@@ -194,7 +194,7 @@ void LocalFileSystem::CreateDirectory(const std::string &path) {
     std::filesystem::path p{path};
     std::filesystem::create_directories(p, error_code);
     if (error_code.value() != 0) {
-        Error<StorageException>(Format("{} create exception: {}", path, strerror(errno)));
+        Error<StorageException>(Format("{} create exception: {}", path, std::strerror(errno)));
     }
 }
 
