@@ -16,7 +16,7 @@ module;
 
 #include <vector>
 
-import stl;
+import std;
 import third_party;
 import parser;
 
@@ -34,21 +34,21 @@ namespace infinity {
 
 TxnIndexStore::TxnIndexStore(TableIndexEntry *table_index_entry) : table_index_entry_(table_index_entry) {}
 
-UniquePtr<String> TxnTableStore::Append(const SharedPtr<DataBlock> &input_block) {
+std::unique_ptr<std::string> TxnTableStore::Append(const std::shared_ptr<DataBlock> &input_block) {
     SizeT column_count = table_entry_->ColumnCount();
     if (input_block->column_count() != column_count) {
-        String err_msg = Format("Attempt to insert different column count data block into transaction table store");
+        std::string err_msg = Format("Attempt to insert different column count data block into transaction table store");
         LOG_ERROR(err_msg);
-        return MakeUnique<String>(err_msg);
+        return std::make_unique<std::string>(err_msg);
     }
 
-    Vector<SharedPtr<DataType>> column_types;
+    std::vector<std::shared_ptr<DataType>> column_types;
     for (SizeT col_id = 0; col_id < column_count; ++col_id) {
         column_types.emplace_back(table_entry_->GetColumnDefByID(col_id)->type());
         if (*column_types.back() != *input_block->column_vectors[col_id]->data_type()) {
-            String err_msg = Format("Attempt to insert different type data into transaction table store");
+            std::string err_msg = Format("Attempt to insert different type data into transaction table store");
             LOG_ERROR(err_msg);
-            return MakeUnique<String>(err_msg);
+            return std::make_unique<std::string>(err_msg);
         }
     }
 
@@ -79,14 +79,14 @@ UniquePtr<String> TxnTableStore::Append(const SharedPtr<DataBlock> &input_block)
     return nullptr;
 }
 
-UniquePtr<String> TxnTableStore::Import(const SharedPtr<SegmentEntry> &segment) {
+std::unique_ptr<std::string> TxnTableStore::Import(const std::shared_ptr<SegmentEntry> &segment) {
     uncommitted_segments_.emplace_back(segment);
     return nullptr;
 }
 
-UniquePtr<String>
-TxnTableStore::CreateIndexFile(TableIndexEntry *table_index_entry, u64 column_id, u32 segment_id, SharedPtr<SegmentColumnIndexEntry> index) {
-    const String &index_name = *table_index_entry->index_def()->index_name_;
+std::unique_ptr<std::string>
+TxnTableStore::CreateIndexFile(TableIndexEntry *table_index_entry, u64 column_id, u32 segment_id, std::shared_ptr<SegmentColumnIndexEntry> index) {
+    const std::string &index_name = *table_index_entry->index_def()->index_name_;
     if (auto column_index_iter = txn_indexes_store_.find(index_name); column_index_iter != txn_indexes_store_.end()) {
         TxnIndexStore *txn_index_store = &(column_index_iter->second);
         if (auto segment_column_index_iter = txn_index_store->index_entry_map_.find(column_id);
@@ -99,14 +99,14 @@ TxnTableStore::CreateIndexFile(TableIndexEntry *table_index_entry, u64 column_id
     } else {
         TxnIndexStore index_store(table_index_entry);
         index_store.index_entry_map_[column_id][segment_id] = index;
-        txn_indexes_store_.emplace(index_name, Move(index_store));
+        txn_indexes_store_.emplace(index_name, std::move(index_store));
     }
     return nullptr;
 }
 
-UniquePtr<String> TxnTableStore::Delete(const Vector<RowID> &row_ids) {
+std::unique_ptr<std::string> TxnTableStore::Delete(const std::vector<RowID> &row_ids) {
     //    auto &rows = delete_state_.rows_;
-    HashMap<u32, HashMap<u16, Vector<RowID>>> &row_hash_table = delete_state_.rows_;
+    std::unordered_map<u32, std::unordered_map<u16, std::vector<RowID>>> &row_hash_table = delete_state_.rows_;
     for (auto row_id : row_ids) {
         auto seg_it = row_hash_table.find(row_id.segment_id_);
         if (seg_it != row_hash_table.end()) {
@@ -115,12 +115,12 @@ UniquePtr<String> TxnTableStore::Delete(const Vector<RowID> &row_ids) {
             if (block_it != seg_it->second.end()) {
                 block_it->second.push_back(row_id);
             } else {
-                seg_it->second.emplace(block_id, Vector<RowID>{row_id});
+                seg_it->second.emplace(block_id, std::vector<RowID>{row_id});
             }
         } else {
-            HashMap<u16, Vector<RowID>> block_row_hash_table;
+            std::unordered_map<u16, std::vector<RowID>> block_row_hash_table;
             u16 block_id = row_id.segment_offset_ / DEFAULT_BLOCK_CAPACITY;
-            block_row_hash_table.emplace(block_id, Vector<RowID>{row_id});
+            block_row_hash_table.emplace(block_id, std::vector<RowID>{row_id});
             row_hash_table.emplace(row_id.segment_id_, block_row_hash_table);
         }
     }
@@ -128,7 +128,7 @@ UniquePtr<String> TxnTableStore::Delete(const Vector<RowID> &row_ids) {
     return nullptr;
 }
 
-void TxnTableStore::Scan(SharedPtr<DataBlock> &) {}
+void TxnTableStore::Scan(std::shared_ptr<DataBlock> &) {}
 
 void TxnTableStore::Rollback() {
     if (append_state_.get() != nullptr) {
@@ -142,7 +142,7 @@ void TxnTableStore::Rollback() {
 
 void TxnTableStore::PrepareCommit() {
     // Init append state
-    append_state_ = MakeUnique<AppendState>(this->blocks_);
+    append_state_ = std::make_unique<AppendState>(this->blocks_);
 
     // Start to append
     LOG_TRACE(Format("Transaction local storage table: {}, Start to prepare commit", *table_entry_->GetTableName()));
