@@ -16,4 +16,6 @@ export namespace std {
     using std::operator==;
 
     using std::static_pointer_cast;
+
+    using std::memory_order;
 }

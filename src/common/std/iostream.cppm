@@ -25,6 +25,7 @@ export namespace std {
     using std::hex;
     using std::ios;
     using std::ios_base;
+    using std::streamsize;
 
     using std::operator<<;
     using std::operator>>;

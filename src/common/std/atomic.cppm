@@ -11,4 +11,5 @@ export namespace std {
     using std::memory_order_acq_rel;
     using std::memory_order_seq_cst;
     using std::atomic;
+    using std::atomic_bool;
 }
