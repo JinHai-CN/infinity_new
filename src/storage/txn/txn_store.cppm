@@ -14,12 +14,13 @@
 
 module;
 
-import stl;
+export module txn_store;
+
+import std;
+import type_alias;
 import parser;
 import data_access_state;
 // import catalog;
-
-export module txn_store;
 
 namespace infinity {
 
@@ -32,7 +33,7 @@ class DataBlock;
 class SegmentColumnIndexEntry;
 
 struct TxnSegmentIndexStore {
-    HashMap<u32, SharedPtr<SegmentColumnIndexEntry>> index_entry_map_{};
+    std::unordered_map<u32, std::shared_ptr<SegmentColumnIndexEntry>> index_entry_map_{};
 };
 
 export struct TxnIndexStore {
@@ -42,26 +43,26 @@ public:
 
     TableIndexEntry *const table_index_entry_{};
 
-    //    Vector<ColumnIndexEntry*> column_index_entry_{};
+    //    std::vector<ColumnIndexEntry*> column_index_entry_{};
     //
     IrsIndexEntry *irs_index_entry_{};
 
-    HashMap<u64, HashMap<u32, SharedPtr<SegmentColumnIndexEntry>>> index_entry_map_{}; // column_id -> segment_id -> segment_column_index_entry
+    std::unordered_map<u64, std::unordered_map<u32, std::shared_ptr<SegmentColumnIndexEntry>>> index_entry_map_{}; // column_id -> segment_id -> segment_column_index_entry
 };
 
 export class TxnTableStore {
 public:
     explicit inline TxnTableStore(TableEntry *table_entry, Txn *txn) : table_entry_(table_entry), txn_(txn) {}
 
-    UniquePtr<String> Append(const SharedPtr<DataBlock> &input_block);
+    std::unique_ptr<std::string> Append(const std::shared_ptr<DataBlock> &input_block);
 
-    UniquePtr<String> Import(const SharedPtr<SegmentEntry> &segment);
+    std::unique_ptr<std::string> Import(const std::shared_ptr<SegmentEntry> &segment);
 
-    UniquePtr<String> CreateIndexFile(TableIndexEntry *table_index_entry, u64 column_id, u32 segment_id, SharedPtr<SegmentColumnIndexEntry> index);
+    std::unique_ptr<std::string> CreateIndexFile(TableIndexEntry *table_index_entry, u64 column_id, u32 segment_id, std::shared_ptr<SegmentColumnIndexEntry> index);
 
-    UniquePtr<String> Delete(const Vector<RowID> &row_ids);
+    std::unique_ptr<std::string> Delete(const std::vector<RowID> &row_ids);
 
-    void Scan(SharedPtr<DataBlock> &output_block);
+    void Scan(std::shared_ptr<DataBlock> &output_block);
 
     void Rollback();
 
@@ -70,10 +71,10 @@ public:
     void Commit() const;
 
 public:
-    Vector<SharedPtr<DataBlock>> blocks_{};
-    Vector<SharedPtr<SegmentEntry>> uncommitted_segments_{};
-    HashMap<String, TxnIndexStore> txn_indexes_store_{};
-    UniquePtr<AppendState> append_state_{};
+    std::vector<std::shared_ptr<DataBlock>> blocks_{};
+    std::vector<std::shared_ptr<SegmentEntry>> uncommitted_segments_{};
+    std::unordered_map<std::string, TxnIndexStore> txn_indexes_store_{};
+    std::unique_ptr<AppendState> append_state_{};
     DeleteState delete_state_{};
 
     SizeT current_block_id_{0};
