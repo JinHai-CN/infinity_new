@@ -14,7 +14,8 @@
 
 module;
 
-import stl;
+import std;
+import type_alias;
 import file_system;
 import file_system_type;
 
@@ -24,7 +25,7 @@ namespace infinity {
 
 export class LocalFileHandler : public FileHandler {
 public:
-    LocalFileHandler(FileSystem &file_system, String path, i32 fd) : FileHandler(file_system, Move(path)), fd_(fd) {}
+    LocalFileHandler(FileSystem &file_system, std::string path, i32 fd) : FileHandler(file_system, std::move(path)), fd_(fd) {}
 
     ~LocalFileHandler() override;
 
@@ -38,43 +39,43 @@ public:
 
     ~LocalFileSystem() override = default;
 
-    UniquePtr<FileHandler> OpenFile(const String &path, u8 flags, FileLockType lock_type) final;
+    std::unique_ptr<FileHandler> OpenFile(const std::string &path, u8 flags, FileLockType lock_type) final;
 
     i64 Read(FileHandler &file_handler, void *data, u64 nbytes) final;
 
     i64 Write(FileHandler &file_handler, const void *data, u64 nbytes) final;
 
-    void Rename(const String &old_path, const String &new_path) final;
+    void Rename(const std::string &old_path, const std::string &new_path) final;
 
     void Seek(FileHandler &file_handler, i64 pos) final;
 
     SizeT GetFileSize(FileHandler &file_handler) final;
 
-    void DeleteFile(const String &file_name) final;
+    void DeleteFile(const std::string &file_name) final;
 
     void SyncFile(FileHandler &file_handler) final;
 
     void Close(FileHandler &file_handler) final;
 
     // Directory related methods
-    bool Exists(const String &path) final; // if file or directory exists
+    bool Exists(const std::string &path) final; // if file or directory exists
 
-    void CreateDirectory(const String &path) final;
+    void CreateDirectory(const std::string &path) final;
 
     // return true if successfully created directory
-    bool CreateDirectoryNoExp(const String &path);
+    bool CreateDirectoryNoExp(const std::string &path);
 
-    u64 DeleteDirectory(const String &path) final;
+    u64 DeleteDirectory(const std::string &path) final;
 
-    Vector<SharedPtr<DirEntry>> ListDirectory(const String &path) final;
+    std::vector<std::shared_ptr<std::filesystem::directory_entry>> ListDirectory(const std::string &path) final;
 
-    String GetAbsolutePath(const String &path);
+    std::string GetAbsolutePath(const std::string &path);
 
-    static u64 GetFileSizeByPath(const String& path);
+    static u64 GetFileSizeByPath(const std::string &path);
 
-    static u64 GetFolderSizeByPath(const String& path);
+    static u64 GetFolderSizeByPath(const std::string &path);
 
-    static String ConcatenateFilePath(const String& dir_path, const String& file_path);
+    static std::string ConcatenateFilePath(const std::string &dir_path, const std::string &file_path);
 };
 
 } // namespace infinity
