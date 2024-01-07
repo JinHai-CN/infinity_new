@@ -44,6 +44,7 @@ export import :unordered_set;
 export import :source_location;
 export import :type_info;
 export import :deque;
+export import :iterator;
 export import :numeric;
 export import :optional;
 export import :move;
