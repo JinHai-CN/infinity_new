@@ -14,25 +14,28 @@
 
 module;
 
-import stl;
-import buffer_base;
 
-import infinity_exception;
 
 #include <iterator>
 
 module write_buffer;
 
+import std;
+import buffer_base;
+import type_alias;
+
+import infinity_exception;
+
 namespace infinity {
 SizeT WriteBuffer::WriteTo(char *to, SizeT n) {
-    n = Min(n, Count());
+    n = std::min(n, Count());
     SizeT bytes_copied = 0;
     Buffer working_buffer = Buffer(0, 0);
     Container::iterator chunk = chunk_list_.begin();
     while (bytes_copied < n) {
         working_buffer = *chunk;
-        SizeT bytes_to_copy = Min(static_cast<SizeT>(working_buffer.Size()), n - bytes_copied);
-        Memcpy(to + bytes_copied, working_buffer.Begin(), bytes_to_copy);
+        SizeT bytes_to_copy = std::min(static_cast<SizeT>(working_buffer.Size()), n - bytes_copied);
+        std::memcpy(to + bytes_copied, working_buffer.Begin(), bytes_to_copy);
         bytes_copied += bytes_to_copy;
         chunk = std::next(chunk);
     }
@@ -49,8 +52,8 @@ void WriteBuffer::Write(const char *from, SizeT n) {
 
     while (bytes_copied < n) {
         NextIfAtEnd();
-        SizeT bytes_to_copy = Min(static_cast<SizeT>(working_buffer_.End() - pos_), n - bytes_copied);
-        Memcpy(pos_, from + bytes_copied, bytes_to_copy);
+        SizeT bytes_to_copy = std::min(static_cast<SizeT>(working_buffer_.End() - pos_), n - bytes_copied);
+        std::memcpy(pos_, from + bytes_copied, bytes_to_copy);
         pos_ += bytes_to_copy;
         bytes_copied += bytes_to_copy;
     }

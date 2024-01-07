@@ -14,9 +14,10 @@
 
 module;
 
-import stl;
-
 module file_system;
+
+import std;
+import type_alias;
 
 namespace infinity {
 

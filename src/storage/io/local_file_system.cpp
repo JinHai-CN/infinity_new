@@ -22,7 +22,8 @@ module;
 #include <sys/stat.h>
 #include <unistd.h>
 
-import stl;
+import std;
+import type_alias;
 import file_system;
 import file_system_type;
 
@@ -44,7 +45,7 @@ LocalFileHandler::~LocalFileHandler() {
     }
 }
 
-UniquePtr<FileHandler> LocalFileSystem::OpenFile(const String &path, u8 flags, FileLockType lock_type) {
+std::unique_ptr<FileHandler> LocalFileSystem::OpenFile(const std::string &path, u8 flags, FileLockType lock_type) {
     i32 file_flags{O_RDWR};
     bool read_flag = flags & FileFlags::READ_FLAG;
     bool write_flag = flags & FileFlags::WRITE_FLAG;
@@ -96,7 +97,7 @@ UniquePtr<FileHandler> LocalFileSystem::OpenFile(const String &path, u8 flags, F
             Error<StorageException>(Format("Can't lock file: {}: {}", path, strerror(errno)));
         }
     }
-    return MakeUnique<LocalFileHandler>(*this, path, fd);
+    return std::make_unique<LocalFileHandler>(*this, path, fd);
 }
 
 void LocalFileSystem::Close(FileHandler &file_handler) {
@@ -109,7 +110,7 @@ void LocalFileSystem::Close(FileHandler &file_handler) {
     }
 }
 
-void LocalFileSystem::Rename(const String &old_path, const String &new_path) {
+void LocalFileSystem::Rename(const std::string &old_path, const std::string &new_path) {
     if (rename(old_path.c_str(), new_path.c_str()) != 0) {
         Error<StorageException>(Format("Can't rename file: {}, {}", old_path, strerror(errno)));
     }
@@ -149,9 +150,9 @@ SizeT LocalFileSystem::GetFileSize(FileHandler &file_handler) {
     return s.st_size;
 }
 
-void LocalFileSystem::DeleteFile(const String &file_name) {
+void LocalFileSystem::DeleteFile(const std::string &file_name) {
     std::error_code error_code;
-    Path p{file_name};
+    std::filesystem::path p{file_name};
     bool is_deleted = std::filesystem::remove(p, error_code);
     if (error_code.value() == 0) {
         if (!is_deleted) {
@@ -170,9 +171,9 @@ void LocalFileSystem::SyncFile(FileHandler &file_handler) {
 }
 
 // Directory related methods
-bool LocalFileSystem::Exists(const String &path) {
+bool LocalFileSystem::Exists(const std::string &path) {
     std::error_code error_code;
-    Path p{path};
+    std::filesystem::path p{path};
     bool is_exists = std::filesystem::exists(p, error_code);
     if (error_code.value() == 0) {
         return is_exists;
@@ -182,24 +183,24 @@ bool LocalFileSystem::Exists(const String &path) {
     return false;
 }
 
-bool LocalFileSystem::CreateDirectoryNoExp(const String &path) {
+bool LocalFileSystem::CreateDirectoryNoExp(const std::string &path) {
     std::error_code error_code;
-    Path p{path};
+    std::filesystem::path p{path};
     return std::filesystem::create_directories(p, error_code);
 }
 
-void LocalFileSystem::CreateDirectory(const String &path) {
+void LocalFileSystem::CreateDirectory(const std::string &path) {
     std::error_code error_code;
-    Path p{path};
+    std::filesystem::path p{path};
     std::filesystem::create_directories(p, error_code);
     if (error_code.value() != 0) {
         Error<StorageException>(Format("{} create exception: {}", path, strerror(errno)));
     }
 }
 
-u64 LocalFileSystem::DeleteDirectory(const String &path) {
+u64 LocalFileSystem::DeleteDirectory(const std::string &path) {
     std::error_code error_code;
-    Path p{path};
+    std::filesystem::path p{path};
     u64 removed_count = std::filesystem::remove_all(p, error_code);
     if (error_code.value() != 0) {
         Error<StorageException>(Format("Delete directory {} exception: {}", path, error_code.message()));
@@ -207,31 +208,29 @@ u64 LocalFileSystem::DeleteDirectory(const String &path) {
     return removed_count;
 }
 
-Vector<SharedPtr<DirEntry>> LocalFileSystem::ListDirectory(const String &path) {
-    Path dir_path(path);
+std::vector<std::shared_ptr<std::filesystem::directory_entry>> LocalFileSystem::ListDirectory(const std::string &path) {
+    std::filesystem::path dir_path(path);
     if (!is_directory(dir_path)) {
         Error<StorageException>(Format("{} isn't a directory", path));
     }
 
-    Vector<SharedPtr<DirEntry>> file_array;
+    std::vector<std::shared_ptr<std::filesystem::directory_entry>> file_array;
     std::ranges::for_each(std::filesystem::directory_iterator{path},
-                          [&](const auto &dir_entry) { file_array.emplace_back(MakeShared<DirEntry>(dir_entry)); });
+                          [&](const auto &dir_entry) { file_array.emplace_back(std::make_shared<std::filesystem::directory_entry>(dir_entry)); });
     return file_array;
 }
 
-String LocalFileSystem::GetAbsolutePath(const String &path) {
-    Path p{path};
+std::string LocalFileSystem::GetAbsolutePath(const std::string &path) {
+    std::filesystem::path p{path};
     return std::filesystem::absolute(p).string();
 }
 
-u64 LocalFileSystem::GetFileSizeByPath(const String& path) {
-    return std::filesystem::file_size(path);
-}
+u64 LocalFileSystem::GetFileSizeByPath(const std::string &path) { return std::filesystem::file_size(path); }
 
-u64 LocalFileSystem::GetFolderSizeByPath(const String& path) {
+u64 LocalFileSystem::GetFolderSizeByPath(const std::string &path) {
     u64 totalSize = 0;
 
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+    for (const auto &entry : std::filesystem::recursive_directory_iterator(path)) {
         if (std::filesystem::is_regular_file(entry.status())) {
             totalSize += std::filesystem::file_size(entry);
         }
@@ -240,7 +239,7 @@ u64 LocalFileSystem::GetFolderSizeByPath(const String& path) {
     return totalSize;
 }
 
-String LocalFileSystem::ConcatenateFilePath(const String& dir_path, const String& file_path) {
+std::string LocalFileSystem::ConcatenateFilePath(const std::string &dir_path, const std::string &file_path) {
     std::filesystem::path full_path = std::filesystem::path(dir_path) / file_path;
     return full_path.string();
 }
