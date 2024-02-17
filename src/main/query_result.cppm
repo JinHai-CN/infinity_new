@@ -33,6 +33,8 @@ public:
         return *this;
     }
 
+    BaseResult &operator=(BaseResult &other) = default;
+
     [[nodiscard]] inline bool IsOk() const { return status_.ok(); }
 
     [[nodiscard]] inline ErrorCode ErrorCode() const { return status_.code(); }
@@ -53,6 +55,9 @@ export struct QueryResult : public BaseResult {
 
     QueryResult(const QueryResult &other_result) : BaseResult((BaseResult &) other_result),
                                                    root_operator_type_(other_result.root_operator_type_) {}
+
+    QueryResult &operator=(QueryResult &other) = default;
+    QueryResult &operator=(QueryResult &&other) = default;
 
     LogicalNodeType root_operator_type_{LogicalNodeType::kInvalid};
 
