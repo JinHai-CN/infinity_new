@@ -70,6 +70,11 @@ NewCatalog::NewCatalog(SharedPtr<String> dir, bool create_default_db) : current_
 
         this->rw_locker_.lock();
         this->databases_["default"] = std::move(db_meta);
+        global_catalog_delta_entry_ = MakeUnique<GlobalCatalogDeltaEntry>();
+        this->rw_locker_.unlock();
+    } else {
+        this->rw_locker_.lock();
+        global_catalog_delta_entry_ = MakeUnique<GlobalCatalogDeltaEntry>();
         this->rw_locker_.unlock();
     }
 }

@@ -25,27 +25,37 @@ export struct BaseResult {
 public:
     BaseResult() = default;
 
-    BaseResult(BaseResult& other): status_(other.status_), result_table_(other.result_table_) {}
+    BaseResult(BaseResult &other) : status_(other.status_), result_table_(other.result_table_) {}
 
-    BaseResult& operator=(BaseResult&& other)  noexcept {
+    BaseResult &operator=(BaseResult &&other) noexcept {
         status_ = std::move(other.status_);
         result_table_ = std::move(other.result_table_);
         return *this;
     }
 
     [[nodiscard]] inline bool IsOk() const { return status_.ok(); }
+
     [[nodiscard]] inline ErrorCode ErrorCode() const { return status_.code(); }
-    [[nodiscard]] inline DataTable* ResultTable() const { return result_table_.get(); }
+
+    [[nodiscard]] inline DataTable *ResultTable() const { return result_table_.get(); }
+
     [[nodiscard]] inline const char *ErrorMsg() const { return status_.message(); }
-    [[nodiscard]] inline String& ErrorStr() const { return *status_.msg_; }
+
+    [[nodiscard]] inline String &ErrorStr() const { return *status_.msg_; }
 
 public:
     Status status_{};
-    SharedPtr<DataTable> result_table_{};
+    SharedPtr <DataTable> result_table_{};
 };
 
 export struct QueryResult : public BaseResult {
+    QueryResult() = default;
+
+    QueryResult(const QueryResult &other_result) : BaseResult((BaseResult &) other_result),
+                                                   root_operator_type_(other_result.root_operator_type_) {}
+
     LogicalNodeType root_operator_type_{LogicalNodeType::kInvalid};
+
     String ToString() const;
 
     static QueryResult UnusedResult() {

@@ -253,7 +253,7 @@ public:
 
     ProfileHistory history{DEFAULT_PROFILER_HISTORY_SIZE};
 
-    UniquePtr<GlobalCatalogDeltaEntry> global_catalog_delta_entry_{MakeUnique<GlobalCatalogDeltaEntry>()};
+    UniquePtr<GlobalCatalogDeltaEntry> global_catalog_delta_entry_{};
 };
 
 } // namespace infinity
