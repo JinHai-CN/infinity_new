@@ -84,6 +84,9 @@ import drop_schema_info;
 import drop_table_info;
 import drop_view_info;
 import column_def;
+import type_info;
+import embedding_info;
+import knn_expr;
 
 namespace {
 
@@ -403,8 +406,18 @@ Status LogicalPlanner::BuildCreateTable(const CreateStatement *statement, Shared
             }
         }
 
+        // Check raise not supported column type.
+        const SharedPtr<DataType> & column_type = create_table_info->column_defs_[idx]->type();
+        if(column_type->type() == LogicalType::kEmbedding) {
+            const TypeInfo* type_info_ptr = column_type->type_info().get();
+            const EmbeddingInfo* embedding_info_ptr = static_cast<const EmbeddingInfo*>(type_info_ptr);
+            if(embedding_info_ptr->Type() != EmbeddingDataType::kElemFloat) {
+                return Status::NotSupport(fmt::format("Only support float as the vector element type."));
+            }
+        }
+
         SharedPtr<ColumnDef> column_def = MakeShared<ColumnDef>(idx,
-                                                                create_table_info->column_defs_[idx]->type(),
+                                                                column_type,
                                                                 create_table_info->column_defs_[idx]->name(),
                                                                 create_table_info->column_defs_[idx]->constraints_);
         columns.emplace_back(column_def);
