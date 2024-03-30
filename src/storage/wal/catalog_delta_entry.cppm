@@ -597,8 +597,6 @@ public:
     void set_txn_ids(Vector<TransactionID> &&txn_ids) { txn_ids_ = std::move(txn_ids); }
     TxnTimeStamp commit_ts() const { return max_commit_ts_; }
     void set_commit_ts(TransactionID commit_ts) { max_commit_ts_ = commit_ts; }
-    void set_sequence(u64 sequence) { sequence_ = sequence; }
-    u64 sequence() const { return sequence_; }
 
     void AddOperation(UniquePtr<CatalogDeltaOperation> operation) { operations_.emplace_back(std::move(operation)); }
 
@@ -609,7 +607,6 @@ public:
 private:
     Vector<TransactionID> txn_ids_{};         // txn id of the entry
     TxnTimeStamp max_commit_ts_{UNCOMMIT_TS}; // commit timestamp of the txn
-    u64 sequence_{};
     Vector<UniquePtr<CatalogDeltaOperation>> operations_{};
 };
 
@@ -635,10 +632,7 @@ private:
     void PruneOpWithSamePrefix(const String &prefix, TxnTimeStamp current_commit_ts);
 
 private:
-    u64 last_sequence_{0};
-    std::priority_queue<u64> sequence_heap_;
-    Map<u64, UniquePtr<CatalogDeltaEntry>> delta_entry_map_;
-
+    std::mutex mtx_{};
     Map<String, UniquePtr<CatalogDeltaOperation>> delta_ops_;
     HashSet<TransactionID> txn_ids_;
     // update by add delta entry, read by bg_process::checkpoint

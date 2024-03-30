@@ -85,8 +85,6 @@ public:
 
     bool enable_compaction() const { return enable_compaction_; }
 
-    u64 NextSequence() { return ++ sequence_; }
-
 private:
     TransactionID GetNewTxnID();
 
@@ -110,8 +108,6 @@ private:
     // For stop the txn manager
     atomic_bool is_running_{false};
     bool enable_compaction_{};
-
-    u64 sequence_{};
 };
 
 } // namespace infinity
