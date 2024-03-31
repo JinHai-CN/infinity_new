@@ -41,7 +41,7 @@ void UpdateSegmentBloomFilterTask::CreateAndSubmitTask(SegmentEntry *segment_ent
     LOG_TRACE(fmt::format("UpdateSegmentBloomFilterTask: create task for segment: {}", segment_entry->segment_id()));
     auto update_bloom_filter_task = MakeShared<UpdateSegmentBloomFilterTask>(segment_entry, table_entry, txn_mgr);
     auto bg_processor = txn_mgr->bg_task_processor();
-    bg_processor->Submit(std::move(update_bloom_filter_task));
+    bg_processor->SubmitCommonTask(std::move(update_bloom_filter_task));
 }
 
 void UpdateSegmentBloomFilterTask::Execute() {

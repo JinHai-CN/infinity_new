@@ -106,7 +106,7 @@ void TxnManager::AddDeltaEntry(UniquePtr<CatalogDeltaEntry> delta_entry) {
         UnrecoverableError("TxnManager is not running, cannot add delta entry");
     }
     i64 wal_size = wal_mgr_->WalSize();
-    bg_task_processor_->Submit(MakeShared<AddDeltaEntryTask>(std::move(delta_entry), wal_size));
+    bg_task_processor_->SubmitCatalogDelta(MakeShared<AddDeltaEntryTask>(std::move(delta_entry), wal_size));
 }
 
 void TxnManager::Start() {

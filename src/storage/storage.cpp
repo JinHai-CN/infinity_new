@@ -87,7 +87,7 @@ void Storage::Init() {
     auto txn = txn_mgr_->CreateTxn();
     txn->Begin();
     auto force_ckp_task = MakeShared<ForceCheckpointTask>(txn, true);
-    bg_processor_->Submit(force_ckp_task);
+    bg_processor_->SubmitCommonTask(force_ckp_task);
     force_ckp_task->Wait();
     txn_mgr_->CommitTxn(txn);
 

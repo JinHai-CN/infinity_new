@@ -116,7 +116,7 @@ TEST_F(WalReplayTest, wal_replay_database) {
             auto *txn = txn_mgr->CreateTxn();
             txn->Begin();
             SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, false);
-            bg_processor->Submit(force_ckp_task);
+            bg_processor->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             txn_mgr->CommitTxn(txn);
         }
@@ -248,7 +248,7 @@ TEST_F(WalReplayTest, wal_replay_tables) {
             auto *txn = txn_mgr->CreateTxn();
             txn->Begin();
             SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, false);
-            bg_processor->Submit(force_ckp_task);
+            bg_processor->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             txn_mgr->CommitTxn(txn);
         }
@@ -391,7 +391,7 @@ TEST_F(WalReplayTest, wal_replay_append) {
             auto *txn = txn_mgr->CreateTxn();
             txn->Begin();
             SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, false);
-            bg_processor->Submit(force_ckp_task);
+            bg_processor->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             txn_mgr->CommitTxn(txn);
         }
@@ -542,7 +542,7 @@ TEST_F(WalReplayTest, wal_replay_import) {
             auto *txn = txn_mgr->CreateTxn();
             txn->Begin();
             SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, false);
-            bg_processor->Submit(force_ckp_task);
+            bg_processor->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             txn_mgr->CommitTxn(txn);
         }

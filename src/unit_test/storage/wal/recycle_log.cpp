@@ -93,7 +93,7 @@ TEST_F(RecycleLogTest, recycle_wal_after_delta_checkpoint) {
             auto *txn = txn_mgr->CreateTxn();
             txn->Begin();
             SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, false /*full_check_point*/);
-            bg_processor->Submit(force_ckp_task);
+            bg_processor->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             txn_mgr->CommitTxn(txn);
         }
@@ -185,7 +185,7 @@ TEST_F(RecycleLogTest, recycle_wal_after_full_checkpoint) {
                 auto *txn = txn_mgr->CreateTxn();
                 txn->Begin();
                 SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, false /*full_check_point*/);
-                bg_processor->Submit(force_ckp_task);
+                bg_processor->SubmitCommonTask(force_ckp_task);
                 force_ckp_task->Wait();
                 txn_mgr->CommitTxn(txn);
             }
@@ -199,7 +199,7 @@ TEST_F(RecycleLogTest, recycle_wal_after_full_checkpoint) {
             auto *txn = txn_mgr->CreateTxn();
             txn->Begin();
             SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(txn, true /*full_check_point*/);
-            bg_processor->Submit(force_ckp_task);
+            bg_processor->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             txn_mgr->CommitTxn(txn);
         }

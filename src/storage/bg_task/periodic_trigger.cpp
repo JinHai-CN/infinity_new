@@ -40,7 +40,7 @@ void CleanupPeriodicTrigger::Trigger() {
     last_visible_ts_ = visible_ts;
     LOG_INFO(fmt::format("Cleanup visible timestamp: {}", visible_ts));
     auto cleanup_task = MakeShared<CleanupTask>(catalog_, visible_ts);
-    bg_processor_->Submit(std::move(cleanup_task));
+    bg_processor_->SubmitCommonTask(std::move(cleanup_task));
 }
 
 void CheckpointPeriodicTrigger::Trigger() {

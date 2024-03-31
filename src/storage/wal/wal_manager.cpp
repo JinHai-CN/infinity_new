@@ -239,7 +239,7 @@ void WalManager::Flush() {
 bool WalManager::TrySubmitCheckpointTask(SharedPtr<CheckpointTaskBase> ckp_task) {
     bool expect = false;
     if (checkpoint_in_progress_.compare_exchange_strong(expect, true)) {
-        storage_->bg_processor()->Submit(ckp_task);
+        storage_->bg_processor()->SubmitCommonTask(ckp_task);
         return true;
     }
     return false;

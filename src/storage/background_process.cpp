@@ -34,27 +34,31 @@ namespace infinity {
 BGTaskProcessor::BGTaskProcessor(WalManager *wal_manager, Catalog *catalog) : wal_manager_(wal_manager), catalog_(catalog) {}
 
 void BGTaskProcessor::Start() {
-    processor_thread_ = Thread([this] { Process(); });
+    processor_common_task_thread_ = Thread([this] { ProcessCommonTask(); });
+    processor_catalog_delta_thread_ = Thread([this] { ProcessCatalogDelta(); });
     LOG_INFO("Background processor is started.");
 }
 
 void BGTaskProcessor::Stop() {
     LOG_INFO("Background processor is stopping.");
     SharedPtr<StopProcessorTask> stop_task = MakeShared<StopProcessorTask>();
-    task_queue_.Enqueue(stop_task);
+    common_task_queue_.Enqueue(stop_task);
+    catalog_delta_queue_.Enqueue(nullptr);
     stop_task->Wait();
-    processor_thread_.join();
+    processor_common_task_thread_.join();
+    processor_catalog_delta_thread_.join();
     LOG_INFO("Background processor is stopped.");
 }
 
-void BGTaskProcessor::Submit(SharedPtr<BGTask> bg_task) { task_queue_.Enqueue(std::move(bg_task)); }
+void BGTaskProcessor::SubmitCommonTask(SharedPtr<BGTask> bg_task) { common_task_queue_.Enqueue(std::move(bg_task)); }
+void BGTaskProcessor::SubmitCatalogDelta(SharedPtr<AddDeltaEntryTask> delta_task) { catalog_delta_queue_.Enqueue(std::move(delta_task)); }
 
-void BGTaskProcessor::Process() {
+void BGTaskProcessor::ProcessCommonTask() {
     bool running{true};
     Deque<SharedPtr<BGTask>> tasks;
     while (running) {
-        task_queue_.DequeueBulk(tasks);
-        for(const auto& bg_task: tasks) {
+        common_task_queue_.DequeueBulk(tasks);
+        for (const auto &bg_task : tasks) {
             switch (bg_task->type_) {
                 case BGTaskType::kStopProcessor: {
                     LOG_INFO("Stop the background processor");
@@ -67,11 +71,6 @@ void BGTaskProcessor::Process() {
                     auto [max_commit_ts, wal_size] = catalog_->GetCheckpointState();
                     wal_manager_->Checkpoint(force_ckp_task, max_commit_ts, wal_size);
                     LOG_INFO("Force checkpoint in background done");
-                    break;
-                }
-                case BGTaskType::kAddDeltaEntry: {
-                    auto *task = static_cast<AddDeltaEntryTask *>(bg_task.get());
-                    catalog_->AddDeltaEntry(std::move(task->delta_entry_), task->wal_size_);
                     break;
                 }
                 case BGTaskType::kCheckpoint: {
@@ -113,6 +112,23 @@ void BGTaskProcessor::Process() {
             }
 
             bg_task->Complete();
+        }
+        tasks.clear();
+    }
+}
+
+void BGTaskProcessor::ProcessCatalogDelta() {
+    bool running{true};
+    Deque<SharedPtr<AddDeltaEntryTask>> tasks;
+    while (running) {
+        catalog_delta_queue_.DequeueBulk(tasks);
+        for (const auto &add_delta_entry_task : tasks) {
+            if(add_delta_entry_task.get() == nullptr) {
+                LOG_INFO("Stop the catalog delta processor");
+                running = false;
+                break;
+            }
+            catalog_->AddDeltaEntry(std::move(add_delta_entry_task->delta_entry_), add_delta_entry_task->wal_size_);
         }
         tasks.clear();
     }

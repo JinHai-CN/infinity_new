@@ -96,11 +96,10 @@ export struct StopProcessorTask final : public BGTask {
     String ToString() const final { return "Stop Task"; }
 };
 
-export struct AddDeltaEntryTask final : public BGTask {
-    AddDeltaEntryTask(UniquePtr<CatalogDeltaEntry> delta_entry, i64 wal_size)
-        : BGTask(BGTaskType::kAddDeltaEntry, false), delta_entry_(std::move(delta_entry)), wal_size_(wal_size) {}
+export struct AddDeltaEntryTask {
+    AddDeltaEntryTask(UniquePtr<CatalogDeltaEntry> delta_entry, i64 wal_size) : delta_entry_(std::move(delta_entry)), wal_size_(wal_size) {}
 
-    String ToString() const final { return "Add Delta Entry Task"; }
+    String ToString() const { return "Add Delta Entry Task"; }
 
     UniquePtr<CatalogDeltaEntry> delta_entry_{};
     i64 wal_size_{};

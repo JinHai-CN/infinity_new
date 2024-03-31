@@ -278,7 +278,7 @@ void TxnTableStore::TryTriggerCompaction(BGTaskProcessor *bg_task_processor, Txn
         }
         auto &[to_compacts, txn] = *ret;
         auto compact_task = CompactSegmentsTask::MakeTaskWithPickedSegments(table_entry_, std::move(to_compacts), txn);
-        bg_task_processor->Submit(std::move(compact_task));
+        bg_task_processor->SubmitCommonTask(std::move(compact_task));
     }
     for (const auto &[segment_id, delete_map] : delete_state_.rows_) {
         auto ret = table_entry_->TryCompactDeleteRow(segment_id, generate_txn);
@@ -287,7 +287,7 @@ void TxnTableStore::TryTriggerCompaction(BGTaskProcessor *bg_task_processor, Txn
         }
         auto &[to_compacts, txn] = *ret;
         auto compact_task = CompactSegmentsTask::MakeTaskWithPickedSegments(table_entry_, std::move(to_compacts), txn);
-        bg_task_processor->Submit(std::move(compact_task));
+        bg_task_processor->SubmitCommonTask(std::move(compact_task));
     }
 }
 

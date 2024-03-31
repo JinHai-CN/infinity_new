@@ -648,7 +648,7 @@ TEST_F(CatalogDeltaReplayTest, replay_with_full_checkpoint) {
             auto *txn_force_ckp = txn_mgr->CreateTxn();
             txn_force_ckp->Begin();
             auto force_ckp_task = MakeShared<ForceCheckpointTask>(txn_force_ckp, true);
-            storage->bg_processor()->Submit(force_ckp_task);
+            storage->bg_processor()->SubmitCommonTask(force_ckp_task);
             force_ckp_task->Wait();
             LOG_INFO("AFTER FULL CKP");
             txn_mgr->CommitTxn(txn_force_ckp);

@@ -32,14 +32,19 @@ public:
     void Stop();
 
 public:
-    void Submit(SharedPtr<BGTask> bg_task);
+    void SubmitCommonTask(SharedPtr<BGTask> bg_task);
+    void SubmitCatalogDelta(SharedPtr<AddDeltaEntryTask> delta_task);
 
 private:
-    void Process();
+    void ProcessCommonTask();
+    void ProcessCatalogDelta();
 
 private:
-    BlockingQueue<SharedPtr<BGTask>> task_queue_;
-    Thread processor_thread_{};
+    BlockingQueue<SharedPtr<BGTask>> common_task_queue_;
+    Thread processor_common_task_thread_{};
+
+    BlockingQueue<SharedPtr<AddDeltaEntryTask>> catalog_delta_queue_;
+    Thread processor_catalog_delta_thread_{};
 
     WalManager *wal_manager_{};
     Catalog *catalog_{};
