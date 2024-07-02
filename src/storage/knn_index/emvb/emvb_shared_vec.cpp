@@ -25,7 +25,8 @@ void EMVBSharedVec<T>::ReserveUnderLock(u32 new_capacity) {
     if (new_capacity <= capacity_) {
         return;
     }
-    auto new_data = MakeShared<T[]>(new_capacity);
+
+    SharedPtr<T[]> new_data(new T[new_capacity]);
     std::copy_n(data_.get(), size_, new_data.get());
     data_ = std::move(new_data);
     capacity_ = new_capacity;
