@@ -299,9 +299,6 @@ namespace infinity {
     using Vector = std::vector<T, Allocator>;
 
     template<typename T>
-    using Span = std::span<T>;
-
-    template<typename T>
     using Deque = std::deque<T>;
 
     template<typename T>

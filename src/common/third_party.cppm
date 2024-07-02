@@ -160,6 +160,10 @@ export void SetLogLevel(LogLevel log_level) {
     }
 }
 
+
+export template<typename T>
+using Span = phmap::Span<T>;
+
 export template <class T>
 using HashDefaultHash = phmap::priv::hash_default_hash<T>;
 export template <class T>
