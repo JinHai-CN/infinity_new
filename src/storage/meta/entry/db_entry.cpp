@@ -122,7 +122,7 @@ DBEntry::DropTable(const String &table_name, ConflictType conflict_type, Transac
     return table_meta->DropEntry(std::move(r_lock), txn_id, begin_ts, txn_mgr, table_name, conflict_type);
 }
 
-Tuple<TableEntry *, Status> DBEntry::GetTableCollection(const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+Tuple<TableEntry *, Status> DBEntry::GetTableCollection(const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts) const {
     LOG_TRACE(fmt::format("Get a table entry {}", table_name));
     auto [table_meta, status, r_lock] = table_meta_map_.GetExistMeta(table_name, ConflictType::kError);
     if (table_meta == nullptr) {
@@ -131,7 +131,7 @@ Tuple<TableEntry *, Status> DBEntry::GetTableCollection(const String &table_name
     return table_meta->GetEntry(std::move(r_lock), txn_id, begin_ts);
 }
 
-Tuple<SharedPtr<TableInfo>, Status> DBEntry::GetTableInfo(const String &table_name, Txn *txn) {
+Tuple<SharedPtr<TableInfo>, Status> DBEntry::GetTableInfo(const String &table_name, Txn *txn) const {
     LOG_TRACE(fmt::format("Get a table entry {}", table_name));
     auto [table_meta, status, r_lock] = table_meta_map_.GetExistMeta(table_name, ConflictType::kError);
     if (table_meta == nullptr) {

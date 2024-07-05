@@ -67,11 +67,11 @@ public:
     Tuple<SharedPtr<TableIndexInfo>, Status>
     GetTableIndexInfo(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts);
 
-    Tuple<TableIndexEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    Tuple<TableIndexEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) const {
         return index_entry_list_.GetEntry(std::move(r_lock), txn_id, begin_ts);
     }
 
-    Tuple<TableIndexEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) {
+    Tuple<TableIndexEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) const {
         return index_entry_list_.GetEntryNolock(txn_id, begin_ts);
     }
 

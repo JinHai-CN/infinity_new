@@ -103,7 +103,7 @@ public:
                                                    TxnManager *txn_mgr,
                                                    ConflictType conflict_type = ConflictType::kError);
 
-    Tuple<DBEntry *, Status> GetDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts);
+    Tuple<DBEntry *, Status> GetDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) const;
 
     Tuple<SharedPtr<DatabaseInfo>, Status> GetDatabaseInfo(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts);
 

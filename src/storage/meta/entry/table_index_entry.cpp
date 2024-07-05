@@ -119,7 +119,7 @@ SharedPtr<TableIndexEntry> TableIndexEntry::ReplayTableIndexEntry(TableIndexMeta
     return table_index_entry;
 }
 
-Map<SegmentID, SharedPtr<SegmentIndexEntry>> TableIndexEntry::GetIndexBySegmentSnapshot(const TableEntry *table_entry, Txn *txn) {
+Map<SegmentID, SharedPtr<SegmentIndexEntry>> TableIndexEntry::GetIndexBySegmentSnapshot(const TableEntry *table_entry, Txn *txn) const {
     std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
     Map<SegmentID, SharedPtr<SegmentIndexEntry>> index_by_segment_snapshot;
     for (const auto &[segment_id, segment_index_entry] : this->index_by_segment_) {

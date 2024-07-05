@@ -70,13 +70,13 @@ private:
 
     void DeleteNewEntry(TransactionID txn_id);
 
-    Tuple<DBEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    Tuple<DBEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) const {
         return db_entry_list_.GetEntry(std::move(r_lock), txn_id, begin_ts);
     }
 
     Tuple<SharedPtr<DatabaseInfo>, Status> GetDatabaseInfo(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts);
 
-    Tuple<DBEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) { return db_entry_list_.GetEntryNolock(txn_id, begin_ts); }
+    Tuple<DBEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) const { return db_entry_list_.GetEntryNolock(txn_id, begin_ts); }
 
     // replay
     void CreateEntryReplay(std::function<SharedPtr<DBEntry>(TransactionID, TxnTimeStamp)> &&init_entry, TransactionID txn_id, TxnTimeStamp begin_ts);

@@ -102,9 +102,9 @@ public:
     Tuple<SharedPtr<TableEntry>, Status>
     DropTable(const String &table_collection_name, ConflictType conflict_type, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
 
-    Tuple<TableEntry *, Status> GetTableCollection(const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts);
+    Tuple<TableEntry *, Status> GetTableCollection(const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts) const;
 
-    Tuple<SharedPtr<TableInfo>, Status> GetTableInfo(const String &table_name, Txn *txn);
+    Tuple<SharedPtr<TableInfo>, Status> GetTableInfo(const String &table_name, Txn *txn) const;
 
     void RemoveTableEntry(const String &table_collection_name, TransactionID txn_id);
 

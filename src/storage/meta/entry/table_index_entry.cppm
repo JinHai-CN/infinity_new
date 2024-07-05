@@ -103,7 +103,7 @@ public:
 
     SegmentIndexesGuard GetSegmentIndexesGuard() { return {index_by_segment_, std::shared_lock(rw_locker_)}; }
 
-    Map<SegmentID, SharedPtr<SegmentIndexEntry>> GetIndexBySegmentSnapshot(const TableEntry *table_entry, Txn *txn);
+    Map<SegmentID, SharedPtr<SegmentIndexEntry>> GetIndexBySegmentSnapshot(const TableEntry *table_entry, Txn *txn) const;
     const SharedPtr<String> &index_dir() const { return index_dir_; }
     String GetPathNameTail() const;
     bool GetOrCreateSegment(SegmentID segment_id, Txn *txn, SharedPtr<SegmentIndexEntry> &segment_index_entry);
@@ -125,7 +125,7 @@ public:
 
     Status CreateIndexDo(BaseTableRef *table_ref, HashMap<SegmentID, atomic_u64> &create_index_idxes, Txn *txn);
 
-    TxnTimeStamp GetFulltexSegmentUpdateTs() {
+    TxnTimeStamp GetFulltexSegmentUpdateTs() const {
         std::shared_lock lock(segment_update_ts_mutex_);
         return segment_update_ts_;
     }
@@ -148,10 +148,10 @@ private:
 
 private:
     // For fulltext index
-    std::shared_mutex segment_update_ts_mutex_{};
+    mutable std::shared_mutex segment_update_ts_mutex_{};
     TxnTimeStamp segment_update_ts_{0};
 
-    std::shared_mutex rw_locker_{};
+    mutable std::shared_mutex rw_locker_{};
     TableIndexMeta *const table_index_meta_{};
     const SharedPtr<IndexBase> index_base_{};
     const SharedPtr<String> index_dir_{};

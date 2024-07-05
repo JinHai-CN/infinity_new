@@ -55,9 +55,9 @@ public:
         return std::get<0>(this->GetMeta(name, std::move(init_func)));
     }
 
-    Tuple<Meta *, Status, std::shared_lock<std::shared_mutex>> GetExistMeta(const String &name, ConflictType conflict_type);
+    Tuple<Meta *, Status, std::shared_lock<std::shared_mutex>> GetExistMeta(const String &name, ConflictType conflict_type) const;
 
-    Tuple<Meta *, Status> GetExistMetaNoLock(const String &name, ConflictType conflict_type) {
+    Tuple<Meta *, Status> GetExistMetaNoLock(const String &name, ConflictType conflict_type) const {
         auto [meta, status, r_lock] = this->GetExistMeta(name, conflict_type);
         return {meta, status};
     }
@@ -99,7 +99,7 @@ Tuple<Meta *, std::shared_lock<std::shared_mutex>> MetaMap<Meta>::GetMeta(const 
 }
 
 template <MetaConcept Meta>
-Tuple<Meta *, Status, std::shared_lock<std::shared_mutex>> MetaMap<Meta>::GetExistMeta(const String &name, ConflictType conflict_type) {
+Tuple<Meta *, Status, std::shared_lock<std::shared_mutex>> MetaMap<Meta>::GetExistMeta(const String &name, ConflictType conflict_type) const {
     std::shared_lock r_lock(rw_locker_);
     if (auto iter = meta_map_.find(name); iter != meta_map_.end()) {
         return {iter->second.get(), Status::OK(), std::move(r_lock)};

@@ -94,11 +94,11 @@ private:
 
     Tuple<SharedPtr<TableInfo>, Status> GetTableInfo(std::shared_lock<std::shared_mutex> &&r_lock, Txn *txn);
 
-    Tuple<TableEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    Tuple<TableEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) const {
         return table_entry_list_.GetEntry(std::move(r_lock), txn_id, begin_ts);
     }
 
-    Tuple<TableEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) {
+    Tuple<TableEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) const {
         return table_entry_list_.GetEntryNolock(txn_id, begin_ts);
     }
 

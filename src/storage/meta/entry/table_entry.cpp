@@ -964,7 +964,7 @@ String TableEntry::GetPathNameTail() const {
     return table_entry_dir_->substr(delimiter_i + 1);
 }
 
-SharedPtr<BlockIndex> TableEntry::GetBlockIndex(Txn *txn) {
+SharedPtr<BlockIndex> TableEntry::GetBlockIndex(Txn *txn) const {
     //    SharedPtr<MultiIndex<u64, u64, SegmentEntry*>> result = MakeShared<MultiIndex<u64, u64, SegmentEntry*>>();
     SharedPtr<BlockIndex> result = MakeShared<BlockIndex>();
     std::shared_lock<std::shared_mutex> rw_locker(this->rw_locker_);

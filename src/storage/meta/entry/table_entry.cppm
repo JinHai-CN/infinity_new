@@ -221,7 +221,7 @@ public:
 
     Pair<SizeT, Status> GetSegmentRowCountBySegmentID(u32 seg_id);
 
-    SharedPtr<BlockIndex> GetBlockIndex(Txn *txn);
+    SharedPtr<BlockIndex> GetBlockIndex(Txn *txn) const;
 
     SharedPtr<IndexIndex> GetIndexIndex(Txn *txn);
 

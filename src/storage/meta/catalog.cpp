@@ -150,7 +150,7 @@ Catalog::DropDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp 
     return db_meta->DropNewEntry(std::move(r_lock), txn_id, begin_ts, txn_mgr, conflict_type);
 }
 
-Tuple<DBEntry *, Status> Catalog::GetDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+Tuple<DBEntry *, Status> Catalog::GetDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) const {
     auto [db_meta, status, r_lock] = db_meta_map_.GetExistMeta(db_name, ConflictType::kError);
     if (db_meta == nullptr) {
         return {nullptr, status};
