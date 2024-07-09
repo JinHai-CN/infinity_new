@@ -1614,8 +1614,6 @@ Status LogicalPlanner::BuildShowDeltaLogs(const ShowStatement *statement, Shared
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
 Status LogicalPlanner::BuildShowCatalogs(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr) {
     SharedPtr<LogicalNode> logical_show = MakeShared<LogicalShow>(bind_context_ptr->GetNewLogicalNodeId(),
                                                                   ShowType::kShowCatalogs,
@@ -1627,7 +1625,6 @@ Status LogicalPlanner::BuildShowCatalogs(const ShowStatement *statement, SharedP
     return Status::OK();
 }
 
->>>>>>> upstream/main
 Status LogicalPlanner::BuildFlush(const FlushStatement *statement, SharedPtr<BindContext> &bind_context_ptr) {
     switch (statement->type()) {
         case FlushType::kData: {
