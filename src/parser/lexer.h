@@ -846,11 +846,7 @@ extern int yylex \
 #undef yyTABLES_NAME
 #endif
 
-<<<<<<< HEAD
-#line 245 "lexer.l"
-=======
 #line 246 "lexer.l"
->>>>>>> upstream/main
 
 
 #line 853 "lexer.h"
