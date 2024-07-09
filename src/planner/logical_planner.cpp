@@ -1256,6 +1256,9 @@ Status LogicalPlanner::BuildShow(ShowStatement *statement, SharedPtr<BindContext
         case ShowStmtType::kDeltaLogs: {
             return BuildShowDeltaLogs(statement, bind_context_ptr);
         }
+        case ShowStmtType::kCatalogs: {
+            return BuildShowCatalogs(statement, bind_context_ptr);
+        }
         default: {
             String error_message = "Unexpected show statement type.";
             LOG_CRITICAL(error_message);
@@ -1611,6 +1614,20 @@ Status LogicalPlanner::BuildShowDeltaLogs(const ShowStatement *statement, Shared
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status LogicalPlanner::BuildShowCatalogs(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr) {
+    SharedPtr<LogicalNode> logical_show = MakeShared<LogicalShow>(bind_context_ptr->GetNewLogicalNodeId(),
+                                                                  ShowType::kShowCatalogs,
+                                                                  query_context_ptr_->schema_name(),
+                                                                  statement->var_name_,
+                                                                  bind_context_ptr->GenerateTableIndex());
+
+    this->logical_plan_ = logical_show;
+    return Status::OK();
+}
+
+>>>>>>> upstream/main
 Status LogicalPlanner::BuildFlush(const FlushStatement *statement, SharedPtr<BindContext> &bind_context_ptr) {
     switch (statement->type()) {
         case FlushType::kData: {
