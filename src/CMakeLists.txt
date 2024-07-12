@@ -286,8 +286,6 @@ target_link_libraries(infinity
         lz4.a
         atomic.a
         event.a
-        c++.a
-        c++abi.a
 #        profiler
         oatpp.a
         jma
@@ -339,12 +337,11 @@ target_link_libraries(embedded_infinity_ext PRIVATE
         atomic.a
         event.a
         oatpp.a
-        c++.a
-        c++abi.a
+
 )
 
 # WARN: python modules shall not link to static libstdc++!!!
-target_link_options(embedded_infinity_ext PRIVATE -static-libgcc)
+target_link_options(embedded_infinity_ext PRIVATE -static-libgcc -static-libstdc++)
 
 target_link_directories(embedded_infinity_ext PUBLIC "${CMAKE_BINARY_DIR}/lib")
 target_link_directories(embedded_infinity_ext PUBLIC "${CMAKE_BINARY_DIR}/third_party/oatpp/src/")
@@ -463,8 +460,7 @@ target_link_libraries(unit_test
         lz4.a
         atomic.a
         thrift.a
-        c++.a
-        c++abi.a
+
         jma
         opencc
 )

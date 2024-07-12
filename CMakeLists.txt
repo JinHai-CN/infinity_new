@@ -31,20 +31,20 @@ if (CLANG_VERSION_STRING VERSION_GREATER 16)
     SET(CMAKE_FIND_PACKAGE_SORT_ORDER NATURAL)
     SET(CMAKE_FIND_PACKAGE_SORT_DIRECTION DEC)
 
-    find_package(LLVM REQUIRED CONFIG)
-
-    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-    message(STATUS "Using LLVM Header in: ${LLVM_INCLUDE_DIRS}")
-    message(STATUS "Using LLVM Library in: ${LLVM_LIBRARY_DIRS}")
-
-
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>)
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-isystem>)
-    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${LLVM_INCLUDE_DIRS}/c++/v1>)
-
-    add_link_options($<$<COMPILE_LANGUAGE:CXX>:-nostdlib++>)
-    add_link_options($<$<COMPILE_LANGUAGE:CXX>:-L${LLVM_LIBRARY_DIRS}>)
-    add_link_options($<$<COMPILE_LANGUAGE:CXX>:-Wl,-rpath,${LLVM_LIBRARY_DIRS}>)
+#    find_package(LLVM REQUIRED CONFIG)
+#
+#    message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+#    message(STATUS "Using LLVM Header in: ${LLVM_INCLUDE_DIRS}")
+#    message(STATUS "Using LLVM Library in: ${LLVM_LIBRARY_DIRS}")
+#
+#
+#    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>)
+#    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-isystem>)
+#    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${LLVM_INCLUDE_DIRS}/c++/v1>)
+#
+#    add_link_options($<$<COMPILE_LANGUAGE:CXX>:-nostdlib++>)
+#    add_link_options($<$<COMPILE_LANGUAGE:CXX>:-L${LLVM_LIBRARY_DIRS}>)
+#    add_link_options($<$<COMPILE_LANGUAGE:CXX>:-Wl,-rpath,${LLVM_LIBRARY_DIRS}>)
 
 else ()
 

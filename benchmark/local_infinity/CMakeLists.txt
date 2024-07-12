@@ -15,8 +15,6 @@ target_link_libraries(
     fastpfor
     lz4.a
     atomic.a
-    c++.a
-    c++abi.a
     jma
     opencc
 )
@@ -40,8 +38,6 @@ target_link_libraries(
     fastpfor
     lz4.a
     atomic.a
-    c++.a
-    c++abi.a
     jma
     opencc
 )
@@ -63,8 +59,6 @@ target_link_libraries(
     fastpfor
     lz4.a
     atomic.a
-    c++.a
-    c++abi.a
     jma
     opencc
 )
@@ -88,8 +82,6 @@ target_link_libraries(
     fastpfor
     lz4.a
     atomic.a
-    c++.a
-    c++abi.a
     jma
     opencc
 )
@@ -112,8 +104,6 @@ target_link_libraries(
     lz4.a
     atomic.a
     jma
-    c++.a
-    c++abi.a
     opencc
 )
 
@@ -134,8 +124,6 @@ target_link_libraries(
     lz4.a
     atomic.a
     jma
-    c++.a
-    c++abi.a
     opencc
 )
 
@@ -156,8 +144,6 @@ target_link_libraries(
     lz4.a
     atomic.a
     jma
-    c++.a
-    c++abi.a
     opencc
 )
 
