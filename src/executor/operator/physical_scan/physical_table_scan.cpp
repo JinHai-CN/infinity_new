@@ -125,9 +125,10 @@ void PhysicalTableScan::ExecuteInternal(QueryContext *query_context, TableScanOp
 
     // Here we assume output is a fresh data block, we have never written anything into it.
     auto write_capacity = output_ptr->available_capacity();
+    u16 block_id = 0;
     while (block_ids_idx < block_ids->size()) {
         u32 segment_id = block_ids->at(block_ids_idx).segment_id_;
-        u16 block_id = block_ids->at(block_ids_idx).block_id_;
+        block_id = block_ids->at(block_ids_idx).block_id_;
 
         BlockEntry *current_block_entry = block_index->GetBlockEntry(segment_id, block_id);
         if (read_offset == 0) {
@@ -146,6 +147,9 @@ void PhysicalTableScan::ExecuteInternal(QueryContext *query_context, TableScanOp
                                       block_ids->size()));
             }
         }
+        if(block_id == 430) {
+            ;
+        }
         auto [row_begin, row_end] = current_block_entry->GetVisibleRange(begin_ts, read_offset);
         if (row_begin == row_end) {
             // we have read all data from current block, move to next block
@@ -158,6 +162,14 @@ void PhysicalTableScan::ExecuteInternal(QueryContext *query_context, TableScanOp
             break;
         }
         auto write_size = std::min(write_capacity, SizeT(row_end - row_begin));
+        if(write_size != 8192) {
+            LOG_WARN(fmt::format("block_id: {}, read_offset: {}, begin: {}, end {}, block row count {}",
+                                 block_id,
+                                 read_offset,
+                                 row_begin,
+                                 row_end,
+                                 current_block_entry->row_count()));
+        }
 
         read_offset = row_begin;
         SizeT output_column_id{0};
@@ -198,6 +210,11 @@ void PhysicalTableScan::ExecuteInternal(QueryContext *query_context, TableScanOp
     }
 
     output_ptr->Finalize();
+
+//    i64 output_row_count = output_ptr->row_count();
+//    if(output_row_count != 8192) {
+//        LOG_WARN(fmt::format("TableScan: {}, block_id {}", output_row_count, block_id));
+//    }
 }
 
 } // namespace infinity

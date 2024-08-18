@@ -306,6 +306,9 @@ u64 SegmentEntry::AppendData(TransactionID txn_id, TxnTimeStamp commit_ts, Appen
             // Append to_append_rows into block
             if (block_entries_.empty() || block_entries_.back()->GetAvailableCapacity() <= 0) {
                 BlockID new_block_id = this->block_entries_.size();
+                if(!block_entries_.empty() && block_entries_.back()->row_count() != 8192) {
+                    LOG_ERROR(fmt::format("block: {}, row_count: {}, going to seal", new_block_id, block_entries_.back()->row_count()));
+                }
                 this->block_entries_.emplace_back(BlockEntry::NewBlockEntry(this, new_block_id, 0, this->column_count_, txn));
             }
             BlockEntry *last_block_entry = this->block_entries_.back().get();

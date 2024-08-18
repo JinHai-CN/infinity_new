@@ -680,15 +680,27 @@ bool PhysicalAggregate::SimpleAggregateExecute(const Vector<UniquePtr<DataBlock>
         ExpressionEvaluator evaluator;
         evaluator.Init(input_data_block);
 
+        i64 input_row_count = input_data_block->row_count();
+        if(input_row_count != 8192) {
+            ;
+        }
+
         SizeT expression_count = aggregates_count;
         // calculate every columns value
         for (SizeT expr_idx = 0; expr_idx < expression_count; ++expr_idx) {
             LOG_TRACE("Physical aggregate Execute");
             evaluator.Execute(aggregates_[expr_idx], expr_states[expr_idx], output_data_block->column_vectors[expr_idx]);
+            if(input_row_count != 8192) {
+                auto v = output_data_block->GetValue(0, 0);
+                LOG_WARN(fmt::format("Input row_count {}, Agg Output: {}, ", input_row_count, v.value_.big_int));
+            }
         }
         if (task_completed) {
             // Finalize the output block (e.g. calculate the average value
             output_data_block->Finalize();
+
+//            auto v = output_data_block->GetValue(0, 0);
+//            LOG_WARN(fmt::format("Agg Output: {}, ", v.value_.big_int));
         }
         // {
         //     auto row = input_data_block->row_count();

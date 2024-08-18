@@ -134,9 +134,9 @@ SizeT BlockEntry::row_count(TxnTimeStamp check_ts) const {
     return block_version->GetRowCount(check_ts);
 }
 
-Pair<BlockOffset, BlockOffset> BlockEntry::GetVisibleRange(TxnTimeStamp begin_ts, u16 block_offset_begin) const {
+Pair<BlockOffset, BlockOffset> BlockEntry::GetVisibleRange(TxnTimeStamp start_ts, u16 block_offset_begin) const {
     std::shared_lock lock(rw_locker_);
-    begin_ts = std::min(begin_ts, this->max_row_ts_);
+    TxnTimeStamp begin_ts = std::min(start_ts, this->max_row_ts_);
 
     auto block_version_handle = this->block_version_->Load();
     const auto *block_version = reinterpret_cast<const BlockVersion *>(block_version_handle.GetData());
@@ -151,6 +151,9 @@ Pair<BlockOffset, BlockOffset> BlockEntry::GetVisibleRange(TxnTimeStamp begin_ts
         if (deleted[row_idx] != 0 && deleted[row_idx] <= begin_ts) {
             break;
         }
+    }
+    if(row_idx != 8192) {
+        LOG_ERROR(fmt::format("begin: {}, end: {}", block_offset_begin, block_offset_end));
     }
     return {block_offset_begin, row_idx};
 }
@@ -366,6 +369,7 @@ bool BlockEntry::FlushVersionNoLock(TxnTimeStamp checkpoint_ts) {
     }
     auto *version_file_worker = static_cast<VersionFileWorker *>(block_version_->file_worker());
     version_file_worker->SetCheckpointTS(checkpoint_ts);
+    LOG_ERROR(fmt::format("block_id: {}, create {}, delete: {}", block_id_, block_version->created_.size(), block_version->deleted_.size()));
     block_version_->Save();
 
     return true;

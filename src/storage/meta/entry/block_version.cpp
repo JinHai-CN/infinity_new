@@ -80,12 +80,17 @@ void BlockVersion::SaveToFile(TxnTimeStamp checkpoint_ts, FileHandler &file_hand
     BlockOffset capacity = deleted_.size();
     file_handler.Write(&capacity, sizeof(capacity));
     TxnTimeStamp dump_ts = 0;
+    u32 index = 0;
     for (const auto &ts : deleted_) {
+        if(ts != 0) {
+            LOG_ERROR(fmt::format("Try to write non-zero DeleteTS {}, index {}", ts, index));
+        }
         if (ts <= checkpoint_ts) {
             file_handler.Write(&ts, sizeof(ts));
         } else {
             file_handler.Write(&dump_ts, sizeof(dump_ts));
         }
+        ++ index;
     }
 }
 
