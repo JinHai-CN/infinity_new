@@ -59,7 +59,7 @@ String BlockEntry::EncodeIndex(const BlockID block_id, const SegmentEntry *segme
 /// class BlockEntry
 BlockEntry::BlockEntry(const SegmentEntry *segment_entry, BlockID block_id, TxnTimeStamp checkpoint_ts)
     : BaseEntry(EntryType::kBlock, false, segment_entry->base_dir_, BlockEntry::EncodeIndex(block_id, segment_entry)), segment_entry_(segment_entry),
-      block_id_(block_id), row_count_(0), row_capacity_(DEFAULT_VECTOR_SIZE), checkpoint_ts_(checkpoint_ts) {}
+      block_id_(block_id), block_row_count_(0), row_capacity_(DEFAULT_VECTOR_SIZE), checkpoint_ts_(checkpoint_ts) {}
 
 UniquePtr<BlockEntry>
 BlockEntry::NewBlockEntry(const SegmentEntry *segment_entry, BlockID block_id, TxnTimeStamp checkpoint_ts, u64 column_count, Txn *txn) {
@@ -82,6 +82,9 @@ BlockEntry::NewBlockEntry(const SegmentEntry *segment_entry, BlockID block_id, T
     return block_entry;
 }
 
+// Used in META deserialization to generate a new BlockEntry according to the json meta
+// Used by replay segment in WAL replay compact and import CMD
+// Used to replay DeltaOp to create a new BlockEntry
 UniquePtr<BlockEntry> BlockEntry::NewReplayBlockEntry(const SegmentEntry *segment_entry,
                                                       BlockID block_id,
                                                       u16 row_count,
@@ -98,7 +101,7 @@ UniquePtr<BlockEntry> BlockEntry::NewReplayBlockEntry(const SegmentEntry *segmen
 
     block_entry->txn_id_ = txn_id;
 
-    block_entry->row_count_ = row_count;
+    block_entry->block_row_count_ = row_count;
     block_entry->min_row_ts_ = min_row_ts;
     block_entry->max_row_ts_ = max_row_ts;
     block_entry->commit_ts_ = commit_ts;
@@ -113,8 +116,9 @@ UniquePtr<BlockEntry> BlockEntry::NewReplayBlockEntry(const SegmentEntry *segmen
     return block_entry;
 }
 
+// Used to replay DeltaOp to update a BlockEntry
 void BlockEntry::UpdateBlockReplay(SharedPtr<BlockEntry> block_entry, String block_filter_binary_data) {
-    row_count_ = block_entry->row_count_;
+    block_row_count_ = block_entry->block_row_count_;
     min_row_ts_ = block_entry->min_row_ts_;
     max_row_ts_ = block_entry->max_row_ts_;
     checkpoint_ts_ = block_entry->checkpoint_ts_;
@@ -127,7 +131,7 @@ void BlockEntry::UpdateBlockReplay(SharedPtr<BlockEntry> block_entry, String blo
 SizeT BlockEntry::row_count(TxnTimeStamp check_ts) const {
     std::shared_lock lock(rw_locker_);
     if (check_ts >= max_row_ts_)
-        return row_count_;
+        return block_row_count_;
 
     auto block_version_handle = this->block_version_->Load();
     const auto *block_version = reinterpret_cast<const BlockVersion *>(block_version_handle.GetData());
@@ -198,7 +202,7 @@ void BlockEntry::SetDeleteBitmask(TxnTimeStamp query_ts, Bitmask &bitmask) const
         read_offset = row_end;
     }
     // FIXME: read row_count_ is not thread safe
-    for (BlockOffset offset = read_offset; offset < row_count_; ++offset) {
+    for (BlockOffset offset = read_offset; offset < block_row_count_; ++offset) {
         bitmask.SetFalse(offset);
     }
 }
@@ -221,8 +225,8 @@ u16 BlockEntry::AppendData(TransactionID txn_id,
 
     this->using_txn_id_ = txn_id;
     u16 actual_copied = append_rows;
-    if (this->row_count_ + append_rows > this->row_capacity_) {
-        actual_copied = this->row_capacity_ - this->row_count_;
+    if (this->block_row_count_ + append_rows > this->row_capacity_) {
+        actual_copied = this->row_capacity_ - this->block_row_count_;
     }
 
     SizeT column_count = this->columns_.size();
@@ -236,11 +240,11 @@ u16 BlockEntry::AppendData(TransactionID txn_id,
                               actual_copied));
     }
 
-    this->row_count_ += actual_copied;
+    this->block_row_count_ += actual_copied;
 
     auto block_version_handle = block_version_->Load();
     auto *block_version = reinterpret_cast<BlockVersion *>(block_version_handle.GetDataMut());
-    block_version->created_.emplace_back(commit_ts, this->row_count_);
+    block_version->created_.emplace_back(commit_ts, this->block_row_count_);
 
     return actual_copied;
 }
@@ -287,7 +291,7 @@ void BlockEntry::CommitFlushed(TxnTimeStamp commit_ts) {
         String error_message = "BlockEntry::CommitFlushed: block_version->created_ is not empty";
         UnrecoverableError(error_message);
     }
-    block_version->created_.emplace_back(commit_ts, this->row_count_);
+    block_version->created_.emplace_back(commit_ts, this->block_row_count_);
 
     FlushVersionNoLock(commit_ts);
 }
@@ -362,14 +366,20 @@ bool BlockEntry::FlushVersionNoLock(TxnTimeStamp checkpoint_ts) {
     // call GetDataMut to set BufferObj type to BufferType::kEphemeral
     auto *block_version = reinterpret_cast<BlockVersion *>(block_version_handle.GetDataMut());
     if (block_version->deleted_.size() != this->row_capacity_) {
-        auto err_info = fmt::format("BlockEntry::FlushVersionNoLock: block_version->deleted_.size() {} != this->row_capacity_ {}",
+        auto err_info = fmt::format("block_version->deleted_.size() {} != this->row_capacity_ {}",
                                     block_version->deleted_.size(),
                                     this->row_capacity_);
         UnrecoverableError(err_info);
     }
     auto *version_file_worker = static_cast<VersionFileWorker *>(block_version_->file_worker());
     version_file_worker->SetCheckpointTS(checkpoint_ts);
-    LOG_ERROR(fmt::format("block_id: {}, create {}, delete: {}", block_id_, block_version->created_.size(), block_version->deleted_.size()));
+    LOG_ERROR(fmt::format("block_id: {}, ckp ts: {} create {}, delete: {}, ckp_row_count {}, row_count {}",
+                          block_id_,
+                          checkpoint_ts,
+                          block_version->created_.size(),
+                          block_version->deleted_.size(),
+                          checkpoint_row_count_,
+                          block_row_count_));
     block_version_->Save();
 
     return true;
@@ -401,7 +411,7 @@ void BlockEntry::Flush(TxnTimeStamp checkpoint_ts) {
     }
 }
 
-void BlockEntry::FlushForImport() { FlushDataNoLock(0, this->row_count_); }
+void BlockEntry::FlushForImport() { FlushDataNoLock(0, this->block_row_count_); }
 
 void BlockEntry::LoadFilterBinaryData(const String &block_filter_data) { fast_rough_filter_.DeserializeFromString(block_filter_data); }
 
@@ -489,7 +499,7 @@ UniquePtr<BlockEntry> BlockEntry::Deserialize(const nlohmann::json &block_entry_
 
 i32 BlockEntry::GetAvailableCapacity() {
     std::shared_lock<std::shared_mutex> lck(this->rw_locker_);
-    return this->row_capacity_ - this->row_count_;
+    return this->row_capacity_ - this->block_row_count_;
 }
 
 SharedPtr<String> BlockEntry::DetermineDir(const String &base_dir, const String &parent_dir, BlockID block_id) {
@@ -508,7 +518,7 @@ void BlockEntry::AddColumnReplay(UniquePtr<BlockColumnEntry> column_entry, Colum
 }
 
 void BlockEntry::AppendBlock(const Vector<ColumnVector> &column_vectors, SizeT row_begin, SizeT read_size, BufferManager *buffer_mgr) {
-    if (read_size + row_count_ > row_capacity_) {
+    if (read_size + block_row_count_ > row_capacity_) {
         String error_message = "BlockEntry::AppendBlock: read_size + row_count_ > row_capacity_";
         UnrecoverableError(error_message);
     }

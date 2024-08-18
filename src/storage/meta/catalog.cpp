@@ -1045,7 +1045,7 @@ bool Catalog::SaveDeltaCatalog(TxnTimeStamp last_ckp_ts, TxnTimeStamp &max_commi
         switch (op->GetType()) {
             case CatalogDeltaOpType::ADD_BLOCK_ENTRY: {
                 auto *block_entry_op = static_cast<AddBlockEntryOp *>(op.get());
-                LOG_TRACE(fmt::format("Flush block entry: {}", block_entry_op->ToString()));
+                LOG_INFO(fmt::format("Flush block entry: {}", block_entry_op->ToString()));
                 block_entry_op->FlushDataToDisk(max_commit_ts);
                 LOG_TRACE(fmt::format("Flush block entry done"));
                 break;
@@ -1058,6 +1058,7 @@ bool Catalog::SaveDeltaCatalog(TxnTimeStamp last_ckp_ts, TxnTimeStamp &max_commi
                 break;
             }
             default:
+                LOG_TRACE(fmt::format("Ignore delta op: {}", ToString(op->GetType())));
                 break;
         }
     }
