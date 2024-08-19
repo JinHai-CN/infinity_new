@@ -82,16 +82,14 @@ void BlockVersion::SaveToFile(TxnTimeStamp checkpoint_ts, FileHandler &file_hand
     TxnTimeStamp dump_ts = 0;
     u32 index = 0;
     for (const auto &ts : deleted_) {
-        if(ts != 0) {
-            LOG_ERROR(fmt::format("Try to write non-zero DeleteTS {}, index {}", ts, index));
-        }
         if (ts <= checkpoint_ts) {
             file_handler.Write(&ts, sizeof(ts));
         } else {
+            ++ index;
             file_handler.Write(&dump_ts, sizeof(dump_ts));
         }
-        ++ index;
     }
+    LOG_ERROR(fmt::format("Flush block version, ckp ts: {}, write create: {}, 0 delete {}", checkpoint_ts, create_size, index));
 }
 
 void BlockVersion::SpillToFile(FileHandler &file_handler) const {
@@ -115,6 +113,7 @@ UniquePtr<BlockVersion> BlockVersion::LoadFromFile(FileHandler &file_handler) {
     for (BlockOffset i = 0; i < create_size; i++) {
         block_version->created_.push_back(CreateField::LoadFromFile(file_handler));
     }
+    LOG_ERROR(fmt::format("BlockVersion::LoadFromFile version, created: {}", create_size));
     BlockOffset capacity;
     file_handler.Read(&capacity, sizeof(capacity));
     block_version->deleted_.resize(capacity);
