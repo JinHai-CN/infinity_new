@@ -2,6 +2,7 @@
 import csv
 import functools
 import os
+import errno
 import subprocess
 import time
 import traceback
@@ -44,6 +45,13 @@ def start_infinity_service_in_subporcess():
     time.sleep(1)
     return infinity
 
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
 
 def copy_data(file_name, dest_file_name):
     data_dir = os.getcwd() + common_values.TEST_DATA_DIR
@@ -52,6 +60,8 @@ def copy_data(file_name, dest_file_name):
             if filename == file_name:
                 src_path = os.path.join(dirpath, filename)
                 dest_path = os.path.join(common_values.TEST_TMP_DIR, dest_file_name)
+                if not os.path.exists(common_values.TEST_TMP_DIR):
+                    mkdir_p(common_values.TEST_TMP_DIR)
                 copyfile(src_path, dest_path)
 
 
