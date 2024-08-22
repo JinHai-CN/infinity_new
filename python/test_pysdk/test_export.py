@@ -56,7 +56,7 @@ class TestInfinity:
 
     def test_export_csv(self, suffix):
         file_name = "enwiki_embedding_9999.csv"
-        copy_data(file_name)
+        copy_data(file_name, file_name)
 
         test_csv_dir = common_values.TEST_TMP_DIR + file_name
 
@@ -106,7 +106,7 @@ class TestInfinity:
 
     def test_export_jsonl(self, suffix):
         file_name = "enwiki_embedding_9999.csv"
-        copy_data(file_name)
+        copy_data(file_name, file_name)
 
         test_csv_dir = common_values.TEST_TMP_DIR + file_name
 
@@ -156,7 +156,7 @@ class TestInfinity:
 
     def test_export_fvecs(self, suffix):
         file_name = "enwiki_embedding_9999.csv"
-        copy_data(file_name)
+        copy_data(file_name, file_name)
 
         test_csv_dir = common_values.TEST_TMP_DIR + file_name
 

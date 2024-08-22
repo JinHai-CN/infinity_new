@@ -185,7 +185,7 @@ class TestSelect(HttpTest):
              }
         ])
 
-        httputils.copy_data("embedding_int_dim3.csv")
+        httputils.copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
         test_csv_dir = TEST_TMP_DIR + filename
         assert os.path.exists(test_csv_dir)
 
@@ -225,7 +225,7 @@ class TestSelect(HttpTest):
             }
         ]
                           )
-        httputils.copy_data(filename)
+        httputils.copy_data(filename, filename)
         test_csv_dir = TEST_TMP_DIR + filename
         assert os.path.exists(test_csv_dir)
 
@@ -271,7 +271,7 @@ class TestSelect(HttpTest):
             }
         ]
                           )
-        httputils.copy_data(filename)
+        httputils.copy_data(filename, filename)
         csv_test_dir = TEST_TMP_DIR + filename
         assert os.path.exists(csv_test_dir)
 

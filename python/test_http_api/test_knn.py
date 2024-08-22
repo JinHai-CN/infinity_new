@@ -27,7 +27,7 @@ class TestKnn(HttpTest):
             {"name": "query_price", "type": "float"}
         ])
 
-        httputils.copy_data("tmp_20240116.csv")
+        httputils.copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = TEST_TMP_DIR + "tmp_20240116.csv"
         self.import_data(db_name, table_name, {
             "file_path": test_csv_dir,
@@ -644,7 +644,7 @@ class TestKnn(HttpTest):
         ])
         generate_file_name = "http_enwiki_embedding_99_commas.csv"
         httputils.generate_commas_enwiki("enwiki_99.csv", generate_file_name, 1)
-        httputils.copy_data(generate_file_name)
+        httputils.copy_data(generate_file_name, generate_file_name)
 
         test_csv_dir = TEST_TMP_DIR + generate_file_name
         self.import_data(db_name, table_name, {
@@ -690,7 +690,7 @@ class TestKnn(HttpTest):
         ])
         generate_file_name = "http_enwiki_embedding_99_commas.csv"
         httputils.generate_commas_enwiki("enwiki_99.csv", generate_file_name, 1)
-        httputils.copy_data(generate_file_name)
+        httputils.copy_data(generate_file_name, generate_file_name)
 
         test_csv_dir = TEST_TMP_DIR + generate_file_name
         self.import_data(db_name, table_name, {
@@ -738,7 +738,7 @@ class TestKnn(HttpTest):
         ])
         generate_file_name = "http_enwiki_embedding_99_commas.csv"
         httputils.generate_commas_enwiki("enwiki_99.csv", generate_file_name, 1)
-        httputils.copy_data(generate_file_name)
+        httputils.copy_data(generate_file_name, generate_file_name)
 
         test_csv_dir = TEST_TMP_DIR + generate_file_name
         self.import_data(db_name, table_name, {
@@ -786,7 +786,7 @@ class TestKnn(HttpTest):
         ])
         generate_file_name = "http_enwiki_embedding_99_commas.csv"
         httputils.generate_commas_enwiki("enwiki_99.csv", generate_file_name, 1)
-        httputils.copy_data(generate_file_name)
+        httputils.copy_data(generate_file_name, generate_file_name)
 
         test_csv_dir = TEST_TMP_DIR + generate_file_name
         self.import_data(db_name, table_name, {
@@ -834,7 +834,7 @@ class TestKnn(HttpTest):
         ])
         generate_file_name = "http_enwiki_embedding_99_commas.csv"
         httputils.generate_commas_enwiki("enwiki_99.csv", generate_file_name, 1)
-        httputils.copy_data(generate_file_name)
+        httputils.copy_data(generate_file_name, generate_file_name)
 
         test_csv_dir = TEST_TMP_DIR + generate_file_name
         self.import_data(db_name, table_name, {
@@ -882,7 +882,7 @@ class TestKnn(HttpTest):
         ])
         generate_file_name = "http_enwiki_embedding_99_commas.csv"
         httputils.generate_commas_enwiki("enwiki_99.csv", generate_file_name, 1)
-        httputils.copy_data(generate_file_name)
+        httputils.copy_data(generate_file_name, generate_file_name)
 
         test_csv_dir = TEST_TMP_DIR + generate_file_name
         self.import_data(db_name, table_name, {

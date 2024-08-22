@@ -364,7 +364,7 @@ class TestInfinity:
         table_obj = db_obj.get_table("test_select_embedding"+suffix)
 
         if not check_data:
-            copy_data("embedding_int_dim3.csv")
+            copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
         test_dir = "/var/infinity/test_data/"
         test_csv_dir = test_dir + "embedding_int_dim3.csv"
         assert os.path.exists(test_csv_dir)
@@ -414,7 +414,7 @@ class TestInfinity:
         test_dir = "/var/infinity/test_data/"
         test_csv_dir = test_dir + "embedding_float_dim4.csv"
         if not check_data:
-            copy_data("embedding_float_dim4.csv")
+            copy_data("embedding_float_dim4.csv", "embedding_float_dim4.csv")
         assert os.path.exists(test_csv_dir)
 
         res = table_obj.import_data(test_csv_dir, None)
@@ -470,7 +470,7 @@ class TestInfinity:
         table_obj = db_obj.get_table("test_select_big_embedding"+suffix)
 
         if not check_data:
-            copy_data("embedding_int_dim3.csv")
+            copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
         test_dir = "/var/infinity/test_data/"
         test_csv_dir = test_dir + "embedding_int_dim3.csv"
         assert os.path.exists(test_csv_dir)

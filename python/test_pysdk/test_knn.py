@@ -72,7 +72,7 @@ class TestInfinity:
 
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         print("import:", test_csv_dir, " start!")
         table_obj.import_data(test_csv_dir, None)
 
@@ -110,7 +110,7 @@ class TestInfinity:
         }, ConflictType.Error)
         test_csv_dir = "/var/infinity/test_data/embedding_int_dim3.csv"
         if not check_data:
-            copy_data("embedding_int_dim3.csv")
+            copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
         print("import:", test_csv_dir, " start!")
         table_obj.import_data(test_csv_dir, None)
         table_obj.insert([{"c1": 11, "c2": [127, 128, 255]}])
@@ -162,7 +162,7 @@ class TestInfinity:
         }, ConflictType.Error)
         test_csv_dir = "/var/infinity/test_data/embedding_int_dim3.csv"
         if not check_data:
-            copy_data("embedding_int_dim3.csv")
+            copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
         print("import:", test_csv_dir, " start!")
         table_obj.import_data(test_csv_dir, None)
         table_obj.insert([{"c1": 11, "c2": [127, 128, 255]}])
@@ -232,7 +232,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.output(["variant_id", "_row_id", "_similarity"]).match_dense(
@@ -268,7 +268,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         with pytest.raises(InfinityException) as e:
@@ -304,7 +304,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.output(["variant_id", "_row_id"]).match_dense(
@@ -343,7 +343,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         with pytest.raises(Exception):
@@ -381,7 +381,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         if embedding_data_type[1]:
@@ -429,7 +429,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         with pytest.raises(Exception):
@@ -483,7 +483,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         if distance_type[1] and embedding_data_type[1]:
@@ -534,7 +534,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("tmp_20240116.csv")
+            copy_data("tmp_20240116.csv", "tmp_20240116.csv")
         test_csv_dir = "/var/infinity/test_data/tmp_20240116.csv"
         table_obj.import_data(test_csv_dir, None)
         if topn[1]:
@@ -583,7 +583,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.create_index("my_index",
@@ -639,7 +639,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.output(["variant_id"]).match_dense(
@@ -676,7 +676,7 @@ class TestInfinity:
                                                {"ANALYZER": "standard"}),
                                ConflictType.Error)
         if not check_data:
-            copy_data("enwiki_99.csv")
+            copy_data("enwiki_99.csv", "enwiki_99.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "enwiki_99.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": "\t"})
         print('Test fulltext operator OR for query "TO BE OR NOT":')
@@ -717,7 +717,7 @@ class TestInfinity:
         if not check_data:
             generate_commas_enwiki(
                 "enwiki_99.csv", "enwiki_embedding_99_commas.csv", 1)
-            copy_data("enwiki_embedding_99_commas.csv")
+            copy_data("enwiki_embedding_99_commas.csv", "enwiki_embedding_99_commas.csv")
 
         test_csv_dir = common_values.TEST_TMP_DIR + "enwiki_embedding_99_commas.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
@@ -763,7 +763,7 @@ class TestInfinity:
         if not check_data:
             generate_commas_enwiki(
                 "enwiki_99.csv", "enwiki_embedding_99_commas.csv", 1)
-            copy_data("enwiki_embedding_99_commas.csv")
+            copy_data("enwiki_embedding_99_commas.csv", "enwiki_embedding_99_commas.csv")
 
         test_csv_dir = common_values.TEST_TMP_DIR + "enwiki_embedding_99_commas.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
@@ -806,7 +806,7 @@ class TestInfinity:
         if not check_data:
             generate_commas_enwiki(
                 "enwiki_99.csv", "enwiki_embedding_99_commas.csv", 1)
-            copy_data("enwiki_embedding_99_commas.csv")
+            copy_data("enwiki_embedding_99_commas.csv", "enwiki_embedding_99_commas.csv")
 
         test_csv_dir = common_values.TEST_TMP_DIR + "enwiki_embedding_99_commas.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
@@ -852,7 +852,7 @@ class TestInfinity:
         if not check_data:
             generate_commas_enwiki(
                 "enwiki_99.csv", "enwiki_embedding_99_commas.csv", 1)
-            copy_data("enwiki_embedding_99_commas.csv")
+            copy_data("enwiki_embedding_99_commas.csv", "enwiki_embedding_99_commas.csv")
 
         test_csv_dir = common_values.TEST_TMP_DIR + "enwiki_embedding_99_commas.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
@@ -886,7 +886,7 @@ class TestInfinity:
                                          "t": {"type": f"tensor, 4, {save_elem_t}"},
                                          "body": {"type": "varchar"}})
         if not check_data:
-            copy_data("tensor_maxsim.csv")
+            copy_data("tensor_maxsim.csv", "tensor_maxsim.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "tensor_maxsim.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         res = (table_obj
@@ -910,7 +910,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         res = (table_obj.output(["*", "_row_id", "_similarity"])
@@ -930,7 +930,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         table_obj.create_index("idx1",
@@ -964,7 +964,7 @@ class TestInfinity:
                                          "t": {"type": "tensor, 4, float"},
                                          "body": {"type": "varchar"}})
         if not check_data:
-            copy_data("tensor_maxsim.csv")
+            copy_data("tensor_maxsim.csv", "tensor_maxsim.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "tensor_maxsim.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         res = (table_obj
@@ -1005,7 +1005,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         if index_type == index.IndexType.Hnsw:
@@ -1145,7 +1145,7 @@ class TestInfinity:
         if not check_data:
             generate_commas_enwiki(
                 "enwiki_99.csv", "enwiki_embedding_99_commas.csv", 1)
-            copy_data("enwiki_embedding_99_commas.csv")
+            copy_data("enwiki_embedding_99_commas.csv", "enwiki_embedding_99_commas.csv")
 
         test_csv_dir = common_values.TEST_TMP_DIR + "enwiki_embedding_99_commas.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
@@ -1183,7 +1183,7 @@ class TestInfinity:
                                          "t": {"type": "tensor, 4, float"},
                                          "body": {"type": "varchar"}})
         if not check_data:
-            copy_data("tensor_maxsim.csv")
+            copy_data("tensor_maxsim.csv", "tensor_maxsim.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "tensor_maxsim.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         with pytest.raises(Exception):
@@ -1215,7 +1215,7 @@ class TestInfinity:
                                          "t": {"type": "tensor, 4, float"},
                                          "body": {"type": "varchar"}})
         if not check_data:
-            copy_data("tensor_maxsim.csv")
+            copy_data("tensor_maxsim.csv", "tensor_maxsim.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "tensor_maxsim.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         with pytest.raises(Exception):
@@ -1284,7 +1284,7 @@ class TestInfinity:
         db_obj.drop_table("test_sparse_scan"+suffix, ConflictType.Ignore)
         params = table_params.split(",")
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
 
         if params[0] == "int8":
@@ -1348,7 +1348,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
 
@@ -1402,7 +1402,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         with pytest.raises(InfinityException) as e:
@@ -1427,7 +1427,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
         table_obj.create_index("idx1",
@@ -1460,7 +1460,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
 
@@ -1484,7 +1484,7 @@ class TestInfinity:
                                         {"c1": {"type": "int"}, "c2": {"type": "sparse,100,float,int8"}},
                                         ConflictType.Error)
         if not check_data:
-            copy_data("sparse_knn.csv")
+            copy_data("sparse_knn.csv", "sparse_knn.csv")
         test_csv_dir = common_values.TEST_TMP_DIR + "sparse_knn.csv"
         table_obj.import_data(test_csv_dir, import_options={"delimiter": ","})
 
@@ -1517,7 +1517,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.create_index("my_index_l2",
@@ -1578,7 +1578,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.create_index("my_index_l2",
@@ -1621,7 +1621,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.create_index("my_index_l2",
@@ -1665,7 +1665,7 @@ class TestInfinity:
             "query_price": {"type": "float"}
         }, ConflictType.Error)
         if not check_data:
-            copy_data("pysdk_test_knn.csv")
+            copy_data("pysdk_test_knn.csv", "pysdk_test_knn.csv")
         test_csv_dir = "/var/infinity/test_data/pysdk_test_knn.csv"
         table_obj.import_data(test_csv_dir, None)
         res = table_obj.create_index("my_index_l2",

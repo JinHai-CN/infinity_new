@@ -45,13 +45,13 @@ def start_infinity_service_in_subporcess():
     return infinity
 
 
-def copy_data(file_name):
+def copy_data(file_name, dest_file_name):
     data_dir = os.getcwd() + common_values.TEST_DATA_DIR
     for dirpath, dirnames, filenames in os.walk(data_dir):
         for filename in filenames:
             if filename == file_name:
                 src_path = os.path.join(dirpath, filename)
-                dest_path = os.path.join(common_values.TEST_TMP_DIR, filename)
+                dest_path = os.path.join(common_values.TEST_TMP_DIR, dest_file_name)
                 copyfile(src_path, dest_path)
 
 

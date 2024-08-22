@@ -4,6 +4,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
+
 import os
 import pandas as pd
 from numpy import dtype
@@ -17,6 +18,7 @@ from infinity_http import infinity_http
 from common.utils import copy_data
 
 test_csv_file = "embedding_int_dim3.csv"
+test_csv_file_dst = "embedding_int_dim3_dst.csv"
 test_export_csv_file = "export_embedding_int_dim3.csv"
 test_export_csv_file_part = "export_embedding_int_dim3_part.csv"
 test_export_jsonl_file = "export_embedding_int_dim3.jsonl"
@@ -68,9 +70,7 @@ class TestInfinity:
             db = infinity_obj.create_database("")
         assert infinity_obj.disconnect()
 
-    @pytest.mark.parametrize("check_data", [{"file_name": "embedding_int_dim3.csv",
-                                             "data_dir": common_values.TEST_TMP_DIR}], indirect=True)
-    def test_basic(self, check_data ,suffix):
+    def test_basic(self, suffix):
         """
         target: test basic operation
         method:
@@ -180,12 +180,11 @@ class TestInfinity:
         table_obj = db_obj.get_table("my_table4"+suffix)
         assert table_obj
 
-        if not check_data:
-            copy_data(test_csv_file)
+        copy_data(test_csv_file, test_csv_file_dst)
 
-        assert os.path.exists(common_values.TEST_TMP_DIR + test_csv_file)
+        assert os.path.exists(common_values.TEST_TMP_DIR + test_csv_file_dst)
 
-        res = table_obj.import_data(common_values.TEST_TMP_DIR + test_csv_file)
+        res = table_obj.import_data(common_values.TEST_TMP_DIR + test_csv_file_dst)
         assert res.error_code == ErrorCode.OK
 
         # export

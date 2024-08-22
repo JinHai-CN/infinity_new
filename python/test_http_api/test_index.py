@@ -441,7 +441,7 @@ class TestIndex(HttpTest):
                 {"name": "c1", "type": "integer"},
                 {"name": "c2", "type": "vector", "dimension": 3, "element_type": "float"}
             ])
-            httputils.copy_data("embedding_int_dim3.csv")
+            httputils.copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
             test_csv_dir = TEST_TMP_DIR + "embedding_int_dim3.csv"
             assert os.path.exists(test_csv_dir)
 
@@ -474,7 +474,7 @@ class TestIndex(HttpTest):
             {"name": "c1", "type": "integer"},
             {"name": "c2", "type": "vector", "dimension": 4, "element_type": "float"}
         ])
-        httputils.copy_data("embedding_float_dim4.csv")
+        httputils.copy_data("embedding_float_dim4.csv", "embedding_float_dim4.csv")
         test_csv_dir = TEST_TMP_DIR + "embedding_float_dim4.csv"
         assert os.path.exists(test_csv_dir)
         # ERROR
@@ -508,7 +508,7 @@ class TestIndex(HttpTest):
                 {"name": "c1", "type": "integer"},
                 {"name": "c2", "type": "vector", "dimension": 3, "element_type": "float"}
             ])
-            httputils.copy_data("embedding_int_dim3.csv")
+            httputils.copy_data("embedding_int_dim3.csv", "embedding_int_dim3.csv")
             test_csv_dir = TEST_TMP_DIR + "embedding_int_dim3.csv"
             assert os.path.exists(test_csv_dir)
             # ERROR
@@ -535,7 +535,7 @@ class TestIndex(HttpTest):
     # ERROR: IVFFlat realtime index is not supported yet
     def test_http_insert_data_fulltext_index_search(self):
         httputils.check_data(TEST_TMP_DIR)
-        httputils.copy_data("enwiki_99.csv")
+        httputils.copy_data("enwiki_99.csv", "enwiki_99.csv")
         db_name = "default_db"
         table_name = "test_http_test_insert_data_fulltext_index_search"
         idxname = "my_index"
@@ -575,7 +575,7 @@ class TestIndex(HttpTest):
             {"name": "docdate", "type": "varchar"},
             {"name": "body", "type": "varchar"}
         ])
-        httputils.copy_data("enwiki_9.csv")
+        httputils.copy_data("enwiki_9.csv", "enwiki_9.csv")
         test_csv_dir = TEST_TMP_DIR + "enwiki_9.csv"
         # print("test_csv_dir: " + test_csv_dir)
         assert os.path.exists(test_csv_dir)
