@@ -516,6 +516,10 @@ void InfinityThriftService::Select(infinity_thrift_rpc::SelectResponse &response
                     delete search_expr;
                     search_expr = nullptr;
                 }
+                if (match_expr != nullptr) {
+                    delete match_expr;
+                }
+
                 ProcessStatus(response, status);
                 return;
             }
