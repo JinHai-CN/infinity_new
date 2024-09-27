@@ -19,6 +19,7 @@ export module persistence_manager;
 import stl;
 import serialize;
 import third_party;
+import obj_status;
 
 // A view means a logical plan
 namespace infinity {
@@ -39,36 +40,6 @@ export struct ObjAddr {
     void WriteBufAdv(char *&buf) const;
 
     static ObjAddr ReadBufAdv(const char *&buf);
-};
-
-export struct Range {
-    SizeT start_{}; // inclusive
-    SizeT end_{};   // exclusive
-    bool operator<(const Range &rhs) const { return start_ < rhs.start_; }
-    bool operator==(const Range &rhs) const { return start_ == rhs.start_ && end_ == rhs.end_; }
-    bool Cover(const Range &rhs) const { return start_ <= rhs.start_ && rhs.end_ <= end_; }
-    bool Intersect(const Range &rhs) const { return start_ < rhs.end_ && rhs.start_ < end_; }
-};
-
-export struct ObjStat {
-    SizeT obj_size_{}; // footer (if present) is excluded
-    SizeT parts_{};    // an object attribute
-    SizeT ref_count_{}; // the number of user (R and W) of some part of this object
-    Set<Range> deleted_ranges_{};
-
-    ObjStat() = default;
-
-    ObjStat(SizeT obj_size, SizeT parts, SizeT ref_count) : obj_size_(obj_size), parts_(parts), ref_count_(ref_count) {}
-
-    nlohmann::json Serialize() const;
-
-    void Deserialize(const nlohmann::json &obj);
-
-    SizeT GetSizeInBytes() const;
-
-    void WriteBufAdv(char *&buf) const;
-
-    static ObjStat ReadBufAdv(const char *&buf);
 };
 
 export class PersistenceManager {
