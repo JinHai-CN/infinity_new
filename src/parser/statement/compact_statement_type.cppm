@@ -1,4 +1,4 @@
-// Copyright(C) 2023 InfiniFlow, Inc. All rights reserved.
+// Copyright(C) 2025 InfiniFlow, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,12 @@
 
 module;
 
-#include "compact_statement.h"
 #include "compact_statement_type.h"
 
-export module compact_statement;
+export module compact_statement_type;
 
 namespace infinity {
+
 export using infinity::CompactStatementType;
-export using infinity::CompactStatement;
-export using infinity::ManualCompactStatement;
-export using infinity::AutoCompactStatement;
+
 }; // namespace infinity

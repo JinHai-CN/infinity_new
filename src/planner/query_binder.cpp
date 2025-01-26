@@ -81,6 +81,7 @@ import logger;
 import defer_op;
 import highlighter;
 import txn_store;
+import txn_table_store;
 
 namespace infinity {
 

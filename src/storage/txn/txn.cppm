@@ -35,6 +35,8 @@ import value;
 import snapshot_info;
 import txn_context;
 import block_index;
+import txn_table_store;
+import compact_statement_type;
 
 namespace infinity {
 
@@ -62,7 +64,6 @@ struct WalCmd;
 class CatalogDeltaEntry;
 class CatalogDeltaOperation;
 class BaseTableRef;
-enum class CompactStatementType;
 struct SegmentIndexEntry;
 struct AddDeltaEntryTask;
 struct IndexReader;

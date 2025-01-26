@@ -15,15 +15,13 @@
 #pragma once
 
 #include "base_statement.h"
+#include "compact_statement_type.h"
 #include <memory>
 #include <vector>
 
 namespace infinity {
 
-struct TableEntry;
 struct SegmentEntry;
-
-enum class CompactStatementType { kManual, kAuto, kInvalid };
 
 class CompactStatement : public BaseStatement {
 public:
@@ -47,11 +45,10 @@ public:
 
 struct AutoCompactStatement : public CompactStatement {
 public:
-    AutoCompactStatement(TableEntry *table_entry, std::vector<SegmentEntry *> compactible_segments)
-        : CompactStatement{CompactStatementType::kAuto}, table_entry_(table_entry), compactible_segments_(std::move(compactible_segments)) {}
+    AutoCompactStatement(std::vector<SegmentEntry *> compactible_segments)
+        : CompactStatement{CompactStatementType::kAuto}, compactible_segments_(std::move(compactible_segments)) {}
 
 public:
-    TableEntry *table_entry_;
     std::vector<SegmentEntry *> compactible_segments_;
 };
 

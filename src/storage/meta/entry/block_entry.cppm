@@ -37,6 +37,7 @@ import column_def;
 import txn_store;
 import cleanup_scanner;
 import snapshot_info;
+import txn_table_store;
 
 namespace infinity {
 

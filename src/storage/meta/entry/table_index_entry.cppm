@@ -33,6 +33,9 @@ import index_file_worker;
 import column_def;
 import snapshot_info;
 import block_entry;
+import txn_index_store;
+import txn_table_store;
+import txn_compact_store;
 
 namespace infinity {
 

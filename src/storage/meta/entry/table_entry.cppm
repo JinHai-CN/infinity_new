@@ -19,6 +19,9 @@ export module table_entry;
 import stl;
 
 import txn_store;
+import txn_compact_store;
+import txn_segment_store;
+import txn_table_store;
 import buffer_manager;
 import third_party;
 import table_entry_type;
