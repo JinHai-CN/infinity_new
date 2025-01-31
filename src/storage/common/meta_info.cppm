@@ -19,6 +19,7 @@ import table_entry_type;
 import column_def;
 import default_values;
 import data_type;
+import create_index_info;
 
 export module meta_info;
 
@@ -52,18 +53,6 @@ public:
     const ColumnDef *GetColumnDefByIdx(SizeT idx) const;
     const ColumnDef *GetColumnDefByName(const String &column_name) const;
     SizeT GetColumnIdxByID(ColumnID column_id) const;
-};
-
-export struct TableIndexInfo {
-    SharedPtr<String> index_name_{};
-    SharedPtr<String> index_comment_{};
-    SharedPtr<String> index_entry_dir_{};
-    i64 segment_index_count_{};
-    SharedPtr<String> index_type_{};
-    SharedPtr<String> index_other_params_{};
-    SharedPtr<String> index_column_ids_{};
-    SharedPtr<String> index_column_names_{};
-    Vector<String> files_{};
 };
 
 export struct SegmentInfo {
@@ -117,6 +106,26 @@ export struct ViewDetail {
     SharedPtr<String> db_name_{};
     SharedPtr<String> view_name_{};
     i64 column_count_{};
+};
+
+export struct TableIndexInfo {
+    SharedPtr<String> index_name_{};
+    SharedPtr<String> index_comment_{};
+    SharedPtr<String> index_entry_dir_{};
+    i64 segment_index_count_{};
+    SharedPtr<String> index_type_{};
+    SharedPtr<String> index_other_params_{};
+    SharedPtr<String> index_column_ids_{};
+    SharedPtr<String> index_column_names_{};
+    Vector<String> files_{};
+};
+
+export struct SegmentIndexInfo {
+    SegmentID segment_id_{};
+    IndexType index_type_{};
+    SharedPtr<String> index_dir_{};
+    SizeT chunk_count_{};
+    Vector<String> files_{};
 };
 
 } // namespace infinity
