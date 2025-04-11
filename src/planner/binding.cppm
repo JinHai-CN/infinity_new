@@ -14,14 +14,16 @@
 
 module;
 
-import stl;
-import parser;
-import block_index;
-import catalog;
-
 export module binding;
 
+import stl;
+import meta_info;
+import internal_types;
+import data_type;
+
 namespace infinity {
+
+class BlockIndex;
 
 export enum class BindingType { kInvalid, kTable, kSubquery, kCTE, kView };
 
@@ -29,7 +31,7 @@ export class Binding {
 public:
     Binding() = default;
 
-    virtual ~Binding() = default;
+    virtual ~Binding();
 
     static SharedPtr<Binding> MakeBinding(BindingType binding_type,
                                           const String &name,
@@ -40,7 +42,7 @@ public:
     static SharedPtr<Binding> MakeBinding(BindingType binding_type,
                                           const String &name,
                                           u64 table_index,
-                                          TableEntry *table_collection_entry_ptr,
+                                          SharedPtr<TableInfo> table_info,
                                           SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                                           SharedPtr<Vector<String>> column_names,
                                           SharedPtr<BlockIndex> block_index);
@@ -60,7 +62,7 @@ public:
     //    SharedPtr<LogicalNode> logical_node_ptr_{nullptr};
 
     // if the binding is table, this is the table_ptr
-    TableEntry *table_collection_entry_ptr_{nullptr};
+    SharedPtr<TableInfo> table_info_{nullptr};
 
     SharedPtr<BlockIndex> block_index_{};
 

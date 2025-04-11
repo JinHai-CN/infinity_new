@@ -14,12 +14,14 @@
 
 #pragma once
 
+#include "parser_assert.h"
 #include <string>
 
 namespace infinity {
 
 enum class StatementType {
     kInvalidStmt, // unused
+    kAdmin,
     kSelect,
     kCopy,
     kInsert,
@@ -35,7 +37,10 @@ enum class StatementType {
     kFlush,
     kOptimize,
     kCommand,
+    kCompact,
 };
+
+extern std::string StatementType2Str(StatementType statement_type);
 
 class BaseStatement {
 public:

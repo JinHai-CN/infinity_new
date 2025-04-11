@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,8 +36,17 @@ import cast_table;
 import column_vector;
 import float_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import data_type;
 
-class DoubleCastTest : public BaseTest {};
+using namespace infinity;
+
+class DoubleCastTest : public BaseTest {
+    void SetUp() override {}
+
+    void TearDown() override { BaseTest::TearDown(); }
+};
 
 TEST_F(DoubleCastTest, double_cast0) {
     using namespace infinity;
@@ -46,7 +55,7 @@ TEST_F(DoubleCastTest, double_cast0) {
     {
         DoubleT source = 0;
         DoubleT target;
-        EXPECT_THROW(FloatTryCastToFixlen::Run(source, target), FunctionException);
+        EXPECT_THROW(FloatTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
 
     // DoubleT to TinyInt
@@ -143,7 +152,7 @@ TEST_F(DoubleCastTest, double_cast0) {
     {
         DoubleT source = std::numeric_limits<DoubleT>::lowest();
         HugeIntT target;
-        EXPECT_THROW(FloatTryCastToFixlen::Run(source, target), NotImplementException);
+        EXPECT_THROW(FloatTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
 
     // DoubleT to FloatT
@@ -170,7 +179,7 @@ TEST_F(DoubleCastTest, double_cast0) {
     {
         DoubleT source = std::numeric_limits<DoubleT>::lowest();
         DecimalT target;
-        EXPECT_THROW(FloatTryCastToFixlen::Run(source, target), NotImplementException);
+        EXPECT_THROW(FloatTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
 
     // Double to VarcharT
@@ -185,64 +194,63 @@ TEST_F(DoubleCastTest, double_cast0) {
         col_varchar_ptr->Initialize();
 
         source = std::numeric_limits<FloatT>::lowest();
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
 
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 47);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 47);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = std::numeric_limits<FloatT>::max();
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 46);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 46);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 0;
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 8);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 8);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 9;
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 8);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 8);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 10;
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 9);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 9);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 99;
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 9);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 9);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = -100;
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 11);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 11);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 100;
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 10);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 10);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         // col_varchar will release extra memory. Therefore,
 
         source = std::numeric_limits<FloatT>::max();
-        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 46);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(FloatTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 46);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         // Not release the heap memory in varchar, due to the heap will be release in col_varchar's destructor
-        target.Reset(false);
     }
 }
 
@@ -361,7 +369,7 @@ TEST_F(DoubleCastTest, double_cast1) {
         CastParameters cast_parameters;
 
         //        bool result = double2hugeint_ptr.function(col_float, col_hugeint, DEFAULT_VECTOR_SIZE, cast_parameters);
-        EXPECT_THROW(double2hugeint_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), NotImplementException);
+        EXPECT_THROW(double2hugeint_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 
     // cast double column vector to float column vector
@@ -399,7 +407,7 @@ TEST_F(DoubleCastTest, double_cast1) {
         EXPECT_TRUE(result);
         for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
             f64 check_value = static_cast<f64>(i);
-            String check_str(ToStr(check_value));
+            String check_str(std::to_string(check_value));
             Value vx = col_target->GetValue(i);
             const String &s2 = vx.GetVarchar();
             EXPECT_STREQ(s2.c_str(), check_str.c_str());
@@ -410,6 +418,6 @@ TEST_F(DoubleCastTest, double_cast1) {
     {
         DataType source(LogicalType::kDouble);
         DataType target(LogicalType::kTimestamp);
-        EXPECT_THROW(BindFloatCast<DoubleT>(source, target), TypeException);
+        EXPECT_THROW(BindFloatCast<DoubleT>(source, target), UnrecoverableException);
     }
 }

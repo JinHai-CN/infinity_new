@@ -21,9 +21,10 @@ import base_expression;
 import column_expression;
 import reference_expression;
 import special_function;
-import parser;
+import default_values;
 import third_party;
 import logger;
+import infinity_exception;
 
 module column_remapper;
 
@@ -32,26 +33,54 @@ namespace infinity {
 void BindingRemapper::VisitNode(LogicalNode &op) {
     auto load_func = [&]() {
         auto load_metas = op.load_metas();
+        column_cnt_ = output_types_ ? output_types_->size() : 0;
 
         if (load_metas.get() != nullptr) {
+            column_cnt_ += load_metas->size();
             for (SizeT i = 0; i < load_metas->size(); ++i) {
-                bindings_.insert(bindings_.begin() + (*load_metas)[i].index_, (*load_metas)[i].binding_);
+                auto &load_meta = (*load_metas)[i];
+                // fix index_ value (will be used in PhysicalOperator::InputLoad), now always append to the end
+                load_meta.index_ = bindings_.size();
+                bindings_.push_back(load_meta.binding_);
             }
         }
     };
 
-    if (op.operator_type() == LogicalNodeType::kJoin or op.operator_type() == LogicalNodeType::kKnnScan) {
-        VisitNodeChildren(op);
-        bindings_ = op.GetColumnBindings();
-        output_types_ = op.GetOutputTypes();
-        load_func();
-        VisitNodeExpression(op);
-    } else {
-        VisitNodeChildren(op);
-        load_func();
-        VisitNodeExpression(op);
-        bindings_ = op.GetColumnBindings();
-        output_types_ = op.GetOutputTypes();
+    switch (op.operator_type()) {
+        case LogicalNodeType::kInsert:
+        case LogicalNodeType::kImport:
+        case LogicalNodeType::kExport:
+        case LogicalNodeType::kCreateTable:
+        case LogicalNodeType::kDropTable:
+        case LogicalNodeType::kDropIndex:
+        case LogicalNodeType::kCreateSchema:
+        case LogicalNodeType::kDropSchema:
+        case LogicalNodeType::kShow:
+        case LogicalNodeType::kCommand:
+        case LogicalNodeType::kPrepare: {
+            // skip
+            return;
+        }
+        case LogicalNodeType::kJoin:
+        case LogicalNodeType::kMatch:
+        case LogicalNodeType::kMatchSparseScan:
+        case LogicalNodeType::kMatchTensorScan:
+        case LogicalNodeType::kKnnScan: {
+            VisitNodeChildren(op);
+            bindings_ = op.GetColumnBindings();
+            output_types_ = op.GetOutputTypes();
+            load_func();
+            VisitNodeExpression(op);
+            break;
+        }
+        default: {
+            VisitNodeChildren(op);
+            load_func();
+            VisitNodeExpression(op);
+            bindings_ = op.GetColumnBindings();
+            output_types_ = op.GetOutputTypes();
+            break;
+        }
     }
 }
 
@@ -64,18 +93,32 @@ SharedPtr<BaseExpression> BindingRemapper::VisitReplace(const SharedPtr<ColumnEx
                                                  expression->table_name(),
                                                  expression->column_name(),
                                                  expression->alias_,
-                                                 output_types_->size() - 1);
+                                                 column_cnt_ - 1);
             }
             case SpecialType::kScore:
+            case SpecialType::kSimilarity:
             case SpecialType::kDistance: {
                 return ReferenceExpression::Make(expression->Type(),
                                                  expression->table_name(),
                                                  expression->column_name(),
                                                  expression->alias_,
-                                                 output_types_->size() - 2);
+                                                 column_cnt_ - 2);
+            }
+            case SpecialType::kScoreFactors:
+            case SpecialType::kSimilarityFactors:
+            case SpecialType::kDistanceFactors: {
+                return ReferenceExpression::Make(expression->Type(),
+                                                 expression->table_name(),
+                                                 expression->column_name(),
+                                                 expression->alias_,
+                                                 column_cnt_ - 3);
+            }
+            case SpecialType::kCreateTs:
+            case SpecialType::kDeleteTs: {
+                break;
             }
             default: {
-                LOG_ERROR(Format("Unknown special function: {}", expression->Name()));
+                LOG_ERROR(fmt::format("Unknown special function: {}", expression->Name()));
             }
         }
     }
@@ -86,10 +129,10 @@ SharedPtr<BaseExpression> BindingRemapper::VisitReplace(const SharedPtr<ColumnEx
             return ReferenceExpression::Make(expression->Type(), expression->table_name(), expression->column_name(), expression->alias_, idx);
         }
     }
-    LOG_ERROR(Format("Can't bind column expression: {} [{}.{}]",
-                     expression->table_name(),
-                     expression->binding().table_idx,
-                     expression->binding().column_idx));
+    UnrecoverableError(fmt::format("Can't bind column expression: {} [{}.{}]",
+                                   expression->table_name(),
+                                   expression->binding().table_idx,
+                                   expression->binding().column_idx));
     return nullptr;
 }
 

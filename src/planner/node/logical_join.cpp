@@ -14,16 +14,17 @@
 
 module;
 
-#include <vector>
 #include <sstream>
+#include <vector>
+
+module logical_join;
 
 import stl;
 import column_binding;
-import parser;
+
 import logical_node_type;
 import base_expression;
-
-module logical_join;
+import internal_types;
 
 namespace infinity {
 
@@ -33,7 +34,7 @@ LogicalJoin::LogicalJoin(u64 node_id,
                          Vector<SharedPtr<BaseExpression>> conditions,
                          const SharedPtr<LogicalNode> &left,
                          const SharedPtr<LogicalNode> &right)
-    : LogicalNode(node_id, LogicalNodeType::kJoin), alias_(Move(alias)), join_type_(join_type), conditions_(Move(conditions)) {
+    : LogicalNode(node_id, LogicalNodeType::kJoin), alias_(std::move(alias)), join_type_(join_type), conditions_(std::move(conditions)) {
     this->set_left_node(left);
     this->set_right_node(right);
 }
@@ -89,7 +90,7 @@ String LogicalJoin::ToString(i64 &space) const {
         space -= 4;
         arrow_str = "->  ";
     }
-    ss << String(space, ' ') << arrow_str << JoinType2Str(join_type_) << " on ";
+    ss << String(space, ' ') << arrow_str << JoinReference::ToString(join_type_) << " on ";
     for (auto &condition : conditions_) {
         ss << condition->Name() << " ";
     }

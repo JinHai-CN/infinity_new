@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import logger;
 import column_vector;
 import value;
-import parser;
+
 import default_values;
 import third_party;
 import stl;
@@ -27,8 +28,28 @@ import selection;
 import vector_buffer;
 import global_resource_usage;
 import infinity_context;
+import internal_types;
+import logical_type;
+import data_type;
+import compilation_config;
 
-class ColumnVectorRowTest : public BaseTest {};
+using namespace infinity;
+
+class ColumnVectorRowTest : public BaseTest {
+    void SetUp() override {
+        using namespace infinity;
+
+        LoggerConfig logger_config;
+        logger_config.log_level_ = LogLevel::kOff;
+        Logger::Initialize(logger_config);
+    }
+
+    void TearDown() override {
+        using namespace infinity;
+
+        Logger::Shutdown();
+    }
+};
 
 TEST_F(ColumnVectorRowTest, flat_row) {
     using namespace infinity;
@@ -37,14 +58,13 @@ TEST_F(ColumnVectorRowTest, flat_row) {
     ColumnVector column_vector(data_type);
     column_vector.Initialize();
 
-    
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), u64(DEFAULT_VECTOR_SIZE));
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -64,7 +84,7 @@ TEST_F(ColumnVectorRowTest, flat_row) {
         EXPECT_EQ(vx.type().type(), LogicalType::kRowID);
         EXPECT_EQ(vx.value_.row.segment_id_, static_cast<u32>(i));
         EXPECT_EQ(vx.value_.row.segment_offset_, static_cast<u32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -87,8 +107,8 @@ TEST_F(ColumnVectorRowTest, flat_row) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -97,18 +117,18 @@ TEST_F(ColumnVectorRowTest, flat_row) {
     //    EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kInvalid);
 
     // ====
-    //    EXPECT_THROW(column_vector.Initialize(), TypeException);
-    //    EXPECT_THROW(column_vector.Initialize(), TypeException);
+    //    EXPECT_THROW(column_vector.Initialize(), UnrecoverableException);
+    //    EXPECT_THROW(column_vector.Initialize(), UnrecoverableException);
     //    column_vector.SetVectorType(ColumnVectorType::kFlat);
     column_vector.Initialize();
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -125,7 +145,7 @@ TEST_F(ColumnVectorRowTest, flat_row) {
         EXPECT_EQ(vx.type().type(), LogicalType::kRowID);
         EXPECT_EQ(vx.value_.row.segment_id_, static_cast<u32>(i));
         EXPECT_EQ(vx.value_.row.segment_offset_, static_cast<u32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -150,15 +170,14 @@ TEST_F(ColumnVectorRowTest, contant_row) {
 
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
 
-    
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.Size(), 0);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.Size(), 0u);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -176,7 +195,7 @@ TEST_F(ColumnVectorRowTest, contant_row) {
         EXPECT_EQ(vx.type().type(), LogicalType::kRowID);
         EXPECT_EQ(vx.value_.row.segment_id_, static_cast<u32>(i));
         EXPECT_EQ(vx.value_.row.segment_offset_, static_cast<u32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
     for (i64 i = 0; i < 1; ++i) {
         Value vx = column_vector.GetValue(i);
@@ -186,8 +205,8 @@ TEST_F(ColumnVectorRowTest, contant_row) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -196,15 +215,15 @@ TEST_F(ColumnVectorRowTest, contant_row) {
 
     // ====
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
-    
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.Size(), 0);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
+
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.Size(), 0u);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -221,7 +240,7 @@ TEST_F(ColumnVectorRowTest, contant_row) {
         EXPECT_EQ(vx.type().type(), LogicalType::kRowID);
         EXPECT_EQ(vx.value_.row.segment_id_, static_cast<u32>(i));
         EXPECT_EQ(vx.value_.row.segment_offset_, static_cast<u32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 }
 
@@ -253,7 +272,7 @@ TEST_F(ColumnVectorRowTest, row_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -288,7 +307,7 @@ TEST_F(ColumnVectorRowTest, row_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {

@@ -15,16 +15,21 @@
 module;
 
 #include <type_traits>
+
+module and_func;
+
 import stl;
 import catalog;
-
+import status;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module and_func;
+import third_party;
+import logical_type;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -38,7 +43,8 @@ struct AndFunction {
                              std::is_same_v<std::remove_cv_t<TC>, BooleanT>) {
             result = left and right;
         } else {
-            Error<TypeException>("AND function accepts only u8 and BooleanT.");
+            String error_message = "AND function accepts only u8 and BooleanT.";
+            UnrecoverableError(error_message);
         }
     }
 };
@@ -52,13 +58,13 @@ static void GenerateAndFunction(SharedPtr<ScalarFunctionSet> &function_set_ptr) 
     function_set_ptr->AddFunction(and_function);
 }
 
-void RegisterAndFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterAndFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "AND";
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
 
     GenerateAndFunction(function_set_ptr);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

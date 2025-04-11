@@ -14,13 +14,27 @@
 
 module;
 
-#include <algorithm>
-
-import stl;
+#include <set>
 
 module file_writer;
 
+import stl;
+import virtual_store;
+import local_file_handle;
+import infinity_exception;
+import logger;
+
 namespace infinity {
+
+FileWriter::FileWriter(const String &path, SizeT buffer_size)
+    : path_(path), data_(MakeUnique<char_t[]>(buffer_size)), offset_(0), total_written_(0), buffer_size_(buffer_size) {
+    // Fixme: Open file out of constructor
+    auto [file_handle, status] = VirtualStore::Open(path, FileAccessMode::kWrite);
+    if (!status.ok()) {
+        UnrecoverableError(status.message());
+    }
+    file_handle_ = std::move(file_handle);
+}
 
 void FileWriter::WriteByte(const u8 b) {
     if (offset_ == buffer_size_) {
@@ -70,8 +84,8 @@ void FileWriter::Write(const char_t *buffer, SizeT bytes_count) {
     while (start_pos < end_pos) {
         i64 byte_count1 = end_pos - start_pos;
         i64 byte_count2 = buffer_size_ - offset_;
-        i64 to_write = Min(byte_count1, byte_count2);
-        Memcpy(data_.get() + offset_, start_pos, to_write);
+        i64 to_write = std::min(byte_count1, byte_count2);
+        std::memcpy(data_.get() + offset_, start_pos, to_write);
         offset_ += to_write;
         start_pos += to_write;
         if (offset_ == buffer_size_) {
@@ -82,19 +96,19 @@ void FileWriter::Write(const char_t *buffer, SizeT bytes_count) {
 
 void FileWriter::Sync() {
     Flush();
-    file_handler_->Sync();
+    file_handle_->Sync();
 }
 
 void FileWriter::Flush() {
     if (offset_ == 0) {
         return;
     }
-    fs_.Write(*file_handler_, data_.get(), offset_);
+    file_handle_->Append(data_.get(), offset_);
     total_written_ += offset_;
     offset_ = 0;
 }
 
-i64 FileWriter::GetFileSize() { return fs_.GetFileSize(*file_handler_) + offset_; }
+i64 FileWriter::GetFileSize() { return file_handle_->FileSize() + offset_; }
 
 SizeT FileWriter::TotalWrittenBytes() const { return total_written_ + offset_; }
 

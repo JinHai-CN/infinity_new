@@ -96,6 +96,8 @@ export enum class ExpressionType {
     kSearch,
     kMatch,
     kFusion,
+    kMatchTensor,
+    kMatchSparse,
 
     // Misc.
     kKnn,
@@ -104,5 +106,11 @@ export enum class ExpressionType {
     kPlaceholder,
     kPredicate, // ?
     kRaw,
+
+    // Fulltext filter
+    kFilterFullText,
+
+    // Unnest
+    kUnnest,
 };
 }

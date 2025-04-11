@@ -14,7 +14,9 @@
 
 module;
 
-#include <memory>
+#include <vector>
+
+module bound_delete_statement;
 
 import bound_statement;
 import table_ref;
@@ -24,7 +26,7 @@ import logical_node;
 import query_context;
 import stl;
 import infinity_exception;
-
+import status;
 import base_table_ref;
 import subquery_table_ref;
 import expression_transformer;
@@ -35,34 +37,35 @@ import logical_table_scan;
 import logical_filter;
 import logical_delete;
 import subquery_unnest;
-import parser;
-import conjunction_expression;
 
-module bound_delete_statement;
+import conjunction_expression;
+import table_reference;
+import logger;
 
 namespace infinity {
 
 SharedPtr<LogicalNode> BoundDeleteStatement::BuildPlan(QueryContext *query_context) {
     const SharedPtr<BindContext> &bind_context = this->bind_context_;
-    SharedPtr<LogicalNode> from = BuildFrom(table_ref_ptr_, query_context, bind_context);
+    SharedPtr<LogicalNode> table_scan_node = BuildFrom(table_ref_ptr_, query_context, bind_context);
 
     auto base_table_ref = std::static_pointer_cast<BaseTableRef>(table_ref_ptr_);
-    SharedPtr<LogicalNode> del = MakeShared<LogicalDelete>(bind_context->GetNewLogicalNodeId(), base_table_ref->table_entry_ptr_);
+    SharedPtr<LogicalNode> delete_node = MakeShared<LogicalDelete>(bind_context->GetNewLogicalNodeId(), base_table_ref->table_info_);
 
     if (!where_conditions_.empty()) {
-        SharedPtr<LogicalNode> filter = BuildFilter(from, where_conditions_, query_context, bind_context);
-        filter->set_left_node(from);
-        del->set_left_node(filter);
+        SharedPtr<LogicalNode> filter_node = BuildFilter(table_scan_node, where_conditions_, query_context, bind_context);
+        filter_node->set_left_node(table_scan_node);
+        delete_node->set_left_node(filter_node);
     } else {
-        del->set_left_node(from);
+        delete_node->set_left_node(table_scan_node);
     }
-    return del;
+    return delete_node;
 }
 
 SharedPtr<LogicalNode>
 BoundDeleteStatement::BuildFrom(SharedPtr<TableRef> &table_ref, QueryContext *query_context, const SharedPtr<BindContext> &bind_context) {
-    if (table_ref == nullptr || table_ref->type_ != TableRefType::kTable) {
-        Error<PlannerException>("unsupported!");
+    if (table_ref.get() == nullptr || table_ref->type_ != TableRefType::kTable) {
+        String error_message = "Unsupported!";
+        UnrecoverableError(error_message);
     }
     return BuildBaseTable(table_ref, query_context, bind_context);
 }
@@ -102,7 +105,7 @@ void BoundDeleteStatement::BuildSubquery(SharedPtr<LogicalNode> &root,
                                          SharedPtr<BaseExpression> &condition,
                                          QueryContext *query_context,
                                          const SharedPtr<BindContext> &bind_context) {
-    if (condition == nullptr) {
+    if (condition.get() == nullptr) {
         return;
     }
 
@@ -111,7 +114,8 @@ void BoundDeleteStatement::BuildSubquery(SharedPtr<LogicalNode> &root,
     if (condition->type() == ExpressionType::kSubQuery) {
         if (building_subquery_) {
             // nested subquery
-            Error<PlannerException>("Nested subquery detected");
+            Status status = Status::SyntaxError("Nested subquery detected");
+            RecoverableError(status);
         }
         condition = UnnestSubquery(root, condition, query_context, bind_context);
     }

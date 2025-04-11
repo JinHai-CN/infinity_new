@@ -24,12 +24,13 @@ struct DateType {
 
     DateType() = default;
 
-    explicit DateType(int32_t date_value) : value(date_value){};
+    explicit constexpr DateType(int32_t date_value) : value(date_value) {};
 
-    // keep compatible with iresearch
+    inline int32_t GetValue() const { return value; }
+
     operator int32_t() const { return value; }
 
-    inline void FromString(const std::string &date_str) { FromString(date_str.c_str(), date_str.length()); }
+    inline void FromString(const std::string_view &date_str) { FromString(date_str.data(), date_str.size()); }
 
     void FromString(const char *date, size_t length);
 
@@ -38,6 +39,8 @@ struct DateType {
     [[nodiscard]] std::string ToString() const;
 
     int32_t value{0};
+
+    int64_t GetEpochTime() const;
 
 private:
     static bool ConvertFromString(const char *date_ptr, size_t length, DateType &date, size_t &end_length);
@@ -68,6 +71,8 @@ public:
     static bool Subtract(DateType input, IntervalType interval, DateType &output);
 
     static int64_t GetDatePart(DateType input, TimeUnit unit);
+
+    static bool OuterDate2YMD(DateType input, int32_t &year, int32_t &month, int32_t &day);
 };
 
 } // namespace infinity

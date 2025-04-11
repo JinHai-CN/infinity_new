@@ -14,19 +14,20 @@
 
 module;
 
+module insert_binder;
+
 import stl;
 import base_expression;
-import parser;
+
 import bind_context;
 import column_expression;
 import function;
-
+import status;
 import infinity_exception;
 import third_party;
 import function_set;
 import bind_alias_proxy;
-
-module insert_binder;
+import logger;
 
 namespace infinity {
 
@@ -35,8 +36,9 @@ SharedPtr<BaseExpression> InsertBinder::BuildExpression(const ParsedExpr &expr, 
     return result;
 }
 
-SharedPtr<BaseExpression> InsertBinder::BuildKnnExpr(const KnnExpr &, BindContext *, i64 , bool ) {
-    Error<PlannerException>("KNN expression isn't supported in insert clause");
+SharedPtr<BaseExpression> InsertBinder::BuildKnnExpr(const KnnExpr &, BindContext *, i64, bool) {
+    Status status = Status::SyntaxError("KNN expression isn't supported in insert clause");
+    RecoverableError(status);
     return nullptr;
 }
 

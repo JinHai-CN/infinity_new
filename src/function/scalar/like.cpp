@@ -14,16 +14,20 @@
 
 module;
 
+module like;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module like;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
+import status;
 
 namespace infinity {
 
@@ -74,67 +78,71 @@ bool LikeOperator(const ptr_t left_ptr, SizeT left_len, const ptr_t right_ptr, S
 struct LikeFunction {
     template <typename TA, typename TB, typename TC>
     static inline void Run(TA, TB, TC &) {
-        Error<NotImplementException>("Not implement");
+        Status status = Status::NotSupport("Not support: Like function");
+        RecoverableError(status);
     }
 };
 
 template <>
 inline void LikeFunction::Run(VarcharT &, VarcharT &, bool &) {
-    Error<NotImplementException>("Not implement: varchar like varchar");
+    String error_message = "Not implement";
+    UnrecoverableError(error_message);
 
-//    ptr_t left_ptr = left.GetDataPtr();
-//    SizeT left_len = left.GetDataLen();
-//    ptr_t right_ptr = right.GetDataPtr();
-//    SizeT right_len = right.GetDataLen();
+    //    ptr_t left_ptr = left.GetDataPtr();
+    //    SizeT left_len = left.GetDataLen();
+    //    ptr_t right_ptr = right.GetDataPtr();
+    //    SizeT right_len = right.GetDataLen();
 
-//    result = LikeOperator(left_ptr, left_len, right_ptr, right_len);
+    //    result = LikeOperator(left_ptr, left_len, right_ptr, right_len);
 }
 
 struct NotLikeFunction {
     template <typename TA, typename TB, typename TC>
     static inline void Run(TA, TB, TC &) {
-        Error<NotImplementException>("Not implement");
+        String error_message = "Not implement";
+        UnrecoverableError(error_message);
     }
 };
 
 template <>
 inline void NotLikeFunction::Run(VarcharT &, VarcharT &, bool &) {
-    Error<NotImplementException>("Not implement: varchar not like varchar");
+    String error_message = "Not implement";
+    UnrecoverableError(error_message);
 
-//    ptr_t left_ptr = left.GetDataPtr();
-//    SizeT left_len = left.GetDataLen();
-//    ptr_t right_ptr = right.GetDataPtr();
-//    SizeT right_len = right.GetDataLen();
+    //    ptr_t left_ptr = left.GetDataPtr();
+    //    SizeT left_len = left.GetDataLen();
+    //    ptr_t right_ptr = right.GetDataPtr();
+    //    SizeT right_len = right.GetDataLen();
 
-//    result = !LikeOperator(left_ptr, left_len, right_ptr, right_len);
+    //    result = !LikeOperator(left_ptr, left_len, right_ptr, right_len);
 }
 
-void RegisterLikeFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterLikeFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "like";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
 
     ScalarFunction varchar_like_function(func_name,
                                          {DataType(LogicalType::kVarchar), DataType(LogicalType::kVarchar)},
-                                         DataType(kBoolean),
+                                         DataType(LogicalType::kBoolean),
                                          &ScalarFunction::BinaryFunction<VarcharT, VarcharT, BooleanT, LikeFunction>);
     function_set_ptr->AddFunction(varchar_like_function);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
-void RegisterNotLikeFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterNotLikeFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "not_like";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
 
     ScalarFunction varchar_not_like_function(func_name,
                                              {DataType(LogicalType::kVarchar), DataType(LogicalType::kVarchar)},
-                                             DataType(kBoolean),
+                                             DataType(LogicalType::kBoolean),
                                              &ScalarFunction::BinaryFunction<VarcharT, VarcharT, BooleanT, NotLikeFunction>);
     function_set_ptr->AddFunction(varchar_not_like_function);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

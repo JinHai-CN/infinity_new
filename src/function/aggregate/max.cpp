@@ -14,16 +14,20 @@
 
 module;
 
+module max;
+
 import stl;
 import catalog;
-
+import status;
 import infinity_exception;
 import aggregate_function;
 import aggregate_function_set;
-import parser;
-import third_party;
 
-module max;
+import third_party;
+import logical_type;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -32,15 +36,30 @@ struct MaxState {
 public:
     ValueType value_;
 
-    void Initialize() { Error<NotImplementException>("Not implemented"); }
+    void Initialize() {
+        String error_message = "Not implement: Max::Initialize";
+        UnrecoverableError(error_message);
+    }
 
-    void Update(const ValueType *__restrict, SizeT) { Error<NotImplementException>("Not implemented"); }
+    void Update(const ValueType *__restrict, SizeT) {
+        String error_message = "Not implement: Max::Update";
+        UnrecoverableError(error_message);
+    }
 
-    inline void ConstantUpdate(const ValueType *__restrict, SizeT, SizeT) { Error<NotImplementException>("Not implemented"); }
+    inline void ConstantUpdate(const ValueType *__restrict, SizeT, SizeT) {
+        String error_message = "Not implement: Max::ConstantUpdate";
+        UnrecoverableError(error_message);
+    }
 
-    [[nodiscard]] ptr_t Finalize() const { Error<NotImplementException>("Not implemented"); }
+    [[nodiscard]] ptr_t Finalize() const {
+        String error_message = "Not implement: Max::Finalize";
+        UnrecoverableError(error_message);
+    }
 
-    inline static SizeT Size(const DataType &) { Error<NotImplementException>("Not implemented"); }
+    inline static SizeT Size(const DataType &) {
+        String error_message = "Not implement: Max::Size";
+        UnrecoverableError(error_message);
+    }
 };
 
 template <>
@@ -64,7 +83,7 @@ struct MaxState<TinyIntT, TinyIntT> {
 public:
     TinyIntT value_;
 
-    void Initialize() { this->value_ = i8_min; }
+    void Initialize() { this->value_ = std::numeric_limits<i8>::min(); }
 
     void Update(const TinyIntT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
 
@@ -80,7 +99,7 @@ struct MaxState<SmallIntT, SmallIntT> {
 public:
     SmallIntT value_;
 
-    void Initialize() { this->value_ = i16_min; }
+    void Initialize() { this->value_ = std::numeric_limits<i16>::min(); }
 
     void Update(const SmallIntT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
 
@@ -96,7 +115,7 @@ struct MaxState<IntegerT, IntegerT> {
 public:
     IntegerT value_;
 
-    void Initialize() { this->value_ = i32_min; }
+    void Initialize() { this->value_ = std::numeric_limits<i32>::min(); }
 
     void Update(const IntegerT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
 
@@ -112,7 +131,7 @@ struct MaxState<BigIntT, BigIntT> {
 public:
     BigIntT value_;
 
-    void Initialize() { this->value_ = i64_min; }
+    void Initialize() { this->value_ = std::numeric_limits<i64>::min(); }
 
     void Update(const BigIntT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
 
@@ -129,8 +148,8 @@ public:
     HugeIntT value_;
 
     void Initialize() {
-        this->value_.lower = i64_min;
-        this->value_.upper = i64_min;
+        this->value_.lower = std::numeric_limits<i64>::min();
+        this->value_.upper = std::numeric_limits<i64>::min();
     }
 
     void Update(const HugeIntT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
@@ -143,11 +162,43 @@ public:
 };
 
 template <>
+struct MaxState<Float16T, Float16T> {
+public:
+    Float16T value_;
+
+    void Initialize() { this->value_ = std::numeric_limits<Float16T>::min(); }
+
+    void Update(const Float16T *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
+
+    inline void ConstantUpdate(const Float16T *__restrict input, SizeT idx, SizeT) { value_ = value_ < input[idx] ? input[idx] : value_; }
+
+    inline ptr_t Finalize() { return (ptr_t)&value_; }
+
+    inline static SizeT Size(const DataType &) { return sizeof(Float16T); }
+};
+
+template <>
+struct MaxState<BFloat16T, BFloat16T> {
+public:
+    BFloat16T value_;
+
+    void Initialize() { this->value_ = std::numeric_limits<BFloat16T>::min(); }
+
+    void Update(const BFloat16T *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
+
+    inline void ConstantUpdate(const BFloat16T *__restrict input, SizeT idx, SizeT) { value_ = value_ < input[idx] ? input[idx] : value_; }
+
+    inline ptr_t Finalize() { return (ptr_t)&value_; }
+
+    inline static SizeT Size(const DataType &) { return sizeof(BFloat16T); }
+};
+
+template <>
 struct MaxState<FloatT, FloatT> {
 public:
     FloatT value_;
 
-    void Initialize() { this->value_ = f32_min; }
+    void Initialize() { this->value_ = std::numeric_limits<f32>::min(); }
 
     void Update(const FloatT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
 
@@ -163,7 +214,7 @@ struct MaxState<DoubleT, DoubleT> {
 public:
     DoubleT value_;
 
-    void Initialize() { this->value_ = f64_min; }
+    void Initialize() { this->value_ = std::numeric_limits<f64>::min(); }
 
     void Update(const DoubleT *__restrict input, SizeT idx) { value_ = value_ < input[idx] ? input[idx] : value_; }
 
@@ -174,7 +225,7 @@ public:
     inline static SizeT Size(const DataType &) { return sizeof(DoubleT); }
 };
 
-void RegisterMaxFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterMaxFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "MAX";
 
     SharedPtr<AggregateFunctionSet> function_set_ptr = MakeShared<AggregateFunctionSet>(func_name);
@@ -224,6 +275,18 @@ void RegisterMaxFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
             UnaryAggregate<MaxState<DoubleT, DoubleT>, DoubleT, DoubleT>(func_name, DataType(LogicalType::kDouble), DataType(LogicalType::kDouble));
         function_set_ptr->AddFunction(max_function);
     }
+    {
+        AggregateFunction max_function = UnaryAggregate<MaxState<Float16T, Float16T>, Float16T, Float16T>(func_name,
+                                                                                                          DataType(LogicalType::kFloat16),
+                                                                                                          DataType(LogicalType::kFloat16));
+        function_set_ptr->AddFunction(max_function);
+    }
+    {
+        AggregateFunction max_function = UnaryAggregate<MaxState<BFloat16T, BFloat16T>, BFloat16T, BFloat16T>(func_name,
+                                                                                                              DataType(LogicalType::kBFloat16),
+                                                                                                              DataType(LogicalType::kBFloat16));
+        function_set_ptr->AddFunction(max_function);
+    }
 #if 0
 
     {
@@ -241,7 +304,7 @@ void RegisterMaxFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
         function_set_ptr->AddFunction(max_function);
     }
 #endif
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

@@ -1,6 +1,14 @@
 add_compile_options(-Wno-everything)
-# Build cxxopts
-add_subdirectory(cxxopts)
+
+################################################################################
+### snappy
+################################################################################
+add_subdirectory(snappy)
+
+################################################################################
+### arrow
+################################################################################
+add_subdirectory(arrow)
 
 # Build doctest
 add_subdirectory(googletest)
@@ -10,15 +18,6 @@ add_subdirectory(magic_enum)
 
 # Build spdlog
 add_subdirectory(spdlog)
-
-set(TLSF_DIR tlsf)
-add_library(
-        tlsf
-        ${TLSF_DIR}/tlsf.cpp
-)
-
-# Build roaring
-add_subdirectory(croaring)
 
 # Build mlas
 add_subdirectory(mlas)
@@ -34,13 +33,6 @@ add_subdirectory(newpfor)
 
 # Build zsv
 add_subdirectory(zsv)
-
-################################################################################
-### Highway library
-################################################################################
-
-set(BUILD_TESTING OFF CACHE INTERNAL "" FORCE)
-add_subdirectory(highway)
 
 ################################################################################
 ### sse2neon
@@ -60,18 +52,49 @@ if (ARCH_AARCH64)
 endif ()
 
 ################################################################################
-### OpenFST
+### thrift
 ################################################################################
-
-add_subdirectory(openfst)
-
-################################################################################
-### iresearch
-################################################################################
-
-add_subdirectory(iresearch)
+add_subdirectory(thrift)
 
 ################################################################################
 ### thrift
 ################################################################################
-add_subdirectory(thrift)
+add_subdirectory(oatpp)
+
+################################################################################
+### fastpfor
+################################################################################
+add_subdirectory(fastpfor)
+
+################################################################################
+### ijma
+################################################################################
+add_subdirectory(ijma)
+
+################################################################################
+### opencc
+################################################################################
+add_subdirectory(opencc)
+
+add_subdirectory(minio-cpp)
+add_subdirectory(curlpp)
+add_subdirectory(pugixml)
+
+add_library(inih STATIC
+        inih/cpp/INIReader.cpp
+        inih/ini.c
+)
+
+add_subdirectory(curl)
+
+add_subdirectory(re2)
+
+add_subdirectory(pcre2)
+target_compile_options(
+        inih
+        PRIVATE
+        -O3 -Wno-sign-compare
+        -fPIC
+)
+
+add_subdirectory(rocksdb)

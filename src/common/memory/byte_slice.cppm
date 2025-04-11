@@ -1,7 +1,6 @@
 module;
 
 import stl;
-import memory_pool;
 
 export module byte_slice;
 
@@ -13,25 +12,27 @@ export struct ByteSlice {
     ByteSlice() = default;
 
     bool operator==(const ByteSlice &other) const {
-        return next_ == other.next_ && data_ == other.data_ && size_ == other.size_ && data_size_ == other.data_size_ && offset_ == other.offset_;
+        return next_ == other.next_ && data_ == other.data_ && size_ == other.size_ && offset_ == other.offset_;
     }
 
     static constexpr SizeT GetHeadSize() { return sizeof(ByteSlice); }
 
-    static ByteSlice *CreateSlice(SizeT data_size, MemoryPool *pool = nullptr);
+    static ByteSlice *CreateSlice(SizeT data_size);
 
-    static void DestroySlice(ByteSlice *slice, MemoryPool *pool = nullptr);
+    static ByteSlice *NewSlice(u8 *data, SizeT data_size);
+
+    static void DestroySlice(ByteSlice *slice);
 
     static ByteSlice *GetEmptySlice() {
         static ByteSlice slice;
         return &slice;
     }
 
-    ByteSlice *next_ = nullptr;
-    u8 *data_ = nullptr;
-    SizeT size_ = 0;
-    SizeT data_size_ = 0;
-    SizeT offset_ = 0;
+    u8 *volatile data_ = nullptr;
+    SizeT volatile size_ = 0;
+    SizeT volatile offset_ = 0;
+    bool volatile owned_ = true;
+    ByteSlice *volatile next_ = nullptr;
 };
 
 #pragma pack(pop)
@@ -57,12 +58,12 @@ public:
 
     void MergeWith(ByteSliceList &other);
 
-    virtual void Clear(MemoryPool *pool);
+    virtual void Clear();
 
 private:
     ByteSlice *head_;
     ByteSlice *tail_;
-    SizeT total_size_;
+    SizeT volatile total_size_;
 };
 
 export class ByteSliceListIterator {

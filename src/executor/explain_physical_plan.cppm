@@ -16,103 +16,65 @@ module;
 
 import stl;
 import physical_operator;
+import physical_union_all;
+import physical_index_scan;
+import physical_dummy_scan;
+import physical_hash_join;
+import physical_sort_merge_join;
+import physical_index_join;
+import physical_top;
+import physical_delete;
+import physical_update;
+import physical_import;
+import physical_export;
+import physical_alter;
+import physical_create_view;
+import physical_drop_view;
+import physical_create_schema;
+import physical_create_table;
+import physical_create_index_prepare;
+import physical_create_collection;
+import physical_drop_schema;
+import physical_drop_table;
+import physical_drop_collection;
+import physical_insert;
+import physical_project;
+import physical_filter;
+import physical_table_scan;
+import physical_knn_scan;
+import physical_aggregate;
+import physical_sort;
+import physical_limit;
+import physical_cross_product;
+import physical_nested_loop_join;
+import physical_show;
+import physical_flush;
+import physical_source;
+import physical_sink;
+import physical_parallel_aggregate;
+import physical_merge_parallel_aggregate;
+import physical_intersect;
+import physical_except;
+import physical_hash;
+import physical_merge_hash;
+import physical_merge_limit;
+import physical_merge_top;
+import physical_merge_sort;
+import physical_merge_knn;
+import physical_merge_match_tensor;
+import physical_merge_match_sparse;
+import physical_match;
+import physical_match_tensor_scan;
+import physical_fusion;
+import physical_merge_aggregate;
+import physical_match_sparse_scan;
+import physical_read_cache;
+import physical_unnest;
+import physical_unnest_aggregate;
 
 export module explain_physical_plan;
 
 namespace infinity {
-
-class PhysicalUnionAll;
-
-class PhysicalIndexScan;
-
-class PhysicalDummyScan;
-
-class PhysicalHashJoin;
-
-class PhysicalSortMergeJoin;
-
-class PhysicalIndexJoin;
-
-class PhysicalTop;
-
-class PhysicalDelete;
-
-class PhysicalUpdate;
-
-class PhysicalImport;
-
-class PhysicalExport;
-
-class PhysicalAlter;
-
-class PhysicalCreateView;
-
-class PhysicalDropView;
-
-class PhysicalCreateSchema;
-
-class PhysicalCreateTable;
-
-class PhysicalCreateIndex;
-
-class PhysicalCreateCollection;
-
-class PhysicalDropSchema;
-
-class PhysicalDropTable;
-
-class PhysicalDropCollection;
-
-class PhysicalInsert;
-
-class PhysicalProject;
-
-class PhysicalFilter;
-
-class PhysicalTableScan;
-
-class PhysicalKnnScan;
-
-class PhysicalAggregate;
-
-class PhysicalSort;
-
-class PhysicalLimit;
-
-class PhysicalCrossProduct;
-
-class PhysicalNestedLoopJoin;
-
-class PhysicalShow;
-
-class PhysicalFlush;
-
-class PhysicalSource;
-
-class PhysicalSink;
-
-class PhysicalParallelAggregate;
-
-class PhysicalMergeParallelAggregate;
-
-class PhysicalIntersect;
-
-class PhysicalExcept;
-
-class PhysicalHash;
-
-class PhysicalMergeHash;
-
-class PhysicalMergeLimit;
-
-class PhysicalMergeTop;
-
-class PhysicalMergeSort;
-
-class PhysicalMergeKnn;
-
-class PhysicalMatch;
-class PhysicalFusion;
 
 export class ExplainPhysicalPlan {
 public:
@@ -150,10 +112,7 @@ public:
 
     static void Explain(const PhysicalCreateTable *create_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
-    static void Explain(const PhysicalCreateIndex *create_index,
-                        SharedPtr<Vector<SharedPtr<String>>> &result,
-
-                        i64 intent_size = 0);
+    static void Explain(const PhysicalCreateIndexPrepare *create_index, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
     static void Explain(const PhysicalCreateCollection *create_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
@@ -191,15 +150,10 @@ public:
 
     static void Explain(const PhysicalSink *flush_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
-    static void Explain(const PhysicalParallelAggregate *parallel_aggregate_node,
-                        SharedPtr<Vector<SharedPtr<String>>> &result,
+    static void Explain(const PhysicalParallelAggregate *parallel_aggregate_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
-                        i64 intent_size = 0);
-
-    static void Explain(const PhysicalMergeParallelAggregate *merge_parallel_aggregate_node,
-                        SharedPtr<Vector<SharedPtr<String>>> &result,
-
-                        i64 intent_size = 0);
+    static void
+    Explain(const PhysicalMergeParallelAggregate *merge_parallel_aggregate_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
     static void Explain(const PhysicalIntersect *intersect_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
@@ -218,7 +172,24 @@ public:
     static void Explain(const PhysicalMergeKnn *merge_knn_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 
     static void Explain(const PhysicalMatch *match_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalMatchTensorScan *match_tensor_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalMatchSparseScan *match_sparse_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalMergeMatchTensor *merge_match_tensor_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalMergeMatchSparse *merge_match_sparse_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
     static void Explain(const PhysicalFusion *fusion_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalMergeAggregate *fusion_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalReadCache *read_cache_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalUnnest *unnest_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
+
+    static void Explain(const PhysicalUnnestAggregate *unnest_node, SharedPtr<Vector<SharedPtr<String>>> &result, i64 intent_size = 0);
 };
 
 } // namespace infinity

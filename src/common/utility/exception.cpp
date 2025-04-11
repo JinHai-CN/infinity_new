@@ -16,14 +16,34 @@ module;
 
 #include <cstdlib>
 #include <execinfo.h>
+#include <iostream>
+
+module infinity_exception;
 
 import stl;
 import logger;
 import third_party;
-
-module infinity_exception;
+import infinity_context;
+import cleanup_scanner;
+import txn_manager;
+import txn_context;
 
 namespace infinity {
+
+void PrintTransactionHistory() {
+    TxnManager *txn_manager = InfinityContext::instance().storage()->txn_manager();
+    if (!txn_manager) {
+        LOG_WARN("TxnManager is null");
+        return;
+    }
+    Vector<SharedPtr<TxnContext>> txn_contexts = txn_manager->GetTxnContextHistories();
+
+    SizeT history_count = txn_contexts.size();
+    for (SizeT idx = 0; idx < history_count; ++idx) {
+        SharedPtr<TxnContext> txn_history = txn_contexts[idx];
+        LOG_CRITICAL(txn_history->ToString());
+    }
+}
 
 void PrintStacktrace(const String &err_msg) {
     int trace_stack_depth = 256;
@@ -31,19 +51,71 @@ void PrintStacktrace(const String &err_msg) {
     int stack_num = backtrace(array, trace_stack_depth);
     char **stacktrace = backtrace_symbols(array, stack_num);
 
-    LOG_CRITICAL(Format("Error: {}", err_msg));
+    LOG_CRITICAL(fmt::format("Error: {}", err_msg));
     for (int i = 0; i < stack_num; ++i) {
         String info = stacktrace[i];
-        LOG_CRITICAL(Format("{}, {}", i, info));
+        LOG_CRITICAL(fmt::format("{}, {}", i, info));
     }
     free(stacktrace);
 }
 
-void Error(const String &message, const char *file_name, u32 line) {
-    String err_msg = message;
-    err_msg.append(" @").append(infinity::TrimPath(file_name)).append(":").append(ToStr(line));
-    PrintStacktrace(err_msg);
-    throw Exception(err_msg);
+#define ADD_LOG_INFO
+
+#if defined(INFINITY_DEBUG) || defined(ADD_LOG_INFO)
+
+void RecoverableError(Status status, const char *file_name, u32 line) {
+    status.AppendMessage(fmt::format("@{}:{}", infinity::TrimPath(file_name), line));
+    if (IS_LOGGER_INITIALIZED()) {
+        LOG_ERROR(status.message());
+    }
+    throw RecoverableException(status);
 }
+
+std::string_view GetErrorMsg(const String &message) {
+    auto pos = message.find_first_of('@', 0);
+    return {message.data(), pos};
+}
+
+void UnrecoverableError(const String &message, const char *file_name, u32 line) {
+    auto *storage = InfinityContext::instance().storage();
+    if (storage != nullptr) {
+        if (storage->txn_manager() != nullptr) {
+            infinity::PrintTransactionHistory();
+        }
+    }
+    // if (storage != nullptr) {
+    //     CleanupInfoTracer *cleanup_tracer = storage->cleanup_info_tracer();
+    //     String error_msg = cleanup_tracer->GetCleanupInfo();
+    //     LOG_ERROR(std::move(error_msg));
+    // }
+    String location_message = fmt::format("{}@{}:{}", message, infinity::TrimPath(file_name), line);
+    if (IS_LOGGER_INITIALIZED()) {
+
+        PrintStacktrace(location_message);
+    }
+    Logger::Flush();
+    throw UnrecoverableException(location_message);
+}
+
+#else
+
+void RecoverableError(Status status) {
+    if (IS_LOGGER_INITIALIZED()) {
+        LOG_ERROR(status.message());
+    }
+    throw RecoverableException(status);
+}
+
+void UnrecoverableError(const String &message) {
+    if (IS_LOGGER_INITIALIZED()) {
+        LOG_CRITICAL(message);
+    }
+    Logger::Flush();
+    throw UnrecoverableException(message);
+}
+
+std::string_view GetErrorMsg(const String &message) { return message; }
+
+#endif
 
 } // namespace infinity

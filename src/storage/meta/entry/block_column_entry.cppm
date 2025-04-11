@@ -14,80 +14,150 @@
 
 module;
 
-export module catalog:block_column_entry;
-
-import :base_entry;
+export module block_column_entry;
 
 import stl;
 import buffer_obj;
-import parser;
+import data_type;
 import third_party;
-import column_buffer;
-import outline_info;
 import buffer_manager;
 import column_vector;
-import local_file_system;
 import vector_buffer;
-
+import txn;
+import internal_types;
+import base_entry;
+import column_def;
+import value;
+import cleanup_scanner;
+import snapshot_info;
+import meta_info;
 
 namespace infinity {
 
-export struct BlockEntry;
-export struct TableEntry;
-export struct SegmentEntry;
+struct BlockEntry;
+struct TableEntry;
+struct SegmentEntry;
 
-export struct BlockColumnEntry : public BaseEntry {
-    friend struct BlockEntry;
+export struct BlockColumnEntry final : public BaseEntry {
 public:
-    static UniquePtr<BlockColumnEntry>
-    MakeNewBlockColumnEntry(const BlockEntry *block_entry, u64 column_id, BufferManager *buffer_manager, bool is_replay = false);
+    friend struct BlockEntry;
 
-    inline explicit BlockColumnEntry(const BlockEntry *block_entry, u64 column_id, const SharedPtr<String> &base_dir_ref)
-        : BaseEntry(EntryType::kBlockColumn), block_entry_(block_entry), column_id_(column_id), base_dir_(base_dir_ref) {}
+    static Vector<std::string_view> DecodeIndex(std::string_view encode);
 
-    Json Serialize();
+    static String EncodeIndex(const ColumnID column_id, const BlockEntry *block_entry);
 
-    static UniquePtr<BlockColumnEntry> Deserialize(const Json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr);
+public:
+    explicit BlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id);
+
+    ~BlockColumnEntry() override;
+
+private:
+    BlockColumnEntry(const BlockColumnEntry &other);
+
+public:
+    UniquePtr<BlockColumnEntry> Clone(BlockEntry *block_entry) const;
+
+    static UniquePtr<BlockColumnEntry> NewBlockColumnEntry(const BlockEntry *block_entry, ColumnID column_id, Txn *txn);
+
+    static UniquePtr<BlockColumnEntry> NewReplayBlockColumnEntry(const BlockEntry *block_entry,
+                                                                 ColumnID column_id,
+                                                                 BufferManager *buffer_manager,
+                                                                 const u32 next_outline_idx,
+                                                                 const u64 last_chunk_offset,
+                                                                 const TxnTimeStamp commit_ts);
+
+    static UniquePtr<BlockColumnEntry> ApplyBlockColumnSnapshot(BlockEntry *block_entry,
+                                                                BlockColumnSnapshotInfo *block_column_snapshot_info,
+                                                                TransactionID txn_id,
+                                                                TxnTimeStamp begin_ts);
+
+    SharedPtr<BlockColumnInfo> GetColumnInfo() const;
+
+    SharedPtr<BlockColumnSnapshotInfo> GetSnapshotInfo() const;
+
+    nlohmann::json Serialize();
+
+    static UniquePtr<BlockColumnEntry> Deserialize(const nlohmann::json &column_data_json, BlockEntry *block_entry, BufferManager *buffer_mgr);
+
+    void CommitColumn(TransactionID txn_id, TxnTimeStamp commit_ts);
 
 public:
     // Getter
     inline const SharedPtr<DataType> &column_type() const { return column_type_; }
     inline BufferObj *buffer() const { return buffer_; }
     inline u64 column_id() const { return column_id_; }
-    inline const SharedPtr<String> &base_dir() const { return base_dir_; }
-    inline const BlockEntry *block_entry() const { return block_entry_; }
+    inline const SharedPtr<String> &filename() const { return filename_; }
+    inline const BlockEntry *block_entry() { return block_entry_; }
 
-    static SharedPtr<String> OutlineFilename(u64 column_id, SizeT file_idx) {
-        return MakeShared<String>(Format("col_{}_out_{}", column_id, file_idx));
+    SharedPtr<String> OutlineFilename(SizeT file_idx) const { return MakeShared<String>(fmt::format("col_{}_out_{}", column_id_, file_idx)); }
+
+    // Relative to `data_dir` config item
+    String FilePath() const;
+
+    // Relative to `data_dir` config item
+    SharedPtr<String> FileDir() const;
+
+    Vector<String> FilePaths() const;
+
+public:
+    ColumnVector GetColumnVector(BufferManager *buffer_mgr, SizeT row_count);
+
+    ColumnVector GetConstColumnVector(BufferManager *buffer_mgr, SizeT row_count);
+
+private:
+    ColumnVector GetColumnVectorInner(BufferManager *buffer_mgr, const ColumnVectorTipe tipe, SizeT row_count);
+
+public:
+    void AppendOutlineBuffer(BufferObj *buffer) {
+        std::unique_lock lock(mutex_);
+        outline_buffers_.emplace_back(buffer);
+        buffer->AddObjRc();
     }
 
-    String FilePath() { return LocalFileSystem::ConcatenateFilePath(*base_dir_, *file_name_); }
-    Vector<String> OutlinePaths() const;
+    BufferObj *GetOutlineBuffer(SizeT idx) const {
+        std::shared_lock lock(mutex_);
+        return outline_buffers_.empty() ? nullptr : outline_buffers_[idx];
+    }
 
-    ColumnBuffer GetColumnData(BufferManager *buffer_manager);
+    SizeT OutlineBufferCount() const {
+        std::shared_lock lock(mutex_);
+        return outline_buffers_.size();
+    }
 
-    // Append used in import and wal_replay
-    void
-    AppendRaw(SizeT dst_offset, const_ptr_t src_ptr, SizeT data_size, SharedPtr<VectorBuffer> vector_buffer);
+    u64 LastChunkOff() const { return last_chunk_offset_; }
 
-protected:
+    void SetLastChunkOff(u64 offset) { last_chunk_offset_ = offset; }
 
-    static void
-    Append(BlockColumnEntry *column_entry, u16 column_entry_offset, ColumnVector *input_column_vector, u16 input_offset, SizeT append_rows);
+public:
+    static void Flush(BlockColumnEntry *block_column_entry, SizeT start_row_count, SizeT checkpoint_row_count);
 
+    void FlushColumnCheck(TxnTimeStamp checkpoint_ts);
 
-    static void Flush(BlockColumnEntry *block_column_entry, SizeT row_count);
+    void FlushColumn(TxnTimeStamp checkpoint_ts);
 
-protected:
+    void Cleanup(CleanupInfoTracer *info_tracer = nullptr, bool dropped = true) override;
+
+    Vector<String> GetFilePath(Txn* txn) const final;
+
+    void DropColumn();
+
+    void FillWithDefaultValue(SizeT row_count, const Value *default_value, BufferManager *buffer_mgr);
+
+    SizeT GetStorageSize() const;
+
+    void ToMmap();
+
+private:
     const BlockEntry *block_entry_{nullptr};
-    u64 column_id_{};
+    ColumnID column_id_{};
     SharedPtr<DataType> column_type_{};
     BufferObj *buffer_{};
 
-    SharedPtr<String> base_dir_{};
-    SharedPtr<String> file_name_{};
+    SharedPtr<String> filename_{};
 
-    UniquePtr<OutlineInfo> outline_info_{};
+    mutable std::shared_mutex mutex_{};
+    Vector<BufferObj *> outline_buffers_;
+    u64 last_chunk_offset_{};
 };
 
 } // namespace infinity

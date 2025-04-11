@@ -14,19 +14,20 @@
 
 module;
 
+module having_binder;
+
 import stl;
 import base_expression;
-import parser;
+
 import bind_context;
 import column_expression;
 import function;
-
+import status;
 import infinity_exception;
 import third_party;
 import function_set;
 import bind_alias_proxy;
-
-module having_binder;
+import logger;
 
 namespace infinity {
 
@@ -43,7 +44,7 @@ SharedPtr<BaseExpression> HavingBinder::BuildExpression(const ParsedExpr &expr, 
             SharedPtr<ColumnExpression> result = ColumnExpression::Make(group_expr->Type(),
                                                                         bind_context_ptr->group_by_table_name_,
                                                                         bind_context_ptr->group_by_table_index_,
-                                                                        ToStr(groupby_index),
+                                                                        std::to_string(groupby_index),
                                                                         groupby_index,
                                                                         depth);
 
@@ -61,7 +62,7 @@ SharedPtr<BaseExpression> HavingBinder::BuildExpression(const ParsedExpr &expr, 
             SharedPtr<ColumnExpression> result = ColumnExpression::Make(aggregate_expr->Type(),
                                                                         bind_context_ptr->aggregate_table_name_,
                                                                         bind_context_ptr->aggregate_table_index_,
-                                                                        ToStr(aggregate_index),
+                                                                        std::to_string(aggregate_index),
                                                                         aggregate_index,
                                                                         depth);
 
@@ -69,7 +70,8 @@ SharedPtr<BaseExpression> HavingBinder::BuildExpression(const ParsedExpr &expr, 
             return result;
         } else {
             // in an aggregate function, which means aggregate function nested, which is error.
-            Error<PlannerException>("Aggregate function is called in another aggregate function.");
+            Status status = Status::SyntaxError("Aggregate function is called in another aggregate function.");
+            RecoverableError(status);
         }
     }
 
@@ -92,7 +94,8 @@ SharedPtr<BaseExpression> HavingBinder::BuildColExpr(const ColumnExpr &expr, Bin
         return result;
 
     } else {
-        Error<PlannerException>(Format("Column {}  must appear in the GROUP BY clause or be used in an aggregate function", expr.GetName()));
+        RecoverableError(
+            Status::SyntaxError(fmt::format("Column {} must appear in the GROUP BY clause or be used in an aggregate function", expr.GetName())));
     }
     return nullptr;
 }
@@ -102,7 +105,8 @@ SharedPtr<BaseExpression> HavingBinder::BuildFuncExpr(const FunctionExpr &expr, 
     SharedPtr<FunctionSet> function_set_ptr = FunctionSet::GetFunctionSet(query_context_->storage()->catalog(), expr);
     if (function_set_ptr->type_ == FunctionType::kAggregate) {
         if (this->binding_agg_func_) {
-            Error<PlannerException>("Aggregate function is called in another aggregate function.");
+            Status status = Status::SyntaxError("Aggregate function is called in another aggregate function.");
+            RecoverableError(status);
         } else {
             this->binding_agg_func_ = true;
         }
@@ -122,7 +126,7 @@ SharedPtr<BaseExpression> HavingBinder::BuildFuncExpr(const FunctionExpr &expr, 
         SharedPtr<ColumnExpression> result = ColumnExpression::Make(func_expr_ptr->Type(),
                                                                     bind_context_ptr->aggregate_table_name_,
                                                                     bind_context_ptr->aggregate_table_index_,
-                                                                    ToStr(aggregate_index),
+                                                                    std::to_string(aggregate_index),
                                                                     aggregate_index,
                                                                     depth);
 
@@ -133,7 +137,8 @@ SharedPtr<BaseExpression> HavingBinder::BuildFuncExpr(const FunctionExpr &expr, 
 }
 
 SharedPtr<BaseExpression> HavingBinder::BuildKnnExpr(const KnnExpr &, BindContext *, i64, bool) {
-    Error<PlannerException>("KNN expression isn't supported in having clause");
+    Status status = Status::SyntaxError("KNN expression isn't supported in having clause");
+    RecoverableError(status);
     return nullptr;
 }
 

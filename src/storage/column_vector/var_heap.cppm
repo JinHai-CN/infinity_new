@@ -14,27 +14,33 @@
 
 module;
 
+export module var_heap;
+
 import global_resource_usage;
 import stl;
 import allocator;
 import default_values;
 import vector_heap_chunk;
 
-export module var_heap;
-
 namespace infinity {
-
+#if 0
 export struct VarHeapManager {
     // Use to store string.
     static constexpr u64 CHUNK_COUNT_LIMIT = MAX_VECTOR_CHUNK_COUNT;
-    static constexpr u64 INVALID_CHUNK_OFFSET = u64_max;
+    static constexpr u64 INVALID_CHUNK_OFFSET = std::numeric_limits<u64>::max();
 
 public:
     inline explicit VarHeapManager(u64 chunk_size = MIN_VECTOR_CHUNK_SIZE) : current_chunk_size_(chunk_size) {
+#ifdef INFINITY_DEBUG
         GlobalResourceUsage::IncrObjectCount();
+#endif
     }
 
-    inline ~VarHeapManager() { GlobalResourceUsage::DecrObjectCount(); }
+    inline ~VarHeapManager() {
+#ifdef INFINITY_DEBUG
+GlobalResourceUsage::DecrObjectCount();
+#endif
+}
 
     // return value: start chunk id & chunk offset
     Pair<u64, u64> AppendToHeap(const char* data_ptr, SizeT nbytes);
@@ -69,5 +75,5 @@ private:
     u64 current_chunk_idx_{INITIAL_VECTOR_CHUNK_ID};
     u64 current_chunk_offset_{0};
 };
-
+#endif
 } // namespace infinity

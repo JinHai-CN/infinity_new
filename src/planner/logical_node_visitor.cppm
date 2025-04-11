@@ -14,6 +14,8 @@
 
 module;
 
+export module logical_node_visitor;
+
 import stl;
 import base_expression;
 import logical_node;
@@ -28,11 +30,9 @@ import in_expression;
 import subquery_expression;
 import knn_expression;
 import conjunction_expression;
-
-export module logical_node_visitor;
+import unnest_expression;
 
 namespace infinity {
-
 
 export class LogicalNodeVisitor {
 public:
@@ -69,6 +69,8 @@ public:
     virtual SharedPtr<BaseExpression> VisitReplace(const SharedPtr<SubqueryExpression> &expression);
 
     virtual SharedPtr<BaseExpression> VisitReplace(const SharedPtr<KnnExpression> &expression);
+
+    virtual SharedPtr<BaseExpression> VisitReplace(const SharedPtr<UnnestExpression> &expression);
 };
 
 } // namespace infinity

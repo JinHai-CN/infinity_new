@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
+
 import first;
 import function_set;
 import aggregate_function_set;
@@ -32,18 +33,26 @@ import column_expression;
 import value;
 import default_values;
 import data_block;
+import internal_types;
+import logical_type;
 #if 0
-class FirstFunctionTest : public BaseTest {};
+using namespace infinity;
+class FirstFunctionTest : public BaseTestParamStr {};
 
-TEST_F(FirstFunctionTest, first_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams,
+                         FirstFunctionTest,
+                         ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+
+TEST_P(FirstFunctionTest, first_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterFirstFunction(catalog_ptr);
 
     String op = "first";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kAggregate);
     SharedPtr<AggregateFunctionSet> aggregate_function_set = std::static_pointer_cast<AggregateFunctionSet>(function_set);
     {
@@ -287,7 +296,7 @@ TEST_F(FirstFunctionTest, first_func) {
         data_block.Init(column_types);
 
         for (SizeT idx = 0; idx < row_count; ++idx) {
-            String s = "hello" + ToStr(idx);
+            String s = "hello" + std::to_string(idx);
             VarcharT varchar_value;
             varchar_value.InitAsValue(s);
             Value v = Value::MakeVarchar(varchar_value);

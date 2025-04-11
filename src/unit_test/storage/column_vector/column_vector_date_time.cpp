@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import logger;
 import column_vector;
 import value;
-import parser;
+
 import default_values;
 import third_party;
 import stl;
@@ -27,8 +28,28 @@ import selection;
 import vector_buffer;
 import global_resource_usage;
 import infinity_context;
+import internal_types;
+import logical_type;
+import data_type;
+import compilation_config;
 
-class ColumnVectorDateTimeTest : public BaseTest {};
+using namespace infinity;
+
+class ColumnVectorDateTimeTest : public BaseTest {
+    void SetUp() override {
+        using namespace infinity;
+
+        LoggerConfig logger_config;
+        logger_config.log_level_ = LogLevel::kOff;
+        Logger::Initialize(logger_config);
+    }
+
+    void TearDown() override {
+        using namespace infinity;
+
+        Logger::Shutdown();
+    }
+};
 
 TEST_F(ColumnVectorDateTimeTest, flat_date) {
     using namespace infinity;
@@ -37,13 +58,13 @@ TEST_F(ColumnVectorDateTimeTest, flat_date) {
     ColumnVector column_vector(data_type);
     column_vector.Initialize();
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), u64(DEFAULT_VECTOR_SIZE));
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -60,7 +81,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_date) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kDate);
         EXPECT_EQ(vx.value_.date.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -80,11 +101,11 @@ TEST_F(ColumnVectorDateTimeTest, flat_date) {
         EXPECT_EQ(vx.type().type(), LogicalType::kDate);
         EXPECT_EQ(vx.value_.date.value, static_cast<i32>(i));
     }
-    EXPECT_EQ(column_vector.Size(), DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE);
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(col_tinyint.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -92,13 +113,13 @@ TEST_F(ColumnVectorDateTimeTest, flat_date) {
 
     // ====
     column_vector.Initialize();
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -114,7 +135,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_date) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kDate);
         EXPECT_EQ(vx.value_.date.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -137,13 +158,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_date) {
 
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -157,11 +178,11 @@ TEST_F(ColumnVectorDateTimeTest, contant_date) {
         DateT date(static_cast<i32>(i));
         Value v = Value::MakeDate(date);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kDate);
         EXPECT_EQ(vx.value_.date.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
     for (i64 i = 0; i < 1; ++i) {
         Value vx = column_vector.GetValue(i);
@@ -170,8 +191,8 @@ TEST_F(ColumnVectorDateTimeTest, contant_date) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -180,13 +201,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_date) {
 
     // ====
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -199,11 +220,11 @@ TEST_F(ColumnVectorDateTimeTest, contant_date) {
         DateT date(static_cast<i32>(i));
         Value v = Value::MakeDate(date);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kDate);
         EXPECT_EQ(vx.value_.date.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 }
 
@@ -234,7 +255,7 @@ TEST_F(ColumnVectorDateTimeTest, date_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -267,7 +288,7 @@ TEST_F(ColumnVectorDateTimeTest, date_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -285,13 +306,13 @@ TEST_F(ColumnVectorDateTimeTest, flat_time) {
     ColumnVector column_vector(data_type);
     column_vector.Initialize();
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -308,7 +329,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_time) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kTime);
         EXPECT_EQ(vx.value_.time.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -330,8 +351,8 @@ TEST_F(ColumnVectorDateTimeTest, flat_time) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(col_tinyint.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -339,13 +360,13 @@ TEST_F(ColumnVectorDateTimeTest, flat_time) {
 
     // ====
     column_vector.Initialize();
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -361,7 +382,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_time) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kTime);
         EXPECT_EQ(vx.value_.time.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -384,13 +405,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_time) {
 
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -404,11 +425,11 @@ TEST_F(ColumnVectorDateTimeTest, contant_time) {
         TimeT time(static_cast<i32>(i));
         Value v = Value::MakeTime(time);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kTime);
         EXPECT_EQ(vx.value_.time.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
     for (i64 i = 0; i < 1; ++i) {
         Value vx = column_vector.GetValue(i);
@@ -417,8 +438,8 @@ TEST_F(ColumnVectorDateTimeTest, contant_time) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -427,13 +448,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_time) {
 
     // ====
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 4);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 4u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -446,11 +467,11 @@ TEST_F(ColumnVectorDateTimeTest, contant_time) {
         TimeT time(static_cast<i32>(i));
         Value v = Value::MakeTime(time);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kTime);
         EXPECT_EQ(vx.value_.time.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 }
 
@@ -481,7 +502,7 @@ TEST_F(ColumnVectorDateTimeTest, time_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -514,7 +535,7 @@ TEST_F(ColumnVectorDateTimeTest, time_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -532,13 +553,13 @@ TEST_F(ColumnVectorDateTimeTest, flat_datetime) {
     ColumnVector column_vector(data_type);
     column_vector.Initialize();
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -556,7 +577,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_datetime) {
         EXPECT_EQ(vx.type().type(), LogicalType::kDateTime);
         EXPECT_EQ(vx.value_.datetime.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.datetime.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -579,21 +600,21 @@ TEST_F(ColumnVectorDateTimeTest, flat_datetime) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.initialized, false);
 
     // ====
     column_vector.Initialize();
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -610,7 +631,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_datetime) {
         EXPECT_EQ(vx.type().type(), LogicalType::kDateTime);
         EXPECT_EQ(vx.value_.datetime.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.datetime.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -635,13 +656,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_datetime) {
 
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -655,12 +676,12 @@ TEST_F(ColumnVectorDateTimeTest, contant_datetime) {
         DateTimeT datetime(static_cast<i32>(i), static_cast<i32>(i));
         Value v = Value::MakeDateTime(datetime);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kDateTime);
         EXPECT_EQ(vx.value_.datetime.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.datetime.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
     for (i64 i = 0; i < 1; ++i) {
         Value vx = column_vector.GetValue(i);
@@ -670,8 +691,8 @@ TEST_F(ColumnVectorDateTimeTest, contant_datetime) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -680,13 +701,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_datetime) {
 
     // ====
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -699,12 +720,12 @@ TEST_F(ColumnVectorDateTimeTest, contant_datetime) {
         DateTimeT datetime(static_cast<i32>(i), static_cast<i32>(i));
         Value v = Value::MakeDateTime(datetime);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kDateTime);
         EXPECT_EQ(vx.value_.datetime.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.datetime.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 }
 
@@ -736,7 +757,7 @@ TEST_F(ColumnVectorDateTimeTest, datetime_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -771,7 +792,7 @@ TEST_F(ColumnVectorDateTimeTest, datetime_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -790,14 +811,14 @@ TEST_F(ColumnVectorDateTimeTest, flat_timestamp) {
     ColumnVector column_vector(data_type);
     column_vector.Initialize();
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.Size(), 0);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.Size(), 0u);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -815,7 +836,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_timestamp) {
         EXPECT_EQ(vx.type().type(), LogicalType::kTimestamp);
         EXPECT_EQ(vx.value_.timestamp.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.timestamp.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -838,21 +859,21 @@ TEST_F(ColumnVectorDateTimeTest, flat_timestamp) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.initialized, false);
 
     // ====
     column_vector.Initialize();
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -869,7 +890,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_timestamp) {
         EXPECT_EQ(vx.type().type(), LogicalType::kTimestamp);
         EXPECT_EQ(vx.value_.timestamp.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.timestamp.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -894,13 +915,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_timestamp) {
 
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -914,12 +935,12 @@ TEST_F(ColumnVectorDateTimeTest, contant_timestamp) {
         TimestampT timestamp(static_cast<i32>(i), static_cast<i32>(i));
         Value v = Value::MakeTimestamp(timestamp);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kTimestamp);
         EXPECT_EQ(vx.value_.timestamp.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.timestamp.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
     for (i64 i = 0; i < 1; ++i) {
         Value vx = column_vector.GetValue(i);
@@ -929,8 +950,8 @@ TEST_F(ColumnVectorDateTimeTest, contant_timestamp) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -939,13 +960,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_timestamp) {
 
     // ====
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -958,12 +979,12 @@ TEST_F(ColumnVectorDateTimeTest, contant_timestamp) {
         TimestampT timestamp(static_cast<i32>(i), static_cast<i32>(i));
         Value v = Value::MakeTimestamp(timestamp);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kTimestamp);
         EXPECT_EQ(vx.value_.timestamp.date, static_cast<i32>(i));
         EXPECT_EQ(vx.value_.timestamp.time, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 }
 
@@ -995,7 +1016,7 @@ TEST_F(ColumnVectorDateTimeTest, timestamp_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -1030,7 +1051,7 @@ TEST_F(ColumnVectorDateTimeTest, timestamp_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -1049,13 +1070,13 @@ TEST_F(ColumnVectorDateTimeTest, flat_interval) {
     ColumnVector column_vector(data_type);
     column_vector.Initialize();
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1073,7 +1094,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_interval) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kInterval);
         EXPECT_EQ(vx.value_.interval.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -1093,24 +1114,24 @@ TEST_F(ColumnVectorDateTimeTest, flat_interval) {
         EXPECT_EQ(vx.type().type(), LogicalType::kInterval);
         EXPECT_EQ(vx.value_.interval.value, static_cast<i32>(i));
     }
-    EXPECT_EQ(column_vector.Size(), DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE);
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.initialized, false);
 
     // ====
     column_vector.Initialize();
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1128,7 +1149,7 @@ TEST_F(ColumnVectorDateTimeTest, flat_interval) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kInterval);
         EXPECT_EQ(vx.value_.interval.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -1152,13 +1173,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_flat) {
 
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
 
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1173,11 +1194,11 @@ TEST_F(ColumnVectorDateTimeTest, contant_flat) {
         interval.value = static_cast<i32>(i);
         Value v = Value::MakeInterval(interval);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kInterval);
         EXPECT_EQ(vx.value_.interval.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
     for (i64 i = 0; i < 1; ++i) {
         Value vx = column_vector.GetValue(i);
@@ -1186,8 +1207,8 @@ TEST_F(ColumnVectorDateTimeTest, contant_flat) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -1196,13 +1217,13 @@ TEST_F(ColumnVectorDateTimeTest, contant_flat) {
 
     // ====
     column_vector.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kConstant), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 8);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 8u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kConstant);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1216,11 +1237,11 @@ TEST_F(ColumnVectorDateTimeTest, contant_flat) {
         interval.value = static_cast<i32>(i);
         Value v = Value::MakeInterval(interval);
         column_vector.AppendValue(v);
-        EXPECT_THROW(column_vector.AppendValue(v), StorageException);
+        EXPECT_THROW(column_vector.AppendValue(v), UnrecoverableException);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kInterval);
         EXPECT_EQ(vx.value_.interval.value, static_cast<i32>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 }
 
@@ -1252,7 +1273,7 @@ TEST_F(ColumnVectorDateTimeTest, interval_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -1286,7 +1307,7 @@ TEST_F(ColumnVectorDateTimeTest, interval_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {

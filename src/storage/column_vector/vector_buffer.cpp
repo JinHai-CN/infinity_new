@@ -14,16 +14,25 @@
 
 module;
 
+module vector_buffer;
+
 import stl;
 import fix_heap;
-
+import buffer_obj;
+import buffer_manager;
+import buffer_handle;
 import infinity_exception;
-
-module vector_buffer;
+import block_column_entry;
+import default_values;
+import logger;
+import third_party;
+import serialize;
+import internal_types;
+import logical_type;
 
 namespace infinity {
 
-SharedPtr<VectorBuffer> VectorBuffer::Make(SizeT data_type_size, SizeT capacity, VectorBufferType buffer_type) {
+SharedPtr<VectorBuffer> VectorBuffer::Make(const SizeT data_type_size, const SizeT capacity, VectorBufferType buffer_type) {
     SharedPtr<VectorBuffer> buffer_ptr = MakeShared<VectorBuffer>();
     buffer_ptr->buffer_type_ = buffer_type;
     switch (buffer_type) {
@@ -39,14 +48,51 @@ SharedPtr<VectorBuffer> VectorBuffer::Make(SizeT data_type_size, SizeT capacity,
     return buffer_ptr;
 }
 
+SharedPtr<VectorBuffer> VectorBuffer::Make(BufferManager *buffer_mgr,
+                                           BlockColumnEntry *block_column_entry,
+                                           const SizeT data_type_size,
+                                           const SizeT capacity,
+                                           const VectorBufferType buffer_type) {
+    SharedPtr<VectorBuffer> buffer_ptr = MakeShared<VectorBuffer>();
+    buffer_ptr->buffer_type_ = buffer_type;
+    switch (buffer_type) {
+        case VectorBufferType::kCompactBit: {
+            buffer_ptr->InitializeCompactBit(buffer_mgr, block_column_entry, capacity);
+            break;
+        }
+        default: {
+            buffer_ptr->Initialize(buffer_mgr, block_column_entry, data_type_size, capacity);
+            break;
+        }
+    }
+    return buffer_ptr;
+}
+
+SharedPtr<VectorBuffer>
+VectorBuffer::Make(BufferObj *buffer_obj, BufferObj *outline_buffer_obj, SizeT data_type_size, SizeT capacity, VectorBufferType buffer_type) {
+    SharedPtr<VectorBuffer> buffer_ptr = MakeShared<VectorBuffer>();
+    buffer_ptr->buffer_type_ = buffer_type;
+    switch (buffer_type) {
+        case VectorBufferType::kCompactBit: {
+            buffer_ptr->InitializeCompactBit(buffer_obj, capacity);
+            break;
+        }
+        default: {
+            buffer_ptr->Initialize(buffer_obj, outline_buffer_obj, data_type_size, capacity);
+            break;
+        }
+    }
+    return buffer_ptr;
+}
+
 void VectorBuffer::InitializeCompactBit(SizeT capacity) {
     if (initialized_) {
-        Error<TypeException>("Vector buffer is already initialized.");
+        String error_message = "Vector buffer is already initialized.";
+        UnrecoverableError(error_message);
     }
     SizeT data_size = (capacity + 7) / 8;
     if (data_size > 0) {
-        // data_ = MakeUnique<char[]>(data_size);
-        data_ = new char[data_size];
+        ptr_ = MakeUniqueForOverwrite<char[]>(data_size);
     }
     initialized_ = true;
     data_size_ = data_size;
@@ -55,33 +101,144 @@ void VectorBuffer::InitializeCompactBit(SizeT capacity) {
 
 void VectorBuffer::Initialize(SizeT type_size, SizeT capacity) {
     if (initialized_) {
-        Error<TypeException>("Vector buffer is already initialized.");
+        String error_message = "Vector buffer is already initialized.";
+        UnrecoverableError(error_message);
     }
     SizeT data_size = type_size * capacity;
     if (data_size > 0) {
-        // data_ = MakeUnique<char[]>(data_size);
-        data_ = new char[data_size];
+        ptr_ = MakeUniqueForOverwrite<char[]>(data_size);
     }
-    if (buffer_type_ == VectorBufferType::kHeap) {
-        fix_heap_mgr_ = MakeUnique<FixHeapManager>();
+    if (buffer_type_ == VectorBufferType::kVarBuffer) {
+        var_buffer_mgr_ = MakeUnique<VarBufferManager>();
     }
     initialized_ = true;
     data_size_ = data_size;
     capacity_ = capacity;
 }
 
-void VectorBuffer::ResetToInit() {
-    if (buffer_type_ == VectorBufferType::kHeap) {
-        fix_heap_mgr_ = MakeUnique<FixHeapManager>();
+void VectorBuffer::InitializeCompactBit(BufferManager *buffer_mgr, BlockColumnEntry *block_column_entry, SizeT capacity) {
+    if (initialized_) {
+        String error_message = "Vector buffer is already initialized.";
+        UnrecoverableError(error_message);
+    }
+    SizeT data_size = (capacity + 7) / 8;
+    auto *buffer_obj = block_column_entry->buffer();
+    if (buffer_obj == nullptr) {
+        String error_message = "Buffer object is nullptr.";
+        UnrecoverableError(error_message);
+    }
+    if (buffer_obj->GetBufferSize() != data_size) {
+        String error_message = "Buffer object size is not equal to data size.";
+        UnrecoverableError(error_message);
+    }
+    ptr_ = buffer_obj->Load();
+    initialized_ = true;
+    data_size_ = data_size;
+    capacity_ = capacity;
+}
+
+void VectorBuffer::Initialize(BufferManager *buffer_mgr, BlockColumnEntry *block_column_entry, SizeT type_size, SizeT capacity) {
+    if (initialized_) {
+        String error_message = "Vector buffer is already initialized.";
+        UnrecoverableError(error_message);
+    }
+    SizeT data_size = type_size * capacity;
+    auto *buffer_obj = block_column_entry->buffer();
+    if (buffer_obj == nullptr) {
+        String error_message = "Buffer object is nullptr.";
+        UnrecoverableError(error_message);
+    }
+    if (buffer_obj->GetBufferSize() != data_size) {
+        String error_message = "Buffer object size is not equal to data size.";
+        UnrecoverableError(error_message);
+    }
+    ptr_ = buffer_obj->Load();
+    if (buffer_type_ == VectorBufferType::kVarBuffer) {
+        var_buffer_mgr_ = MakeUnique<VarBufferManager>(block_column_entry, buffer_mgr);
+    }
+    initialized_ = true;
+    data_size_ = data_size;
+    capacity_ = capacity;
+}
+
+void VectorBuffer::InitializeCompactBit(BufferObj *buffer_obj, SizeT capacity) {
+    if (initialized_) {
+        String error_message = "Vector buffer is already initialized.";
+        UnrecoverableError(error_message);
+    }
+    SizeT data_size = (capacity + 7) / 8;
+    if (buffer_obj == nullptr) {
+        String error_message = "Buffer object is nullptr.";
+        UnrecoverableError(error_message);
+    }
+    if (buffer_obj->GetBufferSize() != data_size) {
+        String error_message = "Buffer object size is not equal to data size.";
+        UnrecoverableError(error_message);
+    }
+    ptr_ = buffer_obj->Load();
+    initialized_ = true;
+    data_size_ = data_size;
+    capacity_ = capacity;
+}
+
+void VectorBuffer::Initialize(BufferObj *buffer_obj, BufferObj *outline_buffer_obj, SizeT type_size, SizeT capacity) {
+    if (initialized_) {
+        String error_message = "Vector buffer is already initialized.";
+        UnrecoverableError(error_message);
+    }
+    SizeT data_size = type_size * capacity;
+    if (buffer_obj == nullptr) {
+        String error_message = "Buffer object is nullptr.";
+        UnrecoverableError(error_message);
+    }
+    if (buffer_obj->GetBufferSize() != data_size) {
+        String error_message = "Buffer object size is not equal to data size.";
+        UnrecoverableError(error_message);
+    }
+    ptr_ = buffer_obj->Load();
+    if (buffer_type_ == VectorBufferType::kVarBuffer) {
+        var_buffer_mgr_ = MakeUnique<VarBufferManager>(outline_buffer_obj);
+    }
+    initialized_ = true;
+    data_size_ = data_size;
+    capacity_ = capacity;
+}
+
+void VectorBuffer::SetToCatalog(BufferObj *buffer_obj, BufferObj *outline_buffer_obj) {
+    if (!std::holds_alternative<UniquePtr<char[]>>(ptr_)) {
+        UnrecoverableError("Cannot convert to new catalog");
+    }
+
+    void *src_ptr = std::get<UniquePtr<char[]>>(ptr_).release();
+    buffer_obj->SetData(src_ptr);
+
+    BufferHandle buffer_handle = buffer_obj->Load();
+    ptr_ = buffer_handle;
+    if (buffer_type_ == VectorBufferType::kVarBuffer) {
+        var_buffer_mgr_->SetToCatalog(outline_buffer_obj);
+    }
+}
+
+void VectorBuffer::ResetToInit(VectorBufferType type) {
+    if (type == VectorBufferType::kVarBuffer) {
+        if (var_buffer_mgr_.get() != nullptr) {
+            String error_message = "Vector heap should be null.";
+            UnrecoverableError(error_message);
+        }
+    }
+
+    if (buffer_type_ == VectorBufferType::kVarBuffer) {
+        var_buffer_mgr_ = MakeUnique<VarBufferManager>();
     }
 }
 
 void VectorBuffer::Copy(ptr_t input, SizeT size) {
     if (data_size_ < size) {
-        Error<TypeException>("Attempt to copy an amount of data that cannot currently be accommodated");
+        String error_message = "Attempt to copy an amount of data that cannot currently be accommodated";
+        UnrecoverableError(error_message);
     }
-    // Memcpy(data_.get(), input, size);
-    Memcpy(data_, input, size);
+    // std::memcpy(data_.get(), input, size);
+    std::memcpy(GetDataMut(), input, size);
 }
 
 bool VectorBuffer::RawPointerGetCompactBit(const u8 *src_ptr_u8, SizeT idx) {
@@ -92,9 +249,10 @@ bool VectorBuffer::RawPointerGetCompactBit(const u8 *src_ptr_u8, SizeT idx) {
 
 bool VectorBuffer::GetCompactBit(SizeT idx) const {
     if (idx >= capacity_) {
-        Error<TypeException>("Index out of range.");
+        String error_message = "Index out of range.";
+        UnrecoverableError(error_message);
     }
-    return VectorBuffer::RawPointerGetCompactBit(reinterpret_cast<const u8 *>(data_), idx);
+    return VectorBuffer::RawPointerGetCompactBit(reinterpret_cast<const u8 *>(GetData()), idx);
 }
 
 void VectorBuffer::RawPointerSetCompactBit(u8 *dst_ptr_u8, SizeT idx, bool val) {
@@ -109,9 +267,10 @@ void VectorBuffer::RawPointerSetCompactBit(u8 *dst_ptr_u8, SizeT idx, bool val) 
 
 void VectorBuffer::SetCompactBit(SizeT idx, bool val) {
     if (idx >= capacity_) {
-        Error<TypeException>("Index out of range.");
+        String error_message = "Index out of range.";
+        UnrecoverableError(error_message);
     }
-    VectorBuffer::RawPointerSetCompactBit(reinterpret_cast<u8 *>(data_), idx, val);
+    VectorBuffer::RawPointerSetCompactBit(reinterpret_cast<u8 *>(GetDataMut()), idx, val);
 }
 
 bool VectorBuffer::CompactBitIsSame(const SharedPtr<VectorBuffer> &lhs, SizeT lhs_cnt, const SharedPtr<VectorBuffer> &rhs, SizeT rhs_cnt) {
@@ -123,8 +282,8 @@ bool VectorBuffer::CompactBitIsSame(const SharedPtr<VectorBuffer> &lhs, SizeT lh
     }
     SizeT full_byte_cnt = lhs_cnt / 8;
     SizeT last_byte_cnt = lhs_cnt % 8;
-    auto lhs_data = reinterpret_cast<const u8 *>(lhs->data_);
-    auto rhs_data = reinterpret_cast<const u8 *>(rhs->data_);
+    auto lhs_data = reinterpret_cast<const u8 *>(lhs->GetData());
+    auto rhs_data = reinterpret_cast<const u8 *>(rhs->GetData());
     for (SizeT idx = 0; idx < full_byte_cnt; ++idx) {
         if (lhs_data[idx] != rhs_data[idx]) {
             return false;
@@ -148,7 +307,7 @@ void VectorBuffer::CopyCompactBits(u8 *dst_ptr_u8, const u8 *src_ptr_u8, SizeT d
         SizeT extra;
         if (start_offset == 0) {
             // Copy by byte when the start index is aligned.
-            Memcpy(dst_ptr_u8 + dest_start_idx / 8, src_ptr_u8 + source_start_idx / 8, count / 8);
+            std::memcpy(dst_ptr_u8 + dest_start_idx / 8, src_ptr_u8 + source_start_idx / 8, count / 8);
             // Copy the last bits.
             extra = count % 8;
         } else {
@@ -161,7 +320,7 @@ void VectorBuffer::CopyCompactBits(u8 *dst_ptr_u8, const u8 *src_ptr_u8, SizeT d
             } else {
                 u8 source_mask = u8(0xff) << start_offset;
                 dst_1 = (dst_1 & (~source_mask)) | (src_1 & source_mask);
-                Memcpy(dst_ptr_u8 + (dest_start_idx / 8) + 1, src_ptr_u8 + (source_start_idx / 8) + 1, (count - start_todo) / 8);
+                std::memcpy(dst_ptr_u8 + (dest_start_idx / 8) + 1, src_ptr_u8 + (source_start_idx / 8) + 1, (count - start_todo) / 8);
                 extra = (count - start_todo) % 8;
             }
         }
@@ -174,7 +333,7 @@ void VectorBuffer::CopyCompactBits(u8 *dst_ptr_u8, const u8 *src_ptr_u8, SizeT d
     } else {
         if (SizeT start_offset = dest_start_idx % 8; start_offset != 0) {
             // head part
-            SizeT start_todo = Min(count, 8 - start_offset);
+            SizeT start_todo = std::min(count, 8 - start_offset);
             for (SizeT i = 0; i < start_todo; ++i) {
                 RawPointerSetCompactBit(dst_ptr_u8, dest_start_idx++, RawPointerGetCompactBit(src_ptr_u8, source_start_idx++));
             }
@@ -204,5 +363,115 @@ void VectorBuffer::CopyCompactBits(u8 *dst_ptr_u8, const u8 *src_ptr_u8, SizeT d
         }
     }
 }
+
+SizeT VectorBuffer::TotalSize(const DataType *data_type) const {
+    SizeT size = 0;
+    switch (data_type->type()) {
+        case LogicalType::kArray:
+        case LogicalType::kVarchar:
+        case LogicalType::kSparse:
+        case LogicalType::kMultiVector:
+        case LogicalType::kTensor:
+        case LogicalType::kTensorArray: {
+            size += sizeof(i32) + var_buffer_mgr_->TotalSize();
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+    return size;
+}
+
+void VectorBuffer::WriteAdv(char *&ptr, const DataType *data_type) const {
+    switch (data_type->type()) {
+        case LogicalType::kArray:
+        case LogicalType::kVarchar:
+        case LogicalType::kSparse:
+        case LogicalType::kMultiVector:
+        case LogicalType::kTensor:
+        case LogicalType::kTensorArray: {
+            const auto heap_len = var_buffer_mgr_->TotalSize();
+            WriteBufAdv<i32>(ptr, heap_len);
+            if (const auto write_n = var_buffer_mgr_->Write(ptr); write_n != heap_len) {
+                UnrecoverableError("Failed to write var buffer");
+            }
+            ptr += heap_len;
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+}
+
+void VectorBuffer::ReadAdv(const char *&ptr, const DataType *data_type) {
+    switch (data_type->type()) {
+        case LogicalType::kArray:
+        case LogicalType::kVarchar:
+        case LogicalType::kSparse:
+        case LogicalType::kMultiVector:
+        case LogicalType::kTensor:
+        case LogicalType::kTensorArray: {
+            const auto heap_len = ReadBufAdv<i32>(ptr);
+            [[maybe_unused]] SizeT offset = this->AppendVarchar(ptr, heap_len);
+            ptr += heap_len;
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+}
+
+const char *VectorBuffer::GetVarchar(SizeT offset, SizeT len) const { return var_buffer_mgr_->Get(offset, len); }
+
+SizeT VectorBuffer::AppendVarchar(const char *data, SizeT len) { return var_buffer_mgr_->Append(data, len); }
+
+Pair<const char *, const char *> VectorBuffer::GetSparseRaw(SizeT offset, SizeT nnz, const SparseInfo *sparse_info) const {
+    if (nnz == 0) {
+        return {nullptr, nullptr};
+    }
+    SizeT indice_size = sparse_info->IndiceSize(nnz);
+    SizeT data_size = sparse_info->DataSize(nnz);
+    const char *raw_indice_ptr = var_buffer_mgr_->Get(offset, indice_size);
+    const char *raw_data_ptr = nullptr;
+    if (data_size > 0) {
+        raw_data_ptr = var_buffer_mgr_->Get(offset + indice_size, data_size);
+    }
+    return {raw_data_ptr, raw_indice_ptr};
+}
+
+SizeT VectorBuffer::AppendSparseRaw(const char *raw_data, const char *raw_idx, SizeT nnz, const SparseInfo *sparse_info) {
+    SizeT indice_size = sparse_info->IndiceSize(nnz);
+    SizeT data_size = sparse_info->DataSize(nnz);
+    SizeT file_offset = var_buffer_mgr_->Append(raw_idx, indice_size);
+    if (raw_data != nullptr) {
+        var_buffer_mgr_->Append(raw_data, data_size);
+    }
+    return file_offset;
+}
+
+const char *VectorBuffer::GetMultiVectorRaw(SizeT offset, SizeT size) const { return var_buffer_mgr_->Get(offset, size); }
+
+SizeT VectorBuffer::AppendMultiVectorRaw(const char *raw_data, SizeT size) { return var_buffer_mgr_->Append(raw_data, size); }
+
+const char *VectorBuffer::GetTensorRaw(SizeT offset, SizeT size) const { return var_buffer_mgr_->Get(offset, size); }
+
+SizeT VectorBuffer::AppendTensorRaw(const char *raw_data, SizeT size) { return var_buffer_mgr_->Append(raw_data, size); }
+
+const char *VectorBuffer::GetTensorArrayMeta(SizeT offset, SizeT array_num) const {
+    SizeT bytes = array_num * sizeof(TensorT);
+    return var_buffer_mgr_->Get(offset, bytes);
+}
+
+SizeT VectorBuffer::AppendTensorArrayMeta(Span<const TensorT> tensor_metas) const {
+    SizeT tensor_meta_size = tensor_metas.size() * sizeof(TensorT);
+    return var_buffer_mgr_->Append(reinterpret_cast<const char *>(tensor_metas.data()), tensor_meta_size);
+}
+
+const char *VectorBuffer::GetArrayRaw(SizeT offset, SizeT size) const { return var_buffer_mgr_->Get(offset, size); }
+
+SizeT VectorBuffer::AppendArrayRaw(const char *raw_data, SizeT size) const { return var_buffer_mgr_->Append(raw_data, size); }
 
 } // namespace infinity

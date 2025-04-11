@@ -14,38 +14,65 @@
 
 module;
 
+module physical_drop_table;
+
 import stl;
 import txn;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+import result_cache_manager;
 import physical_operator_type;
 import operator_state;
 import status;
 import infinity_exception;
-
-module physical_drop_table;
+import logical_type;
+import column_def;
+import wal_manager;
+import infinity_context;
+import new_txn;
 
 namespace infinity {
 
-void PhysicalDropTable::Init() {}
+void PhysicalDropTable::Init(QueryContext *query_context) {}
 
 bool PhysicalDropTable::Execute(QueryContext *query_context, OperatorState *operator_state) {
-    auto txn = query_context->GetTxn();
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
 
-    Status status = txn->DropTableCollectionByName(*schema_name_, *table_name_, conflict_type_);
-    auto drop_table_operator_state = (DropTableOperatorState *)(operator_state);
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
 
-    if(!status.ok()) {
-        drop_table_operator_state->error_message_ = Move(status.msg_);
+    bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+    if (!use_new_catalog) {
+        auto txn = query_context->GetTxn();
+
+        Status status = txn->DropTable(*schema_name_, *table_name_, conflict_type_);
+        if (!status.ok()) {
+            operator_state->status_ = status;
+        }
+    } else {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        Status status = new_txn->DropTable(*schema_name_, *table_name_, conflict_type_);
+        if (!status.ok()) {
+            operator_state->status_ = status;
+        }
+    }
+
+    if (ResultCacheManager *cache_mgr = query_context->storage()->result_cache_manager(); cache_mgr != nullptr) {
+        cache_mgr->DropTable(*schema_name_, *table_name_);
     }
 
     // Generate the result
     Vector<SharedPtr<ColumnDef>> column_defs = {
-        MakeShared<ColumnDef>(0, MakeShared<DataType>(LogicalType::kInteger), "OK", HashSet<ConstraintType>())};
+        MakeShared<ColumnDef>(0, MakeShared<DataType>(LogicalType::kInteger), "OK", std::set<ConstraintType>())};
 
-    auto result_table_def_ptr = MakeShared<TableDef>(MakeShared<String>("default"), MakeShared<String>("Tables"), column_defs);
+    auto result_table_def_ptr = TableDef::Make(MakeShared<String>("default_db"), MakeShared<String>("Tables"), nullptr, column_defs);
     output_ = MakeShared<DataTable>(result_table_def_ptr, TableType::kDataTable);
     operator_state->SetComplete();
     return true;

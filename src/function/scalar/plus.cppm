@@ -20,8 +20,9 @@ export module plus;
 
 namespace infinity {
 
-class NewCatalog;
+class Catalog;
 
-export void RegisterPlusFunction(const UniquePtr<NewCatalog> &catalog_ptr);
+export void RegisterPlusFunction(const UniquePtr<Catalog> &catalog_ptr);
+export void AppendRegisterPlusFunction(const UniquePtr<Catalog> &catalog_ptr);
 
-}
+} // namespace infinity

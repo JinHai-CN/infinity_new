@@ -17,7 +17,7 @@ module;
 #include <vector>
 
 import stl;
-import parser;
+
 import physical_source;
 import physical_sink;
 import data_table;
@@ -56,5 +56,36 @@ SharedPtr<Vector<String>> PlanFragment::ToString() {
 }
 
 SharedPtr<DataTable> PlanFragment::GetResult() { return context_->GetResult(); }
+
+void PlanFragment::AddNext(SharedPtr<PlanFragment> root, PlanFragment *next) {
+    Vector<PlanFragment *> next_leaves;
+    next->GetStartFragments(next_leaves);
+    for (auto &leaf : next_leaves) {
+        leaf->AddChild(root);
+    }
+}
+
+SizeT PlanFragment::GetStartFragments(Vector<PlanFragment *> &leaf_fragments) {
+    SizeT all_fragment_n = 0;
+    HashSet<PlanFragment *> visited;
+    std::function<void(PlanFragment *)> TraversePlanFragmentGraph = [&](PlanFragment *fragment) {
+        if (visited.find(fragment) != visited.end()) {
+            return;
+        }
+        visited.insert(fragment);
+        if (fragment->GetContext()) {
+            all_fragment_n += fragment->GetContext()->Tasks().size();
+        }
+        if (!fragment->HasChild()) {
+            leaf_fragments.emplace_back(fragment);
+            return;
+        }
+        for (auto &child : fragment->Children()) {
+            TraversePlanFragmentGraph(child.get());
+        }
+    };
+    TraversePlanFragmentGraph(this);
+    return all_fragment_n;
+}
 
 } // namespace infinity

@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,8 +36,17 @@ import cast_table;
 import column_vector;
 import geography_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import data_type;
 
-class CircleCastTest : public BaseTest {};
+using namespace infinity;
+
+class CircleCastTest : public BaseTest {
+    void SetUp() override {}
+
+    void TearDown() override { BaseTest::TearDown(); }
+};
 
 TEST_F(CircleCastTest, circle_cast0) {
     using namespace infinity;
@@ -48,7 +57,7 @@ TEST_F(CircleCastTest, circle_cast0) {
         f64 r(2);
         CircleT source(p1, r);
         TinyIntT target;
-        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, nullptr), FunctionException);
+        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, nullptr), UnrecoverableException);
     }
     {
         PointT p1(1, 1);
@@ -60,7 +69,7 @@ TEST_F(CircleCastTest, circle_cast0) {
         SharedPtr<ColumnVector> col_varchar_ptr = MakeShared<ColumnVector>(data_type);
         col_varchar_ptr->Initialize();
 
-        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, col_varchar_ptr), NotImplementException);
+        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, col_varchar_ptr.get()), UnrecoverableException);
     }
 }
 
@@ -71,7 +80,7 @@ TEST_F(CircleCastTest, circle_cast1) {
     {
         DataType source_type(LogicalType::kCircle);
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindGeographyCast<CircleT>(source_type, target_type), TypeException);
+        EXPECT_THROW(BindGeographyCast<CircleT>(source_type, target_type), UnrecoverableException);
     }
 
     SharedPtr<DataType> source_type = MakeShared<DataType>(LogicalType::kCircle);
@@ -101,6 +110,6 @@ TEST_F(CircleCastTest, circle_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), NotImplementException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 }

@@ -12,34 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
 #include "parser/type/complex/varchar.h"
+#include "gtest/gtest.h"
+import base_test;
 
-//import infinity_exception;
-//
-//import global_resource_usage;
-//import third_party;
-//import parser;
-//import logger;
-//import stl;
-//import infinity_context;
-
+using namespace infinity;
 class VarcharTest : public BaseTest {};
 
 TEST_F(VarcharTest, structure_check) {
     using namespace infinity;
-    EXPECT_EQ(sizeof(ValueVarchar), 13);
-    EXPECT_EQ(sizeof(InlineVarchar), 13);
-    EXPECT_EQ(sizeof(VectorVarchar), 13);
-    EXPECT_EQ(sizeof(Varchar), 16);
-}
-
-TEST_F(VarcharTest, value_varchar) {
-    using namespace infinity;
-    Varchar value_varchar;
-    EXPECT_TRUE(value_varchar.IsValue());
-    value_varchar.SetValue();
-    EXPECT_TRUE(value_varchar.IsValue());
-    value_varchar.SetColumnVector();
-    EXPECT_FALSE(value_varchar.IsValue());
+    EXPECT_EQ(sizeof(InlineVarchar), 13u);
+    EXPECT_EQ(sizeof(VectorVarchar), 13u);
+    EXPECT_EQ(sizeof(Varchar), 16u);
 }

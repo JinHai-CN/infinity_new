@@ -14,12 +14,13 @@
 
 module;
 
+export module function_expression;
+
 import stl;
 import base_expression;
-import parser;
+import data_type;
 import scalar_function;
-
-export module function_expression;
+import internal_types;
 
 namespace infinity {
 
@@ -29,10 +30,17 @@ public:
 
     inline DataType Type() const override { return func_.return_type(); }
 
+    [[nodiscard]] inline const String &ScalarFunctionName() const { return func_.name(); }
+
     String ToString() const override;
+
+    u64 Hash() const override;
+
+    bool Eq(const BaseExpression &other) const override;
 
 public:
     ScalarFunction func_;
+    bool nullary_{false};
 };
 
 } // namespace infinity

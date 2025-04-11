@@ -13,10 +13,11 @@
 // limitations under the License.
 module;
 
-#include <memory>
+module dependent_join_flattener;
 
+import status;
 import stl;
-import parser;
+
 import logical_node;
 import logical_node_type;
 import third_party;
@@ -39,11 +40,13 @@ import catalog;
 import function_set;
 import scalar_function;
 import scalar_function_set;
-import table_scan;
 import corrlated_expr_detector;
 import rewrite_correlated_expression;
-
-module dependent_join_flattener;
+import internal_types;
+import join_reference;
+import data_type;
+import logger;
+import block_index;
 
 namespace infinity {
 
@@ -77,7 +80,8 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoin(const SharedPtr
 SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const SharedPtr<LogicalNode> &subquery_plan) {
     // 1. Validates if the logical node was checked in operator2correlated_expression_map_ before.
     if (!operator2correlated_expression_map_.contains(subquery_plan->node_id())) {
-        Error<PlannerException>(Format("Logical node {} wasn't detected before.", subquery_plan->node_id()));
+        Status status = Status::SyntaxError(fmt::format("Logical node {} wasn't detected before.", subquery_plan->node_id()));
+        RecoverableError(status);
     }
 
     // 2. if no correlated expression in this operator. which means all correlated expressions are unnested
@@ -120,11 +124,15 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const S
         case LogicalNodeType::kExcept:
         case LogicalNodeType::kUnion:
         case LogicalNodeType::kIntersect: {
-            Error<PlannerException>("Can't push down through set operation node.");
+            Status status = Status::SyntaxError("Can't push down through set operation node");
+            RecoverableError(status);
+
             break;
         }
         case LogicalNodeType::kJoin: {
-            Error<PlannerException>("Can't push down through join node.");
+            Status status = Status::SyntaxError("Can't push down through join node");
+            RecoverableError(status);
+
             break;
         }
         case LogicalNodeType::kCrossProduct: {
@@ -148,8 +156,8 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const S
             auto right_pushed_plan = PushDependentJoinInternal(subquery_plan->right_node());
             auto right_correlated_binding = this->base_binding_;
 
-            NewCatalog *catalog = query_context_->storage()->catalog();
-            SharedPtr<FunctionSet> function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "=");
+            Catalog *catalog = query_context_->storage()->catalog();
+            SharedPtr<FunctionSet> function_set_ptr = Catalog::GetFunctionSetByName(catalog, "=");
             Vector<SharedPtr<BaseExpression>> join_conditions;
 
             SizeT column_count = bind_context_ptr_->correlated_column_exprs_.size();
@@ -188,7 +196,7 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const S
 
             u64 logical_node_id = bind_context_ptr_->GetNewLogicalNodeId();
             String alias = "logical_join";
-            alias += ToStr(logical_node_id);
+            alias += std::to_string(logical_node_id);
             SharedPtr<LogicalJoin> logical_join = MakeShared<LogicalJoin>(logical_node_id,
                                                                           JoinType::kInner,
                                                                           alias,
@@ -199,7 +207,8 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const S
             return logical_join;
         }
         case LogicalNodeType::kLimit: {
-            Error<PlannerException>("Can't push down through limit node");
+            Status status = Status::SyntaxError("Can't push down through limit node");
+            RecoverableError(status);
             break;
         }
         case LogicalNodeType::kFilter: {
@@ -245,11 +254,13 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const S
             return subquery_plan;
         }
         case LogicalNodeType::kSort: {
-            Error<PlannerException>("Can't push down through order by node");
+            Status status = Status::SyntaxError("Can't push down through order by node");
+            RecoverableError(status);
             break;
         }
         case LogicalNodeType::kTableScan: {
-            Error<PlannerException>("Can't push down through table scan node");
+            Status status = Status::SyntaxError("Can't push down through table scan node");
+            RecoverableError(status);
             break;
         }
         case LogicalNodeType::kDelete:
@@ -272,16 +283,20 @@ SharedPtr<LogicalNode> DependentJoinFlattener::PushDependentJoinInternal(const S
         case LogicalNodeType::kShow:
         case LogicalNodeType::kExplain:
         case LogicalNodeType::kPrepare: {
-            Error<PlannerException>(Format("Logical node {} should be involved in subquery.", subquery_plan->name()));
+            Status status = Status::SyntaxError(fmt::format("Logical node {} should be involved in subquery.", subquery_plan->name()));
+            RecoverableError(status);
         }
         case LogicalNodeType::kInvalid: {
-            Error<PlannerException>("Invalid logical operator node");
+            String error_message = "Invalid logical operator node";
+            UnrecoverableError(error_message);
         }
         default: {
-            Error<PlannerException>("Unsupported logical operator node");
+            String error_message = "Unsupported logical operator node";
+            UnrecoverableError(error_message);
         }
     }
-    Error<PlannerException>("Unreachable");
+    String error_message = "Unreachable";
+    UnrecoverableError(error_message);
     return nullptr;
 }
 
@@ -304,7 +319,8 @@ SharedPtr<LogicalNode> DependentJoinFlattener::BuildNoCorrelatedInternal(const S
     column_ids.emplace_back(correlated_columns[0]->binding().column_idx);
     for (SizeT idx = 1; idx < column_count; ++idx) {
         if (correlated_columns[idx]->binding().table_idx != table_index) {
-            Error<PlannerException>(Format("Correlated column are from different table."));
+            Status status = Status::SyntaxError(fmt::format("Correlated column are from different table."));
+            RecoverableError(status);
         }
         column_names->emplace_back(correlated_columns[idx]->column_name());
         column_types->emplace_back(MakeShared<DataType>(correlated_columns[idx]->Type()));
@@ -313,12 +329,13 @@ SharedPtr<LogicalNode> DependentJoinFlattener::BuildNoCorrelatedInternal(const S
 
     const Binding *table_binding_ptr = bind_context_ptr_->GetBindingFromCurrentOrParentByName(correlated_columns[0]->table_name());
     if (table_binding_ptr == nullptr) {
-        Error<PlannerException>(Format("Can't find table: {} in binding context.", correlated_columns[0]->table_name()));
+        Status status = Status::SyntaxError(fmt::format("Can't find table: {} in binding context.", correlated_columns[0]->table_name()));
+        RecoverableError(status);
     }
 
-//    NewCatalog *catalog = query_context_->storage()->catalog();
+    //    Catalog *catalog = query_context_->storage()->catalog();
 
-    SharedPtr<BaseTableRef> base_table_ref = MakeShared<BaseTableRef>(table_binding_ptr->table_collection_entry_ptr_,
+    SharedPtr<BaseTableRef> base_table_ref = MakeShared<BaseTableRef>(table_binding_ptr->table_info_,
                                                                       column_ids,
                                                                       table_binding_ptr->block_index_,
                                                                       table_binding_ptr->table_name_,
@@ -331,7 +348,7 @@ SharedPtr<LogicalNode> DependentJoinFlattener::BuildNoCorrelatedInternal(const S
     // Generate cross product
     u64 logical_node_id = bind_context_ptr_->GetNewLogicalNodeId();
     String alias = "cross_product";
-    alias += ToStr(logical_node_id);
+    alias += std::to_string(logical_node_id);
     SharedPtr<LogicalCrossProduct> cross_product_node = MakeShared<LogicalCrossProduct>(logical_node_id, alias, subquery_plan, logical_table_scan);
 
     this->base_binding_.table_idx = table_index;

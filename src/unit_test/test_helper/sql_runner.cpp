@@ -14,6 +14,10 @@
 
 module;
 
+#include <memory>
+
+module sql_runner;
+
 import stl;
 import data_table;
 import logger;
@@ -21,7 +25,7 @@ import session;
 import query_context;
 import infinity_context;
 import third_party;
-import parser;
+import sql_parser;
 import logical_planner;
 import optimizer;
 import physical_planner;
@@ -39,8 +43,9 @@ import resource_manager;
 import storage;
 import query_result;
 import session_manager;
-
-module sql_runner;
+import base_statement;
+import parser_result;
+import persistence_manager;
 
 namespace infinity {
 
@@ -52,7 +57,7 @@ namespace infinity {
  */
 SharedPtr<DataTable> SQLRunner::Run(const String &sql_text, bool print) {
     //    if (print) {
-    //        LOG_TRACE(Format("{}", sql_text));
+    //        LOG_TRACE(fmt::format("{}", sql_text));
     //    }
 
     //    UniquePtr<SessionManager> session_manager = MakeUnique<SessionManager>();
@@ -63,7 +68,8 @@ SharedPtr<DataTable> SQLRunner::Run(const String &sql_text, bool print) {
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
-                            InfinityContext::instance().session_manager());
+                            InfinityContext::instance().session_manager(),
+                            InfinityContext::instance().persistence_manager());
     query_context_ptr->set_current_schema(session_ptr->current_database());
 
     SharedPtr<SQLParser> parser = MakeShared<SQLParser>();
@@ -71,11 +77,8 @@ SharedPtr<DataTable> SQLRunner::Run(const String &sql_text, bool print) {
     parser->Parse(sql_text, parsed_result.get());
 
     if (parsed_result->IsError()) {
-        Error<PlannerException>(parsed_result->error_message_);
+        UnrecoverableError(parsed_result->error_message_);
     }
-
-    query_context_ptr->CreateTxn();
-    query_context_ptr->BeginTxn();
 
     //    LogicalPlanner logical_planner(query_context_ptr.get());
     //    Optimizer optimizer(query_context_ptr.get());
@@ -83,27 +86,30 @@ SharedPtr<DataTable> SQLRunner::Run(const String &sql_text, bool print) {
     //    FragmentBuilder fragment_builder(query_context_ptr.get());
     BaseStatement *statement = (*parsed_result->statements_ptr_)[0];
 
+    query_context_ptr->BeginTxn(statement);
+
     SharedPtr<BindContext> bind_context;
     query_context_ptr->logical_planner()->Build(statement, bind_context);
     query_context_ptr->set_max_node_id(bind_context->GetNewLogicalNodeId());
 
-    SharedPtr<LogicalNode> logical_plan = query_context_ptr->logical_planner()->LogicalPlan();
+    SharedPtr<LogicalNode> logical_plan = query_context_ptr->logical_planner()->LogicalPlans()[0];
 
     // Apply optimized rule to the logical plan
-    query_context_ptr->optimizer()->optimize(logical_plan);
+    query_context_ptr->optimizer()->optimize(logical_plan, statement->Type());
 
     // Build physical plan
     SharedPtr<PhysicalOperator> physical_plan = query_context_ptr->physical_planner()->BuildPhysicalOperator(logical_plan);
 
     // Create execution pipeline
     // Fragment Builder, only for test now. plan fragment is same as pipeline.
-    auto plan_fragment = query_context_ptr->fragment_builder()->BuildFragment(physical_plan.get());
+    auto plan_fragment = query_context_ptr->fragment_builder()->BuildFragment({physical_plan.get()});
 
-    Vector<FragmentTask *> tasks;
-    FragmentContext::BuildTask(query_context_ptr.get(), nullptr, plan_fragment.get(), tasks);
+    auto notifier = MakeUnique<Notifier>();
+
+    FragmentContext::BuildTask(query_context_ptr.get(), nullptr, plan_fragment.get(), notifier.get());
 
     // Schedule the query tasks
-    query_context_ptr->scheduler()->Schedule(query_context_ptr.get(), tasks, plan_fragment.get());
+    query_context_ptr->scheduler()->Schedule(plan_fragment.get(), statement);
 
     // Initialize query result
     QueryResult query_result;

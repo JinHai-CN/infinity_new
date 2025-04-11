@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import null_value;
 import stl;
 import infinity_context;
+import internal_types;
 
+using namespace infinity;
 class NullValueTest : public BaseTest {};
 
 TEST_F(NullValueTest, null_value_test1) {
@@ -124,21 +127,21 @@ using IntervalT = IntervalType;
         EXPECT_EQ(null_value.upper_left.x, std::numeric_limits<f64>::infinity());
         EXPECT_EQ(null_value.upper_left.y, std::numeric_limits<f64>::infinity());
     }
-//    {
-//        auto null_value = NullValue<PathT>();
-//        EXPECT_EQ(null_value.point_count, std::numeric_limits<u32>::infinity());
-//        EXPECT_EQ(null_value.closed, std::numeric_limits<i32>::infinity());
-//        EXPECT_EQ(null_value.ptr, std::numeric_limits<ptr_t>::infinity());
-//    }
-//    {
-//        auto null_value = NullValue<PolygonT>();
-//        EXPECT_EQ(null_value.point_count, std::numeric_limits<u32>::infinity());
-//        EXPECT_EQ(null_value.ptr, std::numeric_limits<ptr_t>::infinity());
-//        EXPECT_EQ(null_value.bounding_box.upper_left.x, std::numeric_limits<f64>::infinity());
-//        EXPECT_EQ(null_value.bounding_box.upper_left.y, std::numeric_limits<f64>::infinity());
-//        EXPECT_EQ(null_value.bounding_box.lower_right.x, std::numeric_limits<f64>::infinity());
-//        EXPECT_EQ(null_value.bounding_box.lower_right.y, std::numeric_limits<f64>::infinity());
-//    }
+    //    {
+    //        auto null_value = NullValue<PathT>();
+    //        EXPECT_EQ(null_value.point_count, std::numeric_limits<u32>::infinity());
+    //        EXPECT_EQ(null_value.closed, std::numeric_limits<i32>::infinity());
+    //        EXPECT_EQ(null_value.ptr, std::numeric_limits<ptr_t>::infinity());
+    //    }
+    //    {
+    //        auto null_value = NullValue<PolygonT>();
+    //        EXPECT_EQ(null_value.point_count, std::numeric_limits<u32>::infinity());
+    //        EXPECT_EQ(null_value.ptr, std::numeric_limits<ptr_t>::infinity());
+    //        EXPECT_EQ(null_value.bounding_box.upper_left.x, std::numeric_limits<f64>::infinity());
+    //        EXPECT_EQ(null_value.bounding_box.upper_left.y, std::numeric_limits<f64>::infinity());
+    //        EXPECT_EQ(null_value.bounding_box.lower_right.x, std::numeric_limits<f64>::infinity());
+    //        EXPECT_EQ(null_value.bounding_box.lower_right.y, std::numeric_limits<f64>::infinity());
+    //    }
     {
         auto null_value = NullValue<CircleT>();
         EXPECT_EQ(null_value.radius, std::numeric_limits<f64>::infinity());

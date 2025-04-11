@@ -33,6 +33,9 @@ export enum class LogicalNodeType : u8 {
     kFilter,
     kProjection,
     kSort,
+    kTop,
+    kUnnest,
+    kUnnestAggregate,
 
     // DML
     kDelete,
@@ -60,9 +63,12 @@ export enum class LogicalNodeType : u8 {
 
     // Scan
     kTableScan,
+    kIndexScan,
     kViewScan,
     kDummyScan,
     kKnnScan,
+    kMatchTensorScan,
+    kMatchSparseScan,
 
     // ?
     kShow,
@@ -71,5 +77,13 @@ export enum class LogicalNodeType : u8 {
     kPrepare,
     kFlush,
     kOptimize,
+
+    // Compact
+    kCompact,
+    kCompactIndex,
+    kCompactFinish,
+
+    kReadCache,
+    kMock,
 };
-}
+} // namespace infinity

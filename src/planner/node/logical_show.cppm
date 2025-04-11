@@ -14,43 +14,38 @@
 
 module;
 
+export module logical_show;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
-
-export module logical_show;
+import data_type;
+import internal_types;
+import show_statement;
 
 namespace infinity {
 
-export enum class ShowType {
-    kInvalid,
-    kShowDatabases,
-    kShowTables,
-    kShowViews,
-    kShowColumn,
-    kShowConfigs,
-    kShowProfiles,
-    kShowIndexes,
-    kShowSegments,
-    kShowSessionStatus,
-    kShowGlobalStatus,
-};
-
-export String ToString(ShowType type);
+export String ToString(ShowStmtType type);
 
 export class LogicalShow : public LogicalNode {
 public:
     explicit LogicalShow(u64 node_id,
-                         ShowType type,
+                         ShowStmtType type,
                          String schema_name,
-                         String object_name,
+                         Optional<String> object_name,
                          u64 table_index,
-                         Optional<u32> segment_id = None,
-                         Optional<u16> block_id = None)
-        : LogicalNode(node_id, LogicalNodeType::kShow), scan_type_(type), schema_name_(Move(schema_name)), object_name_(Move(object_name)),
-          table_index_(table_index), segment_id_(segment_id), block_id_(block_id) {}
+                         Optional<SegmentID> segment_id = None,
+                         Optional<BlockID> block_id = None,
+                         Optional<ChunkID> chunk_id = None,
+                         Optional<ColumnID> column_id = None,
+                         Optional<String> index_name = None,
+                         Optional<TransactionID> session_id = None,
+                         Optional<u64> txn_id = None,
+                         Optional<String> function_name = None)
+        : LogicalNode(node_id, LogicalNodeType::kShow), show_type_(type), schema_name_(std::move(schema_name)), object_name_(std::move(object_name)),
+          table_index_(table_index), segment_id_(segment_id), block_id_(block_id), chunk_id_(chunk_id), column_id_(column_id),
+          index_name_(index_name), session_id_(session_id), txn_id_(txn_id), function_name_(function_name) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 
@@ -62,25 +57,44 @@ public:
 
     inline String name() final { return "LogicalShow"; }
 
-    [[nodiscard]] ShowType scan_type() const { return scan_type_; }
+    [[nodiscard]] ShowStmtType show_type() const { return show_type_; }
 
     [[nodiscard]] inline u64 table_index() const { return table_index_; }
 
     [[nodiscard]] inline const String &schema_name() const { return schema_name_; }
 
-    [[nodiscard]] inline const String &object_name() const { return object_name_; }
+    [[nodiscard]] inline const Optional<String> object_name() const { return object_name_; }
 
-    [[nodiscard]] inline const Optional<u32> segment_id() const { return segment_id_; }
+    [[nodiscard]] inline const Optional<u64> session_id() const { return session_id_; }
 
-    [[nodiscard]] inline const Optional<u16> block_id() const { return block_id_; }
+    [[nodiscard]] inline const Optional<SegmentID> segment_id() const { return segment_id_; }
+
+    [[nodiscard]] inline const Optional<TransactionID> transaction_id() const { return txn_id_; }
+
+    [[nodiscard]] inline const Optional<BlockID> block_id() const { return block_id_; }
+
+    [[nodiscard]] inline const Optional<ChunkID> chunk_id() const { return chunk_id_; }
+
+    [[nodiscard]] inline const Optional<ColumnID> column_id() const { return column_id_; }
+
+    [[nodiscard]] inline const Optional<String> index_name() const { return index_name_; }
+
+    [[nodiscard]] inline const Optional<String> function_name() const { return function_name_; }
 
 private:
-    ShowType scan_type_{ShowType::kInvalid};
+    ShowStmtType show_type_{ShowStmtType::kInvalid};
     String schema_name_;
-    String object_name_; // It could be table/collection/view name
+    Optional<String> object_name_; // It could be table/collection/view name
     u64 table_index_{};
-    Optional<u32> segment_id_{};
-    Optional<u16> block_id_{};
+
+    Optional<SegmentID> segment_id_{};
+    Optional<BlockID> block_id_{};
+    Optional<ChunkID> chunk_id_{};
+    Optional<ColumnID> column_id_{};
+    Optional<String> index_name_{};
+    Optional<u64> session_id_{};
+    Optional<TransactionID> txn_id_{};
+    Optional<String> function_name_{};
 };
 
 } // namespace infinity

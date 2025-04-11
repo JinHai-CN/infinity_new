@@ -11,18 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 module;
+
+export module data_block;
 
 import stl;
 import default_values;
 import selection;
-import parser;
+import data_type;
 import column_vector;
 import value;
-
+import internal_types;
 import infinity_exception;
-
-export module data_block;
+import logger;
 
 namespace infinity {
 
@@ -35,6 +37,10 @@ public:
 
 public:
     DataBlock() = default;
+
+    bool AppendColumns(const DataBlock &other, const Vector<SizeT> &column_idxes);
+
+    UniquePtr<DataBlock> Clone() const;
 
     void Init(const DataBlock *input, const SharedPtr<Selection> &input_select);
 
@@ -55,7 +61,7 @@ public:
     // Reset to just initialized state.
     void Reset();
 
-    //TODO: May cause error when capacity is larger than the originally allocated size
+    // TODO: May cause error when capacity is larger than the originally allocated size
     void Reset(SizeT capacity);
 
     [[nodiscard]] Value GetValue(SizeT column_index, SizeT row_index) const;
@@ -69,6 +75,8 @@ public:
     void Finalize();
 
     [[nodiscard]] String ToString() const;
+
+    [[nodiscard]] String ToBriefString() const;
 
     [[nodiscard]] bool Finalized() const { return finalized; }
 
@@ -92,7 +100,8 @@ public:
             if (row_count_ == 0) {
                 return 0;
             }
-            Error<StorageException>("Not finalized data block");
+            String error_message = "Not finalized data block";
+            UnrecoverableError(error_message);
         }
         return row_count_;
     }
@@ -118,7 +127,7 @@ public:
     // Write to a char buffer
     void WriteAdv(char *&ptr) const;
     // Read from a serialized version
-    static SharedPtr<DataBlock> ReadAdv(char *&ptr, i32 maxbytes);
+    static SharedPtr<DataBlock> ReadAdv(const char *&ptr, i32 maxbytes);
 
     Vector<SharedPtr<ColumnVector>> column_vectors;
 

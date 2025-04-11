@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -32,18 +33,24 @@ import column_expression;
 import value;
 import default_values;
 import data_block;
+import internal_types;
+import logical_type;
+import data_type;
 
-class MaxFunctionTest : public BaseTest {};
+using namespace infinity;
+class MaxFunctionTest : public BaseTestParamStr {};
 
-TEST_F(MaxFunctionTest, max_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, MaxFunctionTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(MaxFunctionTest, max_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterMaxFunction(catalog_ptr);
 
     String op = "max";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kAggregate);
     SharedPtr<AggregateFunctionSet> aggregate_function_set = std::static_pointer_cast<AggregateFunctionSet>(function_set);
     {
@@ -56,20 +63,21 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeBool(i % 2 == 0));
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BooleanT result;
-        result = *(BooleanT *)func.finalize_func_(func.GetState());
+        result = *(BooleanT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(result, true);
     }
@@ -84,20 +92,21 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeTinyInt(static_cast<TinyIntT>(i)));
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         TinyIntT result;
-        result = *(TinyIntT *)func.finalize_func_(func.GetState());
+        result = *(TinyIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(result, 127);
     }
@@ -112,28 +121,29 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeSmallInt(static_cast<SmallIntT>(i)));
         }
         data_block.Finalize();
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             Value v = data_block.GetValue(0, i);
             EXPECT_EQ(v.type_.type(), LogicalType::kSmallInt);
             EXPECT_EQ(v.value_.small_int, static_cast<SmallIntT>(i));
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         SmallIntT result;
-        result = *(SmallIntT *)func.finalize_func_(func.GetState());
+        result = *(SmallIntT *)func.finalize_func_(data_state.get());
 
-        EXPECT_EQ(result, row_count - 1);
+        EXPECT_EQ((i64)result, row_count - 1);
     }
 
     {
@@ -146,20 +156,21 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeInt(static_cast<IntegerT>(2 * i)));
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         IntegerT result;
-        result = *(IntegerT *)func.finalize_func_(func.GetState());
+        result = *(IntegerT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(result, 2 * (row_count - 1));
     }
@@ -174,20 +185,21 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeBigInt(static_cast<BigIntT>(2 * i)));
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(result, 2 * (row_count - 1));
     }
@@ -202,20 +214,21 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeFloat(static_cast<FloatT>(2 * i)));
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         FloatT result;
-        result = *(FloatT *)func.finalize_func_(func.GetState());
+        result = *(FloatT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, 2 * (row_count - 1));
     }
@@ -230,20 +243,21 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             data_block.AppendValue(0, Value::MakeDouble(static_cast<DoubleT>(2 * i)));
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, 2 * (row_count - 1));
     }
@@ -258,22 +272,23 @@ TEST_F(MaxFunctionTest, max_func) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             HugeIntT input(0, 2 * i);
             Value v = Value::MakeHugeInt(input);
             data_block.AppendValue(0, v);
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         HugeIntT result;
-        result = *(HugeIntT *)func.finalize_func_(func.GetState());
+        result = *(HugeIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(result.lower, 2 * (row_count - 1));
     }
@@ -282,6 +297,6 @@ TEST_F(MaxFunctionTest, max_func) {
         DataType data_type(LogicalType::kVarchar);
         SharedPtr<ColumnExpression> col_expr_ptr = MakeShared<ColumnExpression>(data_type, "t1", 1, "c1", 0, 0);
 
-        EXPECT_THROW(aggregate_function_set->GetMostMatchFunction(col_expr_ptr), PlannerException);
+        EXPECT_THROW(aggregate_function_set->GetMostMatchFunction(col_expr_ptr), RecoverableException);
     }
 }

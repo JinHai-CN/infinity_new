@@ -7,7 +7,7 @@
  * rank - [preview] (Optional, object) Defines a method for combining and ranking result sets from a combination of query,
  * sub searches, and/or knn searches. Requires a minimum of 2 results sets for ranking from the specified sources.
  */
-#include "expr.h"
+#include "parsed_expr.h"
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,6 +17,8 @@ namespace infinity {
 class MatchExpr;
 class QueryExpr;
 class KnnExpr;
+class MatchTensorExpr;
+class MatchSparseExpr;
 class FusionExpr;
 
 class SearchExpr : public ParsedExpr {
@@ -28,11 +30,12 @@ public:
     [[nodiscard]] std::string ToString() const override;
 
     void SetExprs(std::vector<infinity::ParsedExpr *> *exprs);
+    void AddExpr(infinity::ParsedExpr *expr);
+    void Validate() const;
 
 public:
-    std::vector<MatchExpr *> match_exprs_{};
-    std::vector<KnnExpr *> knn_exprs_{};
-    FusionExpr *fusion_expr_{};
+    std::vector<ParsedExpr *> match_exprs_{};
+    std::vector<FusionExpr *> fusion_exprs_{};
 
 private:
     std::vector<infinity::ParsedExpr *> *exprs_{};

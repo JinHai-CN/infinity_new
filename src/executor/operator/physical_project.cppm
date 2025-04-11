@@ -14,8 +14,10 @@
 
 module;
 
+export module physical_project;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -23,8 +25,9 @@ import physical_operator_type;
 import base_expression;
 import load_meta;
 import infinity_exception;
-
-export module physical_project;
+import internal_types;
+import data_type;
+import highlighter;
 
 namespace infinity {
 
@@ -34,13 +37,14 @@ public:
                              u64 table_index,
                              UniquePtr<PhysicalOperator> left,
                              Vector<SharedPtr<BaseExpression>> expressions,
-                             SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kProjection, Move(left), nullptr, id, load_metas), expressions_(Move(expressions)),
-          projection_table_index_(table_index) {}
+                             SharedPtr<Vector<LoadMeta>> load_metas,
+                             Map<SizeT, SharedPtr<HighlightInfo>> highlight_columns)
+        : PhysicalOperator(PhysicalOperatorType::kProjection, std::move(left), nullptr, id, load_metas), expressions_(std::move(expressions)),
+          projection_table_index_(table_index), highlight_columns_(std::move(highlight_columns)) {}
 
     ~PhysicalProject() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
@@ -48,9 +52,7 @@ public:
 
     SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final;
 
-    SizeT TaskletCount() override {
-        return left_->TaskletCount();
-    }
+    SizeT TaskletCount() override { return left_->TaskletCount(); }
 
     Vector<SharedPtr<BaseExpression>> expressions_{};
 
@@ -59,6 +61,7 @@ public:
 private:
     //    ExpressionExecutor executor;
     u64 projection_table_index_{};
+    Map<SizeT, SharedPtr<HighlightInfo>> highlight_columns_{};
 };
 
 } // namespace infinity

@@ -14,18 +14,28 @@
 
 module;
 
+#include <string>
+
+module project_binder;
+
 import stl;
 import base_expression;
-import parser;
+
 import bind_context;
 import function;
 import function_set;
 import column_expression;
+import unnest_expression;
 import third_party;
-
+import function_expr;
+import parsed_expr;
+import column_expr;
 import infinity_exception;
-
-module project_binder;
+import logger;
+import status;
+import logical_type;
+import array_info;
+import data_type;
 
 namespace {
 
@@ -57,6 +67,9 @@ SharedPtr<BaseExpression> ProjectBinder::BuildExpression(const ParsedExpr &expr,
     // Covert avg function expr to (sum / count) function expr
     if (expr.type_ == ParsedExprType::kFunction) {
         auto &function_expression = (FunctionExpr &)expr;
+        if (IsUnnestedFunction(function_expression.func_name_)) {
+            return BuildUnnestExpr(function_expression, bind_context_ptr, depth, root);
+        }
         auto special_function = TryBuildSpecialFuncExpr(function_expression, bind_context_ptr, depth);
         if (special_function.has_value()) {
             return ExpressionBinder::BuildExpression(expr, bind_context_ptr, depth, root);
@@ -66,7 +79,7 @@ SharedPtr<BaseExpression> ProjectBinder::BuildExpression(const ParsedExpr &expr,
         if (IsEqual(function_set_ptr->name(), String("AVG")) && function_expression.arguments_->size() == 1 &&
             (*function_expression.arguments_)[0]->type_ == ParsedExprType::kColumn) {
             auto column_expr = (ColumnExpr *)(*function_expression.arguments_)[0];
-            Vector<String> column_names(Move(column_expr->names_));
+            Vector<String> column_names(std::move(column_expr->names_));
             delete column_expr;
             ConvertAvgToSumDivideCount(function_expression, column_names);
             return ExpressionBinder::BuildExpression(expr, bind_context_ptr, depth, root);
@@ -134,7 +147,8 @@ SharedPtr<BaseExpression> ProjectBinder::BuildFuncExpr(const FunctionExpr &expr,
     SharedPtr<FunctionSet> function_set_ptr = FunctionSet::GetFunctionSet(query_context_->storage()->catalog(), expr);
     if (function_set_ptr->type_ == FunctionType::kAggregate) {
         if (this->binding_agg_func_) {
-            Error<PlannerException>(Format("Aggregate function {} is called in another aggregate function.", function_set_ptr->name()));
+            String error_message = fmt::format("Aggregate function {} is called in another aggregate function.", function_set_ptr->name());
+            UnrecoverableError(error_message);
         } else {
             this->binding_agg_func_ = true;
         }
@@ -170,6 +184,14 @@ SharedPtr<BaseExpression> ProjectBinder::BuildColExpr(const ColumnExpr &expr, Bi
         bound_column_name_ = bound_column_expr->Name();
     }
     return bound_column_expr;
+}
+
+SharedPtr<BaseExpression> ProjectBinder::BuildUnnestExpr(const FunctionExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root) { 
+    auto col_expr = ExpressionBinder::BuildUnnestExpr(expr, bind_context_ptr, depth, root);
+
+    bound_select_statement_->unnest_expressions_.push_back(col_expr);
+
+    return col_expr;
 }
 
 } // namespace infinity

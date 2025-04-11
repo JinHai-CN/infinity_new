@@ -16,31 +16,47 @@ module;
 
 import logical_node;
 import stl;
-import parser;
+
 import query_context;
 import bound_select_statement;
 import bind_context;
 import table_ref;
+import base_table_ref;
 import binding;
 import bind_alias_proxy;
+import bound_delete_statement;
+import bound_update_statement;
+import bound_compact_statement;
+import select_statement;
+import delete_statement;
+import update_statement;
+import compact_statement;
+import parsed_expr;
+import knn_expr;
+import table_reference;
+import base_table_reference;
+import subquery_reference;
+import join_reference;
+import cross_product_reference;
 
 export module query_binder;
 
 namespace infinity {
 
-class BoundDeleteStatement;
-class BoundUpdateStatement;
-
 export class QueryBinder {
 public:
     explicit QueryBinder(QueryContext *query_context, SharedPtr<BindContext> bind_context_ptr)
-        : query_context_ptr_(Move(query_context)), bind_context_ptr_(Move(bind_context_ptr)) {}
+        : query_context_ptr_(std::move(query_context)), bind_context_ptr_(std::move(bind_context_ptr)) {}
 
     UniquePtr<BoundSelectStatement> BindSelect(const SelectStatement &statement);
 
     UniquePtr<BoundDeleteStatement> BindDelete(const DeleteStatement &statement);
 
     UniquePtr<BoundUpdateStatement> BindUpdate(const UpdateStatement &statement);
+
+    UniquePtr<BoundCompactStatement> BindCompact(const CompactStatement &statement);
+
+    SharedPtr<BaseTableRef> GetTableRef(const String &db_name, const String &table_name, bool update = false);
 
     QueryContext *query_context_ptr_;
 
@@ -57,7 +73,7 @@ private:
 
     SharedPtr<TableRef> BuildCTE(QueryContext *query_context, const String &name);
 
-    SharedPtr<TableRef> BuildBaseTable(QueryContext *query_context, const TableReference *table_reference);
+    SharedPtr<BaseTableRef> BuildBaseTable(QueryContext *query_context, const TableReference *table_reference, bool update = false);
 
     SharedPtr<TableRef> BuildView(QueryContext *query_context, const TableReference *from_table);
 

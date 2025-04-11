@@ -1,19 +1,24 @@
 module;
 
+export module posting_writer;
+
 import stl;
-import memory_pool;
+
 import file_writer;
+import file_reader;
 import doc_list_encoder;
 import inmem_posting_decoder;
-import pos_list_encoder;
+import position_list_encoder;
 import posting_list_format;
 import index_defines;
-export module posting_writer;
+import term_meta;
+import vector_with_lock;
+import mem_usage_change;
 
 namespace infinity {
 export class PostingWriter {
 public:
-    PostingWriter(MemoryPool *byte_slice_pool, RecyclePool *buffer_pool, PostingFormatOption posting_option);
+    PostingWriter(const PostingFormat &posting_format, VectorWithLock<u32> &column_lengths);
 
     ~PostingWriter();
 
@@ -31,16 +36,30 @@ public:
 
     tf_t GetCurrentTF() const;
 
-    void Write(const SharedPtr<FileWriter> &file_writer);
+    void Dump(const SharedPtr<FileWriter> &file_writer, TermMeta &term_meta, bool spill = false);
 
-    InMemPostingDecoder *CreateInMemPostingDecoder(MemoryPool *session_pool) const;
+    void Load(const SharedPtr<FileReader> &file_reader);
+
+    u32 GetDumpLength();
+
+    void EndSegment();
+
+    InMemPostingDecoder *CreateInMemPostingDecoder() const;
+
+    u32 GetDocColumnLength(docid_t doc_id) { return column_lengths_.Get(doc_id); }
+
+    MemUsageChange GetSizeChange();
 
 private:
-    MemoryPool *byte_slice_pool_;
-    RecyclePool *buffer_pool_;
-    PostingFormatOption posting_option_;
-    PostingFormat *posting_format_;
-    DocListEncoder *doc_list_encoder_ = nullptr;
-    PositionListEncoder *position_list_encoder_ = nullptr;
+    // for memory tracing
+    SizeT last_size_{0};
+    const PostingFormat &posting_format_;
+    DocListEncoder *doc_list_encoder_{nullptr};
+    PositionListEncoder *position_list_encoder_{nullptr};
+    // for column length info
+    VectorWithLock<u32> &column_lengths_;
 };
+
+export using PostingWriterProvider = std::function<SharedPtr<PostingWriter>(const String &)>;
+
 } // namespace infinity

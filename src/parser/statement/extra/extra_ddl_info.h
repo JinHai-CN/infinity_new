@@ -20,7 +20,7 @@ namespace infinity {
 
 enum class DDLType {
     kInvalid,
-    kSchema,
+    kDatabase,
     kTable,
     kCollection,
     kView,
@@ -42,6 +42,8 @@ public:
     DDLType type_{DDLType::kInvalid};
 
     ConflictType conflict_type_{ConflictType::kInvalid};
+    std::string schema_name_{};
+    std::string comment_{};
 };
 
 } // namespace infinity

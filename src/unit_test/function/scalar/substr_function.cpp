@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
+
 import scalar_function;
 import scalar_function_set;
 import function_set;
@@ -35,19 +36,27 @@ import base_expression;
 import column_vector;
 import value_expression;
 import substring;
-#if 0
-class SubstrFunctionTest : public BaseTest {};
+import logical_type;
+import internal_types;
+import data_type;
 
-TEST_F(SubstrFunctionTest, varchar_substr) {
+#if 0
+
+using namespace infinity;
+class SubstrFunctionTest : public BaseTestParamStr {};
+
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, SubstrFunctionsTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(SubstrFunctionTest, varchar_substr) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterSubstringFunction(catalog_ptr);
 
     {
         String op = "substring";
-        SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+        SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
         EXPECT_EQ(function_set->type_, FunctionType::kScalar);
         SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -87,7 +96,7 @@ TEST_F(SubstrFunctionTest, varchar_substr) {
         len_value_expr->AppendToChunk(col2);
 
         for (SizeT idx = 0; idx < row_count; ++idx) {
-            String s = "hello" + ToStr(idx);
+            String s = "hello" + std::to_string(idx);
             VarcharT varchar_value;
             varchar_value.InitAsValue(s);
             Value v = Value::MakeVarchar(varchar_value);
@@ -123,7 +132,7 @@ TEST_F(SubstrFunctionTest, varchar_substr) {
 
     {
         String op = "substring";
-        SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+        SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
         EXPECT_EQ(function_set->type_, FunctionType::kScalar);
         SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -163,7 +172,7 @@ TEST_F(SubstrFunctionTest, varchar_substr) {
         len_value_expr->AppendToChunk(col2);
 
         for (SizeT idx = 0; idx < row_count; ++idx) {
-            String s = "hellohellohellohello" + ToStr(idx);
+            String s = "hellohellohellohello" + std::to_string(idx);
             VarcharT varchar_value;
             varchar_value.InitAsValue(s);
             Value v = Value::MakeVarchar(varchar_value);

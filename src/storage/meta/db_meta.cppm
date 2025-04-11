@@ -14,60 +14,94 @@
 
 module;
 
-export module catalog:db_meta;
-import :db_entry;
-import :base_entry;
+export module db_meta;
 
 import stl;
-import parser;
+
 import buffer_manager;
 import third_party;
 import status;
+import extra_ddl_info;
+import db_entry;
+import base_entry;
+import txn_manager;
+import meta_info;
+import entry_list;
+import cleanup_scanner;
 
 namespace infinity {
 
-export struct DBMeta {
+struct Catalog;
 
-friend struct NewCatalog;
+export struct DBMeta : public BaseMeta {
+    using EntryT = DBEntry;
+
+    friend struct Catalog;
 
 public:
-    explicit DBMeta(const SharedPtr<String> &data_dir, SharedPtr<String> name) : db_name_(Move(name)), data_dir_(data_dir) {}
+    explicit DBMeta(SharedPtr<String> db_name) : db_name_(std::move(db_name)) {}
+
+    static UniquePtr<DBMeta> NewDBMeta(const SharedPtr<String> &db_name);
 
     SharedPtr<String> ToString();
 
-    Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
+    nlohmann::json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<DBMeta> Deserialize(const Json &db_meta_json, BufferManager *buffer_mgr);
-
-    void MergeFrom(DBMeta &other);
+    static UniquePtr<DBMeta> Deserialize(const nlohmann::json &db_meta_json, BufferManager *buffer_mgr);
 
     SharedPtr<String> db_name() const { return db_name_; }
 
-    SharedPtr<String> data_dir() const { return data_dir_; }
+    List<SharedPtr<DBEntry>> GetAllEntries() const { return db_entry_list_.GetAllEntries(); }
 
 private:
-    Tuple<DBEntry *, Status>
-    CreateNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflict_type = ConflictType::kError);
+    Tuple<DBEntry *, Status> CreateNewEntry(std::shared_lock<std::shared_mutex> &&r_lock,
+                                            const SharedPtr<String> &comment,
+                                            TransactionID txn_id,
+                                            TxnTimeStamp begin_ts,
+                                            TxnManager *txn_mgr,
+                                            ConflictType conflict_type = ConflictType::kError);
 
-    Tuple<DBEntry *, Status> DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+    Tuple<SharedPtr<DBEntry>, Status> DropNewEntry(std::shared_lock<std::shared_mutex> &&r_lock,
+                                                   TransactionID txn_id,
+                                                   TxnTimeStamp begin_ts,
+                                                   TxnManager *txn_mgr,
+                                                   ConflictType conflict_type = ConflictType::kError);
 
-    void DeleteNewEntry(u64 txn_id, TxnManager *txn_mgr);
+    void DeleteNewEntry(TransactionID txn_id);
 
-    Tuple<DBEntry *, Status> GetEntry(u64 txn_id, TxnTimeStamp begin_ts);
+    Tuple<DBEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) {
+        return db_entry_list_.GetEntry(std::move(r_lock), txn_id, begin_ts);
+    }
 
-    // Thread-unsafe
-    List<UniquePtr<BaseEntry>> &entry_list() { return entry_list_; }
+    Tuple<SharedPtr<DatabaseInfo>, Status> GetDatabaseInfo(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts);
 
-    // Used in initialization phase
-    static void AddEntry(DBMeta *db_meta, UniquePtr<BaseEntry> db_entry);
+    Tuple<DBEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) { return db_entry_list_.GetEntryNolock(txn_id, begin_ts); }
+
+    // replay
+    void CreateEntryReplay(std::function<SharedPtr<DBEntry>(TransactionID, TxnTimeStamp)> &&init_entry, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    void DropEntryReplay(std::function<SharedPtr<DBEntry>(TransactionID, TxnTimeStamp)> &&init_entry, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    DBEntry *GetEntryReplay(TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    void PushBackEntry(const SharedPtr<DBEntry> &new_db_entry);
+
+    void PushFrontEntry(const SharedPtr<DBEntry> &new_db_entry);
+
+    void Sort();
 
 private:
     SharedPtr<String> db_name_{};
-    SharedPtr<String> data_dir_{};
 
-    RWMutex rw_locker_{};
-    // Ordered by commit_ts from latest to oldest.
-    List<UniquePtr<BaseEntry>> entry_list_{};
+public:
+    void Cleanup(CleanupInfoTracer *info_tracer = nullptr, bool dropped = true) override;
+
+    bool PickCleanup(CleanupScanner *scanner) override;
+
+    bool Empty() override { return db_entry_list_.Empty(); }
+
+private:
+    EntryList<DBEntry> db_entry_list_{};
 };
 
 } // namespace infinity

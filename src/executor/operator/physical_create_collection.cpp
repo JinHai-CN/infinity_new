@@ -14,17 +14,24 @@
 
 module;
 
+module physical_create_collection;
+
 import stl;
 import txn;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+
 import physical_operator_type;
 import operator_state;
 import load_meta;
-
-module physical_create_collection;
+import internal_types;
+import extra_ddl_info;
+import data_type;
+import wal_manager;
+import infinity_context;
+import status;
+import infinity_exception;
 
 namespace infinity {
 
@@ -36,14 +43,25 @@ PhysicalCreateCollection::PhysicalCreateCollection(SharedPtr<String> schema_name
                                                    u64 table_index,
                                                    u64 id,
                                                    SharedPtr<Vector<LoadMeta>> load_metas)
-    : PhysicalOperator(PhysicalOperatorType::kCreateCollection, nullptr, nullptr, id, load_metas), schema_name_(Move(schema_name)),
-      collection_name_(Move(collection_name)), conflict_type_(conflict_type), table_index_(table_index), output_names_(Move(output_names)),
-      output_types_(Move(output_types)) {}
+    : PhysicalOperator(PhysicalOperatorType::kCreateCollection, nullptr, nullptr, id, load_metas), schema_name_(std::move(schema_name)),
+      collection_name_(std::move(collection_name)), conflict_type_(conflict_type), table_index_(table_index), output_names_(std::move(output_names)),
+      output_types_(std::move(output_types)) {}
 
-void PhysicalCreateCollection::Init() {}
+void PhysicalCreateCollection::Init(QueryContext* query_context) {}
 
-bool PhysicalCreateCollection::Execute(QueryContext *, OperatorState *output_state) {
-    output_state->SetComplete();
+bool PhysicalCreateCollection::Execute(QueryContext *, OperatorState *operator_state) {
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
+    operator_state->SetComplete();
     return true;
 }
 

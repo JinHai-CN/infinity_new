@@ -14,21 +14,28 @@
 
 module;
 
-import stl;
-
 export module defer_op;
+
+import stl;
 
 namespace infinity {
 
 export template <typename FN>
 class DeferFn {
 public:
-    explicit DeferFn(FN func) : func_(Move(func)) {}
+    explicit DeferFn(FN func) : func_(std::move(func)) {}
 
-    ~DeferFn() noexcept { func_(); }
+    DeferFn(const DeferFn &) = delete;
+    DeferFn(DeferFn &&) : func_(std::exchange(func_, None)) {}
+
+    ~DeferFn() noexcept {
+        if (func_) {
+            (*func_)();
+        }
+    }
 
 private:
-    FN func_;
+    Optional<FN> func_;
 };
 
 } // namespace infinity

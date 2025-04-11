@@ -12,17 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
+import parser_assert;
+
 #if 0
+
+using namespace infinity;
 class PathTypeTest : public BaseTest {};
 
 TEST_F(PathTypeTest, path1) {
@@ -74,7 +79,7 @@ TEST_F(PathTypeTest, path1) {
     EXPECT_EQ(path4.GetPoint(1).y, PointT(1.1, 2.2).y);
 
     PathT path5(1);
-    path5 = Move(path2);
+    path5 = std::move(path2);
     EXPECT_EQ(path5.PointCount(), 2);
     EXPECT_EQ(path5.GetPoint(0).x, PointT(1.0, 2.1).x);
     EXPECT_EQ(path5.GetPoint(0).y, PointT(1.0, 2.1).y);
@@ -84,7 +89,7 @@ TEST_F(PathTypeTest, path1) {
     EXPECT_EQ(path2.PointCount(), 0);
     EXPECT_EQ(path2.ptr, nullptr);
 
-    PathT path6(Move(path4));
+    PathT path6(std::move(path4));
     EXPECT_EQ(path6.PointCount(), 2);
     EXPECT_EQ(path6.GetPoint(0).x, PointT(1.0, 2.1).x);
     EXPECT_EQ(path6.GetPoint(0).y, PointT(1.0, 2.1).y);

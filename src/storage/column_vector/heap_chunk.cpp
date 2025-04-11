@@ -15,19 +15,21 @@
 module;
 
 #include <sstream>
-import stl;
-
-import infinity_exception;
 
 module heap_chunk;
+
+import logger;
+import stl;
+import infinity_exception;
 
 namespace infinity {
 
 ptr_t StringHeapMgr::Allocate(SizeT nbytes) {
     if (nbytes == 0) {
-        Error<ExecutorException>("Attempt to allocate zero size memory.");
+        String error_message = "Attempt to allocate zero size memory.";
+        UnrecoverableError(error_message);
     }
-    if (current_chunk_idx_ == u64_max) {
+    if (current_chunk_idx_ == std::numeric_limits<u64>::max()) {
         // First chunk
         while (current_chunk_size_ < nbytes) {
             current_chunk_size_ *= 2;
@@ -44,7 +46,8 @@ ptr_t StringHeapMgr::Allocate(SizeT nbytes) {
             ++current_chunk_idx_;
         }
         if (chunks_[current_chunk_idx_]->current_offset_ + nbytes > current_chunk_size_) {
-            Error<ExecutorException>("Unexpected string chunk error");
+            String error_message = "Unexpected string chunk error";
+            UnrecoverableError(error_message);
         }
     }
 
@@ -63,12 +66,12 @@ ptr_t StringHeapMgr::Allocate(SizeT nbytes) {
 String StringHeapMgr::Stats() const {
     std::stringstream ss;
     SizeT chunk_count = chunks_.size();
-    ss << "Chunk count: " << chunk_count <<std::endl;;
+    ss << "Chunk count: " << chunk_count << std::endl;
     ;
     for (SizeT idx = 0; idx < chunk_count; ++idx) {
         auto &chunk = chunks_[idx];
         ss << "Chunk id: " << idx++ << ", Capacity: " << chunk->capacity_ << ", Current pos: " << chunk->current_offset_
-           << ", object count: " << chunk->object_count_ <<std::endl;;
+           << ", object count: " << chunk->object_count_ << std::endl;
         ;
     }
     return ss.str();

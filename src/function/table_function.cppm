@@ -14,26 +14,26 @@
 
 module;
 
+export module table_function;
+
 import stl;
 import function;
 import function_data;
-import parser;
-//import query_context;
-import data_block;
 
-export module table_function;
+// import query_context;
+import data_block;
+import logical_type;
 
 namespace infinity {
 
 class QueryContext;
-//class DataBlock;
 
 export class TableFunctionData : public FunctionData {
 public:
     ~TableFunctionData() override = default;
 };
 
-export using TableFunctionType = StdFunction<void(QueryContext *query_context, TableFunctionData *data, DataBlock &output)>;
+export using TableFunctionType = std::function<void(QueryContext *query_context, TableFunctionData *data, DataBlock &output)>;
 
 export class TableFunction : public Function {
 public:

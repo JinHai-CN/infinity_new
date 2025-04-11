@@ -14,33 +14,62 @@
 
 module;
 
+module physical_drop_index;
+
 import stl;
 import query_context;
 import operator_state;
-import parser;
+
 import table_def;
 import data_table;
 import status;
 import infinity_exception;
+import logical_type;
+import column_def;
 
-module physical_drop_index;
+import wal_manager;
+import infinity_context;
+import status;
+import new_txn;
 
 namespace infinity {
 
-void PhysicalDropIndex::Init() {}
+void PhysicalDropIndex::Init(QueryContext *query_context) {}
 
 bool PhysicalDropIndex::Execute(QueryContext *query_context, OperatorState *operator_state) {
-    auto txn = query_context->GetTxn();
-    Status status = txn->DropIndexByName(*schema_name_, *table_name_, *index_name_, conflict_type_);
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
 
-    auto drop_index_operator_state = static_cast<DropIndexOperatorState *>(operator_state);
-    drop_index_operator_state->error_message_ = Move(status.msg_);
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
+    bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+    if (!use_new_catalog) {
+        auto txn = query_context->GetTxn();
+        Status status = txn->DropIndexByName(*schema_name_, *table_name_, *index_name_, conflict_type_);
+
+        if (!status.ok()) {
+            operator_state->status_ = status;
+        }
+    } else {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        Status status = new_txn->DropIndexByName(*schema_name_, *table_name_, *index_name_, conflict_type_);
+
+        if (!status.ok()) {
+            operator_state->status_ = status;
+        }
+    }
 
     // Generate the result
     Vector<SharedPtr<ColumnDef>> column_defs = {
-        MakeShared<ColumnDef>(0, MakeShared<DataType>(LogicalType::kInteger), "OK", HashSet<ConstraintType>())};
+        MakeShared<ColumnDef>(0, MakeShared<DataType>(LogicalType::kInteger), "OK", std::set<ConstraintType>())};
 
-    auto result_table_def_ptr = MakeShared<TableDef>(MakeShared<String>("default"), MakeShared<String>("Tables"), column_defs);
+    auto result_table_def_ptr = TableDef::Make(MakeShared<String>("default_db"), MakeShared<String>("Tables"), nullptr, column_defs);
     output_ = MakeShared<DataTable>(result_table_def_ptr, TableType::kDataTable);
     operator_state->SetComplete();
     return true;

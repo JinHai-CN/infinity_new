@@ -14,93 +14,92 @@
 
 module;
 
+export module fragment_task;
+
 import stl;
 import profiler;
 import operator_state;
-
-export module fragment_task;
+import global_resource_usage;
 
 namespace infinity {
 
-// Task type:
-// DDL task
-// DML task
-// Query task
-// Read data from queue or file system
+class FragmentContext;
 
-enum class FragmentSourceType {
-    kNone,
-    kScan,
-    kQueue,
-};
-
-enum class FragmentSinkType {
-    kGlobalMaterialize,
-    kLocalMaterialize,
-    kStream,
-};
-
-enum class FragmentTaskStatus {
-    kRunning,
-    kCancelled,
-    kFinished,
-    kReady,
+export enum class FragmentTaskStatus : i8 {
     kPending,
+    kRunning,
+    kFinished,
     kError,
 };
 
+export String FragmentTaskStatus2String(FragmentTaskStatus status) {
+    switch (status) {
+        case FragmentTaskStatus::kPending:
+            return String("Pending");
+        case FragmentTaskStatus::kRunning:
+            return String("Running");
+        case FragmentTaskStatus::kFinished:
+            return String("Finished");
+        case FragmentTaskStatus::kError:
+            return String("Error");
+    }
+}
+
 export class FragmentTask {
 public:
-    explicit FragmentTask(bool terminator = true) : is_terminator_(terminator) {}
+    explicit FragmentTask(bool terminator = true) : is_terminator_(terminator) {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("FragmentTask");
+#endif
+    }
 
     explicit FragmentTask(void *fragment_context, i64 task_id, i64 operator_count)
         : fragment_context_(fragment_context), task_id_(task_id), operator_count_(operator_count) {
         Init();
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("FragmentTask");
+#endif
     }
 
-    inline void SetTerminator() { is_terminator_ = true; }
+    ~FragmentTask() {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::DecrObjectCount("FragmentTask");
+#endif
+    }
 
     [[nodiscard]] inline bool IsTerminator() const { return is_terminator_; }
 
-    // Set source
-    // Scan source
-    //    void
-    //    AddSourceSegment(const SegmentEntry* segment_entry_ptr);
-    //
-    //    // Input queue
-    //    void
-    //    AddQueue(const BatchBlockingQueue);
     void Init();
 
-    void OnExecute(i64 worker_id);
+    void OnExecute();
 
     inline void SetLastWorkID(i64 worker_id) { last_worker_id_ = worker_id; }
 
     [[nodiscard]] inline i64 LastWorkerID() const { return last_worker_id_; }
 
+    u64 FragmentId() const;
+
     [[nodiscard]] inline i64 TaskID() const { return task_id_; }
 
-    [[nodiscard]] bool Ready() const;
+    [[nodiscard]] bool IsComplete();
 
-    [[nodiscard]] bool IsComplete() const;
+    // TryInto and QuitFrom race on `status_`
+    bool TryIntoWorkerLoop();
+
+    bool QuitFromWorkerLoop();
 
     [[nodiscard]] TaskBinding TaskBinding() const;
 
-    void TryCompleteFragment();
+    bool CompleteTask();
 
     String PhysOpsToString();
 
-    inline void set_status(FragmentTaskStatus new_status) {
-        status_ = new_status;
-    }
+    // for test.
+    [[nodiscard]] inline FragmentTaskStatus status() const { return status_; }
 
-    [[nodiscard]] inline FragmentTaskStatus status() const {
-        return status_;
-    }
+    FragmentContext *fragment_context() const;
 
 public:
-    FragmentTaskStatus status_{FragmentTaskStatus::kReady};
-
     UniquePtr<SourceState> source_state_{};
 
     Vector<UniquePtr<OperatorState>> operator_states_{};
@@ -108,6 +107,10 @@ public:
     UniquePtr<SinkState> sink_state_{};
 
 private:
+    std::mutex mutex_;
+
+    FragmentTaskStatus status_{FragmentTaskStatus::kPending};
+
     void *fragment_context_{};
     bool is_terminator_{false};
     i64 last_worker_id_{-1};

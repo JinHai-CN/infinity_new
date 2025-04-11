@@ -14,21 +14,23 @@
 
 module;
 
+export module cast_expression;
+
 import column_binding;
-import parser;
+
 import stl;
 import expression_type;
 import bound_cast_func;
 import base_expression;
-
-export module cast_expression;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
 export class CastExpression : public BaseExpression {
 public:
     CastExpression(BoundCastFunc cast_function, const SharedPtr<BaseExpression> &argument, DataType target_type)
-        : BaseExpression(ExpressionType::kCast, {argument}), func_(cast_function), target_type_(Move(target_type)) {}
+        : BaseExpression(ExpressionType::kCast, {argument}), func_(cast_function), target_type_(std::move(target_type)) {}
 
     inline DataType Type() const override { return target_type_; }
 
@@ -39,6 +41,10 @@ public:
     static SharedPtr<BaseExpression> AddCastToType(const SharedPtr<BaseExpression> &expr, const DataType &target_type);
 
     BoundCastFunc func_;
+
+    u64 Hash() const override;
+
+    bool Eq(const BaseExpression &other) const override;
 
 private:
     DataType target_type_;

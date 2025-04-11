@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,8 +36,17 @@ import cast_table;
 import column_vector;
 import interval_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import data_type;
 
-class IntervalCastTest : public BaseTest {};
+using namespace infinity;
+
+class IntervalCastTest : public BaseTest {
+    void SetUp() override { BaseTest::SetUp(); }
+
+    void TearDown() override { BaseTest::TearDown(); }
+};
 
 TEST_F(IntervalCastTest, date_cast0) {
     using namespace infinity;
@@ -46,7 +55,7 @@ TEST_F(IntervalCastTest, date_cast0) {
     {
         IntervalT source;
         TinyIntT target;
-        EXPECT_THROW(IntervalTryCastToVarlen::Run(source, target, nullptr), FunctionException);
+        EXPECT_THROW(IntervalTryCastToVarlen::Run(source, target, nullptr), UnrecoverableException);
     }
     {
         IntervalT source;
@@ -56,7 +65,7 @@ TEST_F(IntervalCastTest, date_cast0) {
         SharedPtr<ColumnVector> col_varchar_ptr = MakeShared<ColumnVector>(data_type);
         col_varchar_ptr->Initialize();
 
-        EXPECT_THROW(IntervalTryCastToVarlen::Run(source, target, col_varchar_ptr), NotImplementException);
+        EXPECT_THROW(IntervalTryCastToVarlen::Run(source, target, col_varchar_ptr.get()), UnrecoverableException);
     }
 }
 
@@ -66,7 +75,7 @@ TEST_F(IntervalCastTest, date_cast1) {
     // Call BindIntervalCast with wrong type of parameters
     {
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindTimeCast(target_type), TypeException);
+        EXPECT_THROW(BindTimeCast(target_type), UnrecoverableException);
     }
 
     SharedPtr<DataType> source_type = MakeShared<DataType>(LogicalType::kInterval);
@@ -92,6 +101,6 @@ TEST_F(IntervalCastTest, date_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), NotImplementException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 }

@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,7 +36,13 @@ import cast_table;
 import column_vector;
 import geography_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import data_type;
+
 #if 0
+
+using namespace infinity;
 class PathCastTest : public BaseTest {};
 
 TEST_F(PathCastTest, path_cast0) {
@@ -55,7 +61,7 @@ TEST_F(PathCastTest, path_cast0) {
         source.SetPoint(2, p3);
         source.SetPoint(3, p4);
         TinyIntT target;
-        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, nullptr), FunctionException);
+        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, nullptr), UnrecoverableException);
     }
     {
         PointT p1(static_cast<f64>(1) + 0.1f, static_cast<f64>(1) - 0.3f);
@@ -75,7 +81,7 @@ TEST_F(PathCastTest, path_cast0) {
         SharedPtr<ColumnVector> col_varchar_ptr = MakeShared<ColumnVector>(data_type);
         col_varchar_ptr->Initialize();
 
-        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, col_varchar_ptr), NotImplementException);
+        EXPECT_THROW(GeographyTryCastToVarlen::Run(source, target, col_varchar_ptr.get()), UnrecoverableException);
     }
 }
 
@@ -86,7 +92,7 @@ TEST_F(PathCastTest, path_cast1) {
     {
         DataType source_type(LogicalType::kPath);
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindGeographyCast<PathT>(source_type, target_type), TypeException);
+        EXPECT_THROW(BindGeographyCast<PathT>(source_type, target_type), UnrecoverableException);
     }
 
     SharedPtr<DataType> source_type = MakeShared<DataType>(LogicalType::kPath);
@@ -132,7 +138,7 @@ TEST_F(PathCastTest, path_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), NotImplementException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 }
 #endif

@@ -37,8 +37,6 @@ struct WithExpr {
 
 enum OrderType { kAsc, kDesc };
 
-std::string ToString(OrderType type);
-
 struct OrderByExpr {
     ~OrderByExpr() { delete expr_; }
     ParsedExpr *expr_{};
@@ -51,22 +49,26 @@ public:
 
     ~SelectStatement() final;
 
+    static std::string ToString(OrderType type);
     [[nodiscard]] std::string ToString() const final;
 
     BaseTableReference *table_ref_{nullptr};
     std::vector<ParsedExpr *> *select_list_{nullptr};
+    std::vector<ParsedExpr *> *highlight_list_{nullptr};
     bool select_distinct_{false};
     ParsedExpr *search_expr_{nullptr};
     ParsedExpr *where_expr_{nullptr};
     std::vector<ParsedExpr *> *group_by_list_{nullptr};
     ParsedExpr *having_expr_{nullptr};
-    std::vector<OrderByExpr *> *order_by_list{nullptr};
+    std::vector<OrderByExpr *> *order_by_list_{nullptr};
     ParsedExpr *limit_expr_{nullptr};
     ParsedExpr *offset_expr_{nullptr};
     std::vector<WithExpr *> *with_exprs_{nullptr};
 
     SetOperatorType set_op_{SetOperatorType::kUnion};
     SelectStatement *nested_select_{nullptr};
+
+    bool total_hits_count_flag_{false};
 };
 
 } // namespace infinity

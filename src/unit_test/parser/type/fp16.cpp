@@ -1,14 +1,17 @@
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
+import float16;
 
+using namespace infinity;
 class FP16TypeTest : public BaseTest {};
 
 TEST_F(FP16TypeTest, test1) {

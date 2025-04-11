@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -30,7 +31,11 @@ import data_block;
 import column_vector;
 import logger;
 import selection;
+import logical_type;
+import internal_types;
+import data_type;
 
+using namespace infinity;
 class ExpressionExecutorSelectTest : public BaseTest {};
 
 TEST_F(ExpressionExecutorSelectTest, test1) {
@@ -129,6 +134,6 @@ TEST_F(ExpressionExecutorSelectTest, test3) {
                                output_true_select,
                                true);
 #endif
-    EXPECT_EQ(output_true_select->Size(), 0);
-    EXPECT_THROW((*output_true_select)[0], ExecutorException);
+    EXPECT_EQ(output_true_select->Size(), 0u);
+    EXPECT_THROW((*output_true_select)[0], UnrecoverableException);
 }

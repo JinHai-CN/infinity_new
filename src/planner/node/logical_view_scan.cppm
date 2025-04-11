@@ -14,23 +14,23 @@
 
 module;
 
+export module logical_view_scan;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
-
-export module logical_view_scan;
+import data_type;
+import view;
+import internal_types;
 
 namespace infinity {
-
-class View;
 
 export class LogicalViewScan : public LogicalNode {
 
 public:
     explicit LogicalViewScan(u64 node_id, SharedPtr<View> view_ptr)
-        : LogicalNode(node_id, LogicalNodeType::kViewScan), view_ptr_(Move(view_ptr)) {}
+        : LogicalNode(node_id, LogicalNodeType::kViewScan), view_ptr_(std::move(view_ptr)) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 

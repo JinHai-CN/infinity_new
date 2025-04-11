@@ -12,105 +12,186 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 module;
-
+#include <chrono>
 export module config;
 
 import stl;
 import third_party;
 import options;
+import status;
+import command_statement;
+import virtual_store;
+
 
 namespace infinity {
 
-export constexpr StringView profile_history_capacity_name = "profile_history_capacity";
-export constexpr StringView enable_profiling_name = "enable_profile";
-export constexpr StringView worker_cpu_limit = "cpu_count";
-export constexpr StringView log_level = "log_level";
+using namespace std::chrono;
+export constexpr std::string_view profile_history_capacity_name = "profile_history_capacity";
+export constexpr std::string_view enable_profile_name = "enable_profile";
+export constexpr std::string_view worker_cpu_limit = "cpu_count";
+export constexpr std::string_view log_level = "log_level";
+
+export struct DefaultConfig {
+    LogLevel default_log_level_{LogLevel::kInfo};
+    bool default_use_new_catalog_{false};
+    bool default_log_to_stdout_{false};
+    String default_log_dir_ = "/var/infinity/log";
+    String default_catalog_dir_ = "/var/infinity/catalog";
+    String default_snapshot_dir_ = "/var/infinity/snapshot";
+    String default_data_dir_ = "/var/infinity/data";
+    String default_wal_dir_ = "/var/infinity/wal";
+    String default_temp_dir_ = "/var/infinity/tmp";
+    String default_resource_dir_ = "/var/infinity/resource";
+    String default_persistence_dir_ = "/var/infinity/persistence";
+};
 
 export struct Config {
 public:
-    SharedPtr<String> Init(const SharedPtr<String> &config_path);
+    Config();
+    ~Config();
 
-    void PrintAll() const;
+    Status Init(const SharedPtr<String> &config_path, DefaultConfig *default_config);
+
+    void PrintAll();
 
     // General
-    [[nodiscard]] inline String version() const { return system_option_.version; }
+    String Version();
+    String ServerMode();
+    String TimeZone();
+    i64 TimeZoneBias();
 
-    [[nodiscard]] inline String time_zone() const { return system_option_.time_zone; }
+    void SetCPULimit(i64 new_cpu_limit);
+    i64 CPULimit();
+    inline bool RecordRunningQuery() { return record_running_query_; }
+    void SetRecordRunningQuery(bool flag);
 
-    [[nodiscard]] inline i32 time_zone_bias() const { return system_option_.time_zone_bias; }
+    // Network
+    String ServerAddress();
+    String PeerServerIP();
+    i64 PeerServerPort();
+    i64 PostgresPort();
+    i64 HTTPPort();
+    i64 ClientPort();
+    i64 ConnectionPoolSize();
+    i64 PeerServerConnectionPoolSize();
 
-    inline void set_worker_cpu_number(u64 new_cpu_limit) { system_option_.worker_cpu_limit = new_cpu_limit; }
-    [[nodiscard]] inline u64 worker_cpu_limit() const { return system_option_.worker_cpu_limit; }
-
-    [[nodiscard]] inline u64 total_memory_size() const { return system_option_.total_memory_size; }
-
-    [[nodiscard]] inline u64 query_cpu_limit() const { return system_option_.query_cpu_limit; }
-
-    [[nodiscard]] inline u64 query_memory_limit() const { return system_option_.query_memory_limit; }
-
-    [[nodiscard]] inline String listen_address() const { return system_option_.listen_address; }
-
-    [[nodiscard]] inline u16 pg_port() const { return system_option_.pg_port; }
-
-    [[nodiscard]] inline u32 http_port() const { return system_option_.http_port; }
-
-    [[nodiscard]] inline u32 sdk_port() const { return system_option_.sdk_port; }
-
-    // Profiler
-    [[nodiscard]] inline bool enable_profiler() const { return system_option_.enable_profiler; }
-
-    [[nodiscard]] inline SizeT profile_record_capacity() const { return system_option_.profile_record_capacity; }
+    i64 PeerRetryDelay();
+    i64 PeerRetryCount();
+    i64 PeerConnectTimeout();
+    i64 PeerRecvTimeout();
+    i64 PeerSendTimeout();
 
     // Log
-    [[nodiscard]] inline SharedPtr<String> log_filename() const { return system_option_.log_filename; }
+    String LogFileName();
+    String LogDir();
+    String LogFilePath();
 
-    [[nodiscard]] inline SharedPtr<String> log_dir() const { return system_option_.log_dir; }
+    void SetLogToStdout(bool log_to_stdout);
+    bool LogToStdout();
 
-    [[nodiscard]] inline SharedPtr<String> log_file_path() const { return system_option_.log_file_path; }
+    i64 LogFileMaxSize();
+    i64 LogFileRotateCount();
 
-    [[nodiscard]] inline bool log_to_stdout() const { return system_option_.log_to_stdout; }
-
-    [[nodiscard]] inline SizeT log_max_size() const { return system_option_.log_max_size; }
-
-    [[nodiscard]] inline SizeT log_file_rotate_count() const { return system_option_.log_file_rotate_count; }
-
-    [[nodiscard]] inline LogLevel log_level() const { return system_option_.log_level; }
+    void SetLogLevel(LogLevel level);
+    LogLevel GetLogLevel();
 
     // Storage
-    [[nodiscard]] inline SharedPtr<String> data_dir() const { return system_option_.data_dir; }
+    bool UseNewCatalog();
+    bool ReplayWal();
+    String DataDir();
+    String CatalogDir();
+    String SnapshotDir();
 
-    [[nodiscard]] inline SharedPtr<String> wal_dir() const { return system_option_.wal_dir; }
+    i64 CleanupInterval();
+    void SetCleanupInterval(i64);
 
-    [[nodiscard]] inline u64 default_row_size() const { return system_option_.default_row_size; }
+    i64 CompactInterval();
+    void SetCompactInterval(i64);
 
-    [[nodiscard]] inline u64 buffer_pool_size() const { return system_option_.buffer_pool_size; }
+    i64 OptimizeIndexInterval();
+    void SetOptimizeInterval(i64);
 
-    [[nodiscard]] inline SharedPtr<String> temp_dir() const { return system_option_.temp_dir; }
+    i64 MemIndexCapacity();
+    i64 DenseIndexBuildingWorker();
+    i64 SparseIndexBuildingWorker();
+    i64 FulltextIndexBuildingWorker();
 
-    // Wal
-    [[nodiscard]] inline u64 full_checkpoint_interval_sec() const { return system_option_.full_checkpoint_interval_sec_; }
+    StorageType StorageType();
+    String ObjectStorageUrl();
+    String ObjectStorageBucket();
+    String ObjectStorageAccessKey();
+    String ObjectStorageSecretKey();
+    bool ObjectStorageHttps();
 
-    [[nodiscard]] inline u64 full_checkpoint_txn_interval() const { return system_option_.full_checkpoint_txn_interval_; }
+    // Persistence
+    String PersistenceDir();
+    i64 PersistenceObjectSizeLimit();
 
-    [[nodiscard]] inline u64 delta_checkpoint_interval_sec() const { return system_option_.delta_checkpoint_interval_sec_; }
+    // Buffer
+    i64 BufferManagerSize();
+    SizeT LRUNum();
+    String TempDir();
 
-    [[nodiscard]] inline u64 delta_checkpoint_interval_wal_bytes() const { return system_option_.delta_checkpoint_interval_wal_bytes_; }
+    i64 MemIndexMemoryQuota();
 
-    [[nodiscard]] inline u64 wal_size_threshold() const { return system_option_.wal_size_threshold_; }
+    String ResultCache();
+    i64 CacheResultNum();
+    void SetCacheResult(const String &mode);
+
+    // WAL
+    String WALDir();
+
+    i64 WALCompactThreshold();
+
+    i64 FullCheckpointInterval();
+    void SetFullCheckpointInterval(i64);
+
+    i64 DeltaCheckpointInterval();
+    void SetDeltaCheckpointInterval(i64);
+
+    i64 DeltaCheckpointThreshold();
+
+    FlushOptionType FlushMethodAtCommit();
 
     // Resource
-    [[nodiscard]] inline String resource_dict_path() const { return system_option_.resource_dict_path_; }
+    String ResourcePath();
 
-private:
+    // Date and Time
+
+    void SetTimeZone(const String &value);
+
+    void SetTimeZoneBias(i64);
+public:
+    // Get config by name
+    Tuple<BaseOption *, Status> GetConfigByName(const String &name);
+
+    GlobalOptionIndex GetOptionIndex(const String &var_name) const { return global_options_.GetOptionIndex(var_name); }
+
+    void SetOption(const String &var_name, const String &value);
+
+    static void SetTimeZoneOuter(const String &value);
+
     static void ParseTimeZoneStr(const String &time_zone_str, String &parsed_time_zone, i32 &parsed_time_zone_bias);
 
-    static SharedPtr<String> ParseByteSize(const String &byte_size_str, u64 &byte_size);
+private:
+
+
+    // static void ParseTimeZoneStr(const String &time_zone_str);
+
+    static Status ParseByteSize(const String &byte_size_str, i64 &byte_size);
+
+    static Status ParseTimeInfo(const String &time_info, i64 &time_seconds);
 
     static u64 GetAvailableMem();
 
-private:
-    SystemOptions system_option_;
-    SessionOptions default_session_options_;
-};
 
+private:
+    std::mutex mutex_;
+    GlobalOptions global_options_;
+    // record running query flag
+    Atomic<bool> record_running_query_{false};
+
+public:
+    hours hour_offset_{};
+};
 } // namespace infinity

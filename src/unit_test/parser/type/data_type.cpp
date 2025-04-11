@@ -12,17 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
+import internal_types;
+import logical_type;
+import type_info;
+import bitmap_info;
+import decimal_info;
+import embedding_info;
+import knn_expr;
+import internal_types;
+import data_type;
 
+using namespace infinity;
 class DataTypeTest : public BaseTest {};
 
 TEST_F(DataTypeTest, GetTypeName) {
@@ -70,18 +81,18 @@ TEST_F(DataTypeTest, GetTypeName) {
     EXPECT_EQ(line_seg_type.ToString(), "LineSegment");
     DataType box_type(LogicalType::kBox);
     EXPECT_EQ(box_type.ToString(), "Box");
-//    DataType path_type(LogicalType::kPath);
-//    EXPECT_EQ(path_type.ToString(), "Path");
-//    DataType polygon(LogicalType::kPolygon);
-//    EXPECT_EQ(polygon.ToString(), "Polygon");
+    //    DataType path_type(LogicalType::kPath);
+    //    EXPECT_EQ(path_type.ToString(), "Path");
+    //    DataType polygon(LogicalType::kPolygon);
+    //    EXPECT_EQ(polygon.ToString(), "Polygon");
     DataType circle_type(LogicalType::kCircle);
     EXPECT_EQ(circle_type.ToString(), "Circle");
-//    DataType bitmap_type(LogicalType::kBitmap);
-//    EXPECT_EQ(bitmap_type.ToString(), "Bitmap");
+    //    DataType bitmap_type(LogicalType::kBitmap);
+    //    EXPECT_EQ(bitmap_type.ToString(), "Bitmap");
     DataType uuid_type(LogicalType::kUuid);
     EXPECT_EQ(uuid_type.ToString(), "UUID");
-//    DataType blob_type(LogicalType::kBlob);
-//    EXPECT_EQ(blob_type.ToString(), "Blob");
+    //    DataType blob_type(LogicalType::kBlob);
+    //    EXPECT_EQ(blob_type.ToString(), "Blob");
     DataType vector_type(LogicalType::kEmbedding);
     EXPECT_EQ(vector_type.ToString(), "Embedding");
     DataType row_id_type(LogicalType::kRowID);
@@ -148,7 +159,7 @@ TEST_F(DataTypeTest, ReadWrite) {
         MakeShared<DataType>(LogicalType::kTinyInt),
         MakeShared<DataType>(LogicalType::kFloat),
         MakeShared<DataType>(LogicalType::kTuple),
-//        MakeShared<DataType>(LogicalType::kBitmap, type_info_bitmap),
+        //        MakeShared<DataType>(LogicalType::kBitmap, type_info_bitmap),
         MakeShared<DataType>(LogicalType::kDecimal, type_info_decimal),
         MakeShared<DataType>(LogicalType::kEmbedding, type_info_embedding),
     };
@@ -162,10 +173,10 @@ TEST_F(DataTypeTest, ReadWrite) {
         data_type->WriteAdv(ptr);
         EXPECT_EQ(ptr - buf_beg, exp_size);
 
-        ptr = buf_beg;
-        SharedPtr<DataType> data_type2 = DataType::ReadAdv(ptr, exp_size);
+        const char *ptr_r = buf_beg;
+        SharedPtr<DataType> data_type2 = DataType::ReadAdv(ptr_r, exp_size);
         EXPECT_NE(data_type2, nullptr);
         EXPECT_EQ(*data_type2, *data_type);
-        EXPECT_EQ(ptr - buf_beg, exp_size);
+        EXPECT_EQ(ptr_r - buf_beg, exp_size);
     }
 }

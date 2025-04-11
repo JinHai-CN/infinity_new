@@ -14,16 +14,18 @@
 
 module;
 
+module count;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import aggregate_function;
 import aggregate_function_set;
-import parser;
-import third_party;
 
-module count;
+import third_party;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
@@ -43,7 +45,7 @@ public:
     inline static SizeT Size(const DataType &) { return sizeof(i64); }
 };
 
-void RegisterCountFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterCountFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "COUNT";
 
     SharedPtr<AggregateFunctionSet> function_set_ptr = MakeShared<AggregateFunctionSet>(func_name);
@@ -91,6 +93,18 @@ void RegisterCountFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
     {
         AggregateFunction count_function =
             UnaryAggregate<CountState<DoubleT, BigIntT>, DoubleT, BigIntT>(func_name, DataType(LogicalType::kDouble), DataType(LogicalType::kBigInt));
+        function_set_ptr->AddFunction(count_function);
+    }
+    {
+        AggregateFunction count_function = UnaryAggregate<CountState<Float16T, BigIntT>, Float16T, BigIntT>(func_name,
+                                                                                                            DataType(LogicalType::kFloat16),
+                                                                                                            DataType(LogicalType::kBigInt));
+        function_set_ptr->AddFunction(count_function);
+    }
+    {
+        AggregateFunction count_function = UnaryAggregate<CountState<BFloat16T, BigIntT>, BFloat16T, BigIntT>(func_name,
+                                                                                                              DataType(LogicalType::kBFloat16),
+                                                                                                              DataType(LogicalType::kBigInt));
         function_set_ptr->AddFunction(count_function);
     }
     {
@@ -208,7 +222,7 @@ void RegisterCountFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
             UnaryAggregate<CountState<MixedT, BigIntT>, MixedT, BigIntT>(func_name, DataType(LogicalType::kMixed), DataType(LogicalType::kBigInt));
         function_set_ptr->AddFunction(count_function);
     }
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

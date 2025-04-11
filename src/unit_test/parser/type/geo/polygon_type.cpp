@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
+import parser_assert;
+
 #if 0
 class PolygonTypeTest : public BaseTest {};
 
@@ -93,7 +96,7 @@ TEST_F(PolygonTypeTest, polygon1) {
     EXPECT_EQ(polygon4.bounding_box.lower_right.y, 2.1);
 
     PolygonT polygon5(1);
-    polygon5 = Move(polygon2);
+    polygon5 = std::move(polygon2);
     EXPECT_EQ(polygon5.PointCount(), 2);
     EXPECT_EQ(polygon5.GetPoint(0).x, PointT(1.0, 2.1).x);
     EXPECT_EQ(polygon5.GetPoint(0).y, PointT(1.0, 2.1).y);
@@ -108,7 +111,7 @@ TEST_F(PolygonTypeTest, polygon1) {
     EXPECT_EQ(polygon2.PointCount(), 0);
     EXPECT_EQ(polygon2.ptr, nullptr);
 
-    PolygonT polygon6(Move(polygon4));
+    PolygonT polygon6(std::move(polygon4));
     EXPECT_EQ(polygon6.PointCount(), 2);
     EXPECT_EQ(polygon6.GetPoint(0).x, PointT(1.0, 2.1).x);
     EXPECT_EQ(polygon6.GetPoint(0).y, PointT(1.0, 2.1).y);

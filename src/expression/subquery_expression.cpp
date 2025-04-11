@@ -15,17 +15,19 @@
 module;
 
 #include <sstream>
+
+module subquery_expression;
+
 import stl;
 import bound_select_statement;
 import expression_type;
-import parser;
 
-module subquery_expression;
+import logical_type;
 
 namespace infinity {
 
 SubqueryExpression::SubqueryExpression(UniquePtr<BoundSelectStatement> bound_select_statement, SubqueryType subquery_type)
-    : BaseExpression(ExpressionType::kSubQuery, {}), bound_select_statement_ptr_(Move(bound_select_statement)), subquery_type_(subquery_type) {}
+    : BaseExpression(ExpressionType::kSubQuery, {}), bound_select_statement_ptr_(std::move(bound_select_statement)), subquery_type_(subquery_type) {}
 
 String SubqueryExpression::ToString() const {
     std::stringstream ss;

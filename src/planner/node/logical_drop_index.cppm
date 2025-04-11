@@ -14,13 +14,16 @@
 
 module;
 
+export module logical_drop_index;
+
 import stl;
-import parser;
+
 import logical_node;
 import logical_node_type;
 import column_binding;
-
-export module logical_drop_index;
+import internal_types;
+import extra_ddl_info;
+import data_type;
 
 namespace infinity {
 
@@ -31,8 +34,8 @@ public:
                      SharedPtr<String> table_name,
                      SharedPtr<String> index_name,
                      ConflictType conflict_type)
-        : LogicalNode(node_id, LogicalNodeType::kDropIndex), schema_name_(Move(schema_name)), table_name_(Move(table_name)),
-          index_name_(Move(index_name)), conflict_type_(conflict_type) {}
+        : LogicalNode(node_id, LogicalNodeType::kDropIndex), schema_name_(std::move(schema_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)), conflict_type_(conflict_type) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 

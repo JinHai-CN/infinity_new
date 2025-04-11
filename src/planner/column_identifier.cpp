@@ -14,20 +14,23 @@
 
 module;
 
-import stl;
-import parser;
+module column_identifer;
 
+import stl;
+
+import column_expr;
 import infinity_exception;
+import status;
 import third_party;
 import query_context;
-
-module column_identifer;
+import logger;
 
 namespace infinity {
 
 ColumnIdentifier ColumnIdentifier::MakeColumnIdentifier(QueryContext *, const ColumnExpr &expr) {
-    if (expr.star_) {
-        Error<PlannerException>("Star expression should be unfolded before.");
+    if (expr.star_ && expr.names_.empty()) {
+        Status status = Status::SyntaxError("Star expression should be unfolded before.");
+        RecoverableError(status);
     }
 
     SharedPtr<String> db_name_ptr = nullptr;
@@ -37,7 +40,8 @@ ColumnIdentifier ColumnIdentifier::MakeColumnIdentifier(QueryContext *, const Co
 
     i64 name_count = expr.names_.size();
     if (name_count > 4 || name_count <= 0) {
-        Error<PlannerException>("Star expression should be unfolded before.");
+        Status status = Status::SyntaxError("Star expression should be unfolded before.");
+        RecoverableError(status);
     }
     --name_count;
     column_name_ptr = MakeShared<String>(expr.names_[name_count]);
@@ -66,12 +70,12 @@ ColumnIdentifier::ColumnIdentifier(SharedPtr<String> db_name,
                                    SharedPtr<String> table_name,
                                    SharedPtr<String> column_name,
                                    SharedPtr<String> alias_name)
-    : db_name_ptr_(Move(db_name)), schema_name_ptr_(Move(schema_name)), column_name_ptr_(Move(column_name)), table_name_ptr_(Move(table_name)),
-      alias_name_ptr_(Move(alias_name)) {}
+    : db_name_ptr_(std::move(db_name)), schema_name_ptr_(std::move(schema_name)), column_name_ptr_(std::move(column_name)),
+      table_name_ptr_(std::move(table_name)), alias_name_ptr_(std::move(alias_name)) {}
 
 String ColumnIdentifier::ToString() const {
     if (table_name_ptr_.get() != nullptr)
-        return Format("{}.{}", *table_name_ptr_, *column_name_ptr_);
+        return fmt::format("{}.{}", *table_name_ptr_, *column_name_ptr_);
     else
         return *column_name_ptr_;
 }

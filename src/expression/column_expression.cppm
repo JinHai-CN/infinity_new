@@ -14,13 +14,14 @@
 
 module;
 
+export module column_expression;
+
 import column_binding;
 import base_expression;
-import parser;
+import data_type;
 import special_function;
 import stl;
-
-export module column_expression;
+import internal_types;
 
 namespace infinity {
 
@@ -33,7 +34,13 @@ public:
                                                    i64 column_index,
                                                    i64 depth,
                                                    Optional<SpecialType> special = None) {
-        return MakeShared<ColumnExpression>(Move(data_type), Move(table_name), table_index, Move(column_name), column_index, depth, special);
+        return MakeShared<ColumnExpression>(std::move(data_type),
+                                            std::move(table_name),
+                                            table_index,
+                                            std::move(column_name),
+                                            column_index,
+                                            depth,
+                                            special);
     }
 
 public:
@@ -71,7 +78,10 @@ public:
 
     inline Optional<SpecialType> special() const { return special_; }
 
-private:
+    u64 Hash() const override;
+
+    bool Eq(const BaseExpression &other) const override;
+
     String ToString() const final;
 
 private:

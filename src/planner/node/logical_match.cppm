@@ -14,19 +14,26 @@
 
 module;
 
+export module logical_match;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
 
-export module logical_match;
+import base_expression;
+import match_expression;
+import base_table_ref;
+import meta_info;
+import internal_types;
+import data_type;
+import common_query_filter;
+import column_index_reader;
+import doc_iterator;
+import query_node;
+import parse_fulltext_options;
 
 namespace infinity {
-
-class MatchExpression;
-class BaseTableRef;
-struct TableEntry;
 
 export class LogicalMatch : public LogicalNode {
 public:
@@ -38,7 +45,7 @@ public:
 
     [[nodiscard]] SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final;
 
-    [[nodiscard]] TableEntry *table_collection_ptr() const;
+    [[nodiscard]] TableInfo *table_info() const;
 
     [[nodiscard]] String TableAlias() const;
 
@@ -50,6 +57,19 @@ public:
 
     SharedPtr<BaseTableRef> base_table_ref_{};
     SharedPtr<MatchExpression> match_expr_{};
+    SharedPtr<BaseExpression> filter_expression_{};
+    SharedPtr<IndexReader> index_reader_;
+    UniquePtr<QueryNode> query_tree_;
+    float begin_threshold_;
+    EarlyTermAlgo early_term_algo_{EarlyTermAlgo::kAuto};
+    u32 top_n_{1};
+
+    SharedPtr<CommonQueryFilter> common_query_filter_{};
+    MinimumShouldMatchOption minimum_should_match_option_{};
+    RankFeaturesOption rank_features_option_{};
+    f32 score_threshold_{};
+    FulltextSimilarity ft_similarity_{FulltextSimilarity::kBM25};
+    BM25Params bm25_params_;
 };
 
 } // namespace infinity

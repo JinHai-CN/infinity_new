@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
@@ -23,20 +24,12 @@ import logger;
 import compilation_config;
 import infinity_context;
 
-class JsonTest : public BaseTest {
-    void SetUp() override {
-        system("rm -rf /tmp/infinity/log /tmp/infinity/data /tmp/infinity/wal");
-        infinity::GlobalResourceUsage::Init();
-        std::shared_ptr<std::string> config_path = nullptr;
-        infinity::InfinityContext::instance().Init(config_path);
-    }
+using namespace infinity;
 
-    void TearDown() override {
-        infinity::InfinityContext::instance().UnInit();
-        EXPECT_EQ(infinity::GlobalResourceUsage::GetObjectCount(), 0);
-        EXPECT_EQ(infinity::GlobalResourceUsage::GetRawMemoryCount(), 0);
-        infinity::GlobalResourceUsage::UnInit();
-    }
+class JsonTest : public BaseTest {
+    void SetUp() override {}
+
+    void TearDown() override {}
 };
 
 TEST_F(JsonTest, test1) {
@@ -45,6 +38,6 @@ TEST_F(JsonTest, test1) {
     String json_path = String(test_data_path()) + "/json/twitter.json";
     std::ifstream f(json_path);
 
-    Json data = Json::parse(f);
+    nlohmann::json data = nlohmann::json::parse(f);
     EXPECT_EQ(data["search_metadata"]["count"], 100);
 }

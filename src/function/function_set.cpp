@@ -15,20 +15,20 @@
 module;
 
 #include <sstream>
-import stl;
-import catalog;
-import parser;
-import base_expression;
 
 module function_set;
 
+import stl;
+import catalog;
+import base_expression;
+
 namespace infinity {
 
-SharedPtr<FunctionSet> FunctionSet::GetFunctionSet(NewCatalog *catalog, const FunctionExpr &expr) {
+SharedPtr<FunctionSet> FunctionSet::GetFunctionSet(Catalog *catalog, const FunctionExpr &expr) {
     String function_name = expr.func_name_;
 
-    // SharedPtr<NewCatalog>& catalog
-    SharedPtr<FunctionSet> function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, function_name);
+    // SharedPtr<Catalog>& catalog
+    SharedPtr<FunctionSet> function_set_ptr = Catalog::GetFunctionSetByName(catalog, function_name);
 
     return function_set_ptr;
 }

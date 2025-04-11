@@ -14,17 +14,18 @@
 
 module;
 
-import stl;
-import parser;
-import data_block;
-
 export module task_result;
+
+import stl;
+import data_type;
+import data_block;
+import internal_types;
 
 namespace infinity {
 
-enum class TaskResultType { kInvalid };
+export enum class TaskResultType { kInvalid };
 
-class TaskResult {
+export class TaskResult {
 public:
     explicit TaskResult(TaskResultType task_result_type) : task_result_type_(task_result_type) {}
 
@@ -34,7 +35,7 @@ public:
 
 private:
     UniquePtr<DataBlock> data_{};
-    TaskResultType task_result_type_{kInvalid};
+    TaskResultType task_result_type_{TaskResultType::kInvalid};
 };
 
 } // namespace infinity

@@ -33,7 +33,8 @@ def generate_test_varchar(
 
         slt_file.write("query I\n")
         slt_file.write(
-            "COPY {} FROM '{}' WITH ( DELIMITER ',' );\n".format(table_name, copy_path)
+            "COPY {} FROM '{}' WITH ( DELIMITER ',', FORMAT CSV );\n".format(
+                table_name, copy_path)
         )
         slt_file.write("----\n")
         slt_file.write("\n")
@@ -87,7 +88,8 @@ def generate_test_embedding(
 
         slt_file.write("query I\n")
         slt_file.write(
-            "COPY {} FROM '{}' WITH ( DELIMITER ',' );\n".format(table_name, copy_path)
+            "COPY {} FROM '{}' WITH ( DELIMITER ',', FORMAT CSV );\n".format(
+                table_name, copy_path)
         )
         slt_file.write("----\n")
         slt_file.write("\n")
@@ -104,7 +106,7 @@ def generate_test_embedding(
             )
             embedding.extend([0] * (dim - col_n))
             slt_file.write(
-                str(integer) + " " + ",".join([str(x) for x in embedding]) + "\n"
+                str(integer) + " [" + ",".join([str(x) for x in embedding]) + "]\n"
             )
         slt_file.write("\n")
 
@@ -125,11 +127,14 @@ def generate(generate_if_exists, copy_dir: str):
     slt_path = slt_dir + "/test_big_embedding.slt"
     csv_path = csv_dir + "/big_embedding.csv"
     copy_path = copy_dir + "/big_embedding.csv"
-    generate_test_embedding(slt_path, csv_path, copy_path, row_n, dim, generate_if_exists)
+    generate_test_embedding(slt_path, csv_path, copy_path,
+                            row_n, dim, generate_if_exists)
     slt_path = slt_dir + "/test_big_varchar.slt"
     csv_path = csv_dir + "/big_varchar.csv"
     copy_path = copy_dir + "/big_varchar.csv"
-    generate_test_varchar(slt_path, csv_path, copy_path, row_n, dim, generate_if_exists)
+    generate_test_varchar(slt_path, csv_path, copy_path,
+                          row_n, dim, generate_if_exists)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate big data for test")
@@ -145,7 +150,7 @@ if __name__ == "__main__":
         "-c",
         "--copy",
         type=str,
-        default="/tmp/infinity/test_data",
+        default="/var/infinity/test_data",
         dest="copy_dir",
     )
     args = parser.parse_args()

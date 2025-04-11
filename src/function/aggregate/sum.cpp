@@ -14,31 +14,50 @@
 
 module;
 
+module sum;
+
 import stl;
 import catalog;
-
+import status;
 import infinity_exception;
 import aggregate_function;
 import aggregate_function_set;
-import parser;
-import third_party;
 
-module sum;
+import third_party;
+import logical_type;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 template <typename ValueType, typename ResultType>
 struct SumState {
 public:
-    inline void Initialize() { Error<NotImplementException>("Not implemented"); }
+    inline void Initialize() {
+        Status status = Status::NotSupport("Not implemented");
+        RecoverableError(status);
+    }
 
-    inline void Update(const ValueType *__restrict, SizeT) { Error<NotImplementException>("Not implemented"); }
+    inline void Update(const ValueType *__restrict, SizeT) {
+        Status status = Status::NotSupport("Not implemented");
+        RecoverableError(status);
+    }
 
-    inline void ConstantUpdate(const ValueType *__restrict, SizeT, SizeT) { Error<NotImplementException>("Not implemented"); }
+    inline void ConstantUpdate(const ValueType *__restrict, SizeT, SizeT) {
+        Status status = Status::NotSupport("Not implemented");
+        RecoverableError(status);
+    }
 
-    inline ptr_t Finalize() { Error<NotImplementException>("Not implemented"); }
+    inline ptr_t Finalize() {
+        Status status = Status::NotSupport("Not implemented");
+        RecoverableError(status);
+    }
 
-    inline static SizeT Size(const DataType &) { Error<NotImplementException>("Not implemented"); }
+    inline static SizeT Size(const DataType &) {
+        Status status = Status::NotSupport("Not implemented");
+        RecoverableError(status);
+    }
 };
 
 template <>
@@ -106,6 +125,38 @@ public:
 };
 
 template <>
+struct SumState<Float16T, DoubleT> {
+public:
+    DoubleT sum_;
+
+    inline void Initialize() { this->sum_ = 0; }
+
+    inline void Update(const Float16T *__restrict input, SizeT idx) { sum_ += static_cast<float>(input[idx]); }
+
+    inline void ConstantUpdate(const Float16T *__restrict input, SizeT idx, SizeT count) { sum_ += static_cast<float>(input[idx]) * count; }
+
+    inline ptr_t Finalize() { return (ptr_t)&sum_; }
+
+    inline static SizeT Size(const DataType &) { return sizeof(DoubleT); }
+};
+
+template <>
+struct SumState<BFloat16T, DoubleT> {
+public:
+    DoubleT sum_;
+
+    inline void Initialize() { this->sum_ = 0; }
+
+    inline void Update(const BFloat16T *__restrict input, SizeT idx) { sum_ += static_cast<float>(input[idx]); }
+
+    inline void ConstantUpdate(const BFloat16T *__restrict input, SizeT idx, SizeT count) { sum_ += static_cast<float>(input[idx]) * count; }
+
+    inline ptr_t Finalize() { return (ptr_t)&sum_; }
+
+    inline static SizeT Size(const DataType &) { return sizeof(DoubleT); }
+};
+
+template <>
 struct SumState<FloatT, DoubleT> {
 public:
     DoubleT sum_;
@@ -137,7 +188,7 @@ public:
     inline static SizeT Size(const DataType &) { return sizeof(DoubleT); }
 };
 
-void RegisterSumFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterSumFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "SUM";
 
     SharedPtr<AggregateFunctionSet> function_set_ptr = MakeShared<AggregateFunctionSet>(func_name);
@@ -177,6 +228,20 @@ void RegisterSumFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                                                                   DataType(LogicalType::kHugeInt));
         function_set_ptr->AddFunction(sum_function);
 #endif
+    }
+
+    {
+        AggregateFunction sum_function = UnaryAggregate<SumState<Float16T, DoubleT>, Float16T, DoubleT>(func_name,
+                                                                                                        DataType(LogicalType::kFloat16),
+                                                                                                        DataType(LogicalType::kDouble));
+        function_set_ptr->AddFunction(sum_function);
+    }
+
+    {
+        AggregateFunction sum_function = UnaryAggregate<SumState<BFloat16T, DoubleT>, BFloat16T, DoubleT>(func_name,
+                                                                                                          DataType(LogicalType::kBFloat16),
+                                                                                                          DataType(LogicalType::kDouble));
+        function_set_ptr->AddFunction(sum_function);
     }
 
     {
@@ -223,7 +288,7 @@ void RegisterSumFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
         function_set_ptr->AddFunction(sum_function);
     }
 #endif
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

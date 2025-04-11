@@ -14,16 +14,19 @@
 
 module;
 
+export module physical_index_join;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
 import load_meta;
 import infinity_exception;
-
-export module physical_index_join;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -34,18 +37,13 @@ public:
 
     ~PhysicalIndexJoin() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
     SharedPtr<Vector<String>> GetOutputNames() const final;
 
     SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 };
 
 } // namespace infinity

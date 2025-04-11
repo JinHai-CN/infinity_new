@@ -15,12 +15,15 @@
 module;
 
 #include <string>
+
+module physical_insert;
+
 import stl;
 import txn;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+
 import physical_operator_type;
 import operator_state;
 import expression_state;
@@ -28,31 +31,53 @@ import data_block;
 import third_party;
 import expression_evaluator;
 import base_expression;
-
+import default_values;
+import status;
 import infinity_exception;
+import logger;
+import meta_info;
 
-module physical_insert;
+import wal_manager;
+import infinity_context;
+
+import column_def;
+import new_txn;
 
 namespace infinity {
 
-void PhysicalInsert::Init() {}
+void PhysicalInsert::Init(QueryContext *query_context) {}
 
 bool PhysicalInsert::Execute(QueryContext *query_context, OperatorState *operator_state) {
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
     SizeT row_count = value_list_.size();
     SizeT column_count = value_list_[0].size();
-    SizeT table_collection_column_count = table_entry_->ColumnCount();
+    SizeT table_collection_column_count = table_info_->column_count_;
     if (column_count != table_collection_column_count) {
-        Error<ExecutorException>(
-            Format("Insert values count{} isn't matched with table column count{}.", column_count, table_collection_column_count));
-        ;
+        String error_message =
+            fmt::format("Insert values count{} isn't matched with table column count{}.", column_count, table_collection_column_count);
+        UnrecoverableError(error_message);
     }
 
     // Prepare the output block
     Vector<SharedPtr<DataType>> output_types;
     output_types.reserve(column_count);
-    for (auto &expr : value_list_[0]) {
-        output_types.emplace_back(MakeShared<DataType>(expr->Type()));
+    auto field_list = value_list_[0];
+    SizeT field_count = field_list.size();
+    for (SizeT i = 0; i < field_count; ++i) {
+        auto data_type = field_list[i]->Type();
+        output_types.emplace_back(MakeShared<DataType>(data_type));
     }
+
     SharedPtr<DataBlock> output_block = DataBlock::Make();
     output_block->Init(output_types);
     SharedPtr<DataBlock> output_block_tmp = DataBlock::Make();
@@ -71,21 +96,29 @@ bool PhysicalInsert::Execute(QueryContext *query_context, OperatorState *operato
     }
     output_block->Finalize();
 
-    auto *txn = query_context->GetTxn();
-    const String &db_name = *table_entry_->GetDBName();
-    const String &table_name = *table_entry_->GetTableName();
-    txn->Append(db_name, table_name, output_block);
+    bool use_new_meta = query_context->global_config()->UseNewCatalog();
+    if (use_new_meta) {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        Status status = new_txn->Append(*table_info_, output_block);
+        if (!status.ok()) {
+            operator_state->status_ = status;
+        }
+    } else {
+        auto *txn = query_context->GetTxn();
+        txn->Append(*table_info_->db_name_, *table_info_->table_name_, output_block);
+    }
 
-    UniquePtr<String> result_msg = MakeUnique<String>(Format("INSERTED {} Rows", output_block->row_count()));
+    UniquePtr<String> result_msg = MakeUnique<String>(fmt::format("INSERTED {} Rows", output_block->row_count()));
     if (operator_state == nullptr) {
         // Generate the result table
         Vector<SharedPtr<ColumnDef>> column_defs;
-        SharedPtr<TableDef> result_table_def_ptr = MakeShared<TableDef>(MakeShared<String>("default"), MakeShared<String>("Tables"), column_defs);
+        SharedPtr<TableDef> result_table_def_ptr =
+            TableDef::Make(MakeShared<String>("default_db"), MakeShared<String>("Tables"), nullptr, column_defs);
         output_ = MakeShared<DataTable>(result_table_def_ptr, TableType::kDataTable);
-        output_->SetResultMsg(Move(result_msg));
+        output_->SetResultMsg(std::move(result_msg));
     } else {
         InsertOperatorState *insert_operator_state = static_cast<InsertOperatorState *>(operator_state);
-        insert_operator_state->result_msg_ = Move(result_msg);
+        insert_operator_state->result_msg_ = std::move(result_msg);
     }
     operator_state->SetComplete();
     return true;

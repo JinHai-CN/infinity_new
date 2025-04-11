@@ -14,25 +14,40 @@
 
 module;
 
+module physical_flush;
+
 import stl;
 import txn;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+import wal_manager;
 import physical_operator_type;
 import operator_state;
 import logger;
 import bg_task;
-
-module physical_flush;
+import third_party;
+import status;
+import infinity_context;
 
 namespace infinity {
 
-void PhysicalFlush::Init() {}
+void PhysicalFlush::Init(QueryContext* query_context) {}
 
 bool PhysicalFlush::Execute(QueryContext *query_context, OperatorState *operator_state) {
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
     switch (flush_type_) {
+        case FlushType::kDelta:
         case FlushType::kData: {
             FlushData(query_context, operator_state);
             break;
@@ -51,19 +66,29 @@ bool PhysicalFlush::Execute(QueryContext *query_context, OperatorState *operator
 }
 
 void PhysicalFlush::FlushData(QueryContext *query_context, OperatorState *operator_state) {
-    // Generate the result
-    SharedPtr<ForceCheckpointTask> force_ckp_task = MakeShared<ForceCheckpointTask>(query_context->GetTxn());
-    query_context->storage()->bg_processor()->Submit(force_ckp_task);
+    // full checkpoint here
+
+    bool is_full_checkpoint = flush_type_ == FlushType::kData;
+    auto force_ckp_task = MakeShared<ForceCheckpointTask>(query_context->GetTxn(), is_full_checkpoint);
+    auto *wal_mgr = query_context->storage()->wal_manager();
+    if (!wal_mgr->TrySubmitCheckpointTask(force_ckp_task)) {
+        LOG_TRACE(fmt::format("Skip {} checkpoint(manual) because there is already a full checkpoint task running.", "FULL"));
+        return;
+    }
     force_ckp_task->Wait();
     LOG_TRACE("Flushed data");
 }
 
 void PhysicalFlush::FlushLog(QueryContext *query_context, OperatorState *operator_state) {
     // Generate the result
+    Status status = Status::NotSupport("Flush log");
+    RecoverableError(status);
 }
 
 void PhysicalFlush::FlushBuffer(QueryContext *query_context, OperatorState *operator_state) {
     // Generate the result
+    Status status = Status::NotSupport("Flush buffer");
+    RecoverableError(status);
 }
 
 } // namespace infinity

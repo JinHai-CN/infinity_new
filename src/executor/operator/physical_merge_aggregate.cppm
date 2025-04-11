@@ -14,19 +14,23 @@
 
 module;
 
-import stl;
-import parser;
+export module physical_merge_aggregate;
+
+import base_table_ref;
+import load_meta;
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
-import load_meta;
-import base_table_ref;
+
 import infinity_exception;
 import value;
 import data_block;
+import stl;
 
-export module physical_merge_aggregate;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -38,23 +42,18 @@ public:
                                     SharedPtr<Vector<String>> output_names,
                                     SharedPtr<Vector<SharedPtr<DataType>>> output_types,
                                     SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kMergeAggregate, Move(left), nullptr, id, load_metas), output_names_(Move(output_names)),
-          output_types_(Move(output_types)), table_ref_(Move(table_ref)) {}
+        : PhysicalOperator(PhysicalOperatorType::kMergeAggregate, std::move(left), nullptr, id, load_metas), output_names_(std::move(output_names)),
+          output_types_(std::move(output_types)), table_ref_(std::move(table_ref)) {}
 
     ~PhysicalMergeAggregate() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     template <typename T>
     T GetInputData(MergeAggregateOperatorState *op_state, SizeT block_index, SizeT col_idx, SizeT row_idx);
@@ -63,34 +62,57 @@ public:
     T GetOutputData(MergeAggregateOperatorState *op_state, SizeT block_index, SizeT col_idx, SizeT row_idx);
 
     template <typename T>
-    using MathOperation = StdFunction<T(T, T)>;
+    using MathOperation = std::function<T(T, T)>;
 
     void SimpleMergeAggregateExecute(MergeAggregateOperatorState *merge_aggregate_op_state);
 
+    void GroupByMergeAggregateExecute(MergeAggregateOperatorState *merge_aggregate_op_state);
+
     template <typename T>
-    void UpdateData(MergeAggregateOperatorState *op_state, MathOperation<T> operation, SizeT col_idx);
+    void UpdateData(MergeAggregateOperatorState *op_state,
+                    MathOperation<T> operation,
+                    SizeT col_idx,
+                    const Pair<SizeT, SizeT> &input_block_row_id,
+                    const Pair<SizeT, SizeT> &output_block_row_id);
 
     template <typename T>
     void WriteValueAtPosition(MergeAggregateOperatorState *op_state, SizeT block_index, SizeT col_idx, SizeT row_idx, T value);
 
     template <typename T>
-    void HandleSum(MergeAggregateOperatorState *op_state, SizeT col_idx);
+    void HandleSum(MergeAggregateOperatorState *op_state,
+                   SizeT col_idx,
+                   const Pair<SizeT, SizeT> &input_block_row_id,
+                   const Pair<SizeT, SizeT> &output_block_row_id);
 
     template <typename T>
-    void HandleCount(MergeAggregateOperatorState *op_state, SizeT col_idx);
+    void HandleCount(MergeAggregateOperatorState *op_state,
+                     SizeT col_idx,
+                     const Pair<SizeT, SizeT> &input_block_row_id,
+                     const Pair<SizeT, SizeT> &output_block_row_id);
 
     template <typename T>
-    void HandleMin(MergeAggregateOperatorState *op_state, SizeT col_idx);
+    void HandleMin(MergeAggregateOperatorState *op_state,
+                   SizeT col_idx,
+                   const Pair<SizeT, SizeT> &input_block_row_id,
+                   const Pair<SizeT, SizeT> &output_block_row_id);
 
     template <typename T>
-    void HandleMax(MergeAggregateOperatorState *op_state, SizeT col_idx);
+    void HandleMax(MergeAggregateOperatorState *op_state,
+                   SizeT col_idx,
+                   const Pair<SizeT, SizeT> &input_block_row_id,
+                   const Pair<SizeT, SizeT> &output_block_row_id);
 
     template <typename T>
-    void HandleAggregateFunction(const String &function_name, MergeAggregateOperatorState *op_state, SizeT col_idx);
+    void HandleAggregateFunction(const String &function_name,
+                                 MergeAggregateOperatorState *op_state,
+                                 SizeT col_idx,
+                                 const Pair<SizeT, SizeT> &input_block_row_id = {0, 0},
+                                 const Pair<SizeT, SizeT> &output_block_row_id = {0, 0});
 
     template <typename T>
     Value CreateValue(T value) {
-        Error<NotImplementException>("Unhandled type for makeValue");
+        String error_message = "Unhandled type for makeValue";
+        UnrecoverableError(error_message);
     }
 
     template <>

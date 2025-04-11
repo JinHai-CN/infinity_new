@@ -14,17 +14,18 @@
 
 module;
 
-import base_expression;
-import bound_select_statement;
-import parser;
-import stl;
-import column_expression;
-
 export module subquery_expression;
 
-namespace infinity {
+import base_expression;
+import bound_select_statement;
 
-//class ColumnExpression;
+import stl;
+import column_expression;
+import internal_types;
+import subquery_expr;
+import data_type;
+
+namespace infinity {
 
 export class SubqueryExpression : public BaseExpression {
 public:
@@ -44,7 +45,6 @@ public:
     Vector<SharedPtr<ColumnExpression>> correlated_columns{};
 
 private:
-
 };
 
 } // namespace infinity

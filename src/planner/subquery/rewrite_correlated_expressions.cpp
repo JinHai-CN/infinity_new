@@ -14,15 +14,16 @@
 
 module;
 
+module rewrite_correlated_expression;
+
 import stl;
 import logical_node;
 import base_expression;
 import column_expression;
-
+import status;
 import infinity_exception;
 import subquery_expression;
-
-module rewrite_correlated_expression;
+import logger;
 
 namespace infinity {
 
@@ -34,13 +35,15 @@ SharedPtr<BaseExpression> RewriteCorrelatedExpressions::VisitReplace(const Share
     }
 
     if (expression->depth() > 1) {
-        Error<PlannerException>("Correlated depth > 1 is not suppported now.");
+        Status status = Status::SyntaxError("Correlated depth > 1 is not supported now.");
+        RecoverableError(status);
     }
 
     auto entry = bind_context_ptr_->correlated_column_map_.find(expression->binding());
     if (entry == bind_context_ptr_->correlated_column_map_.end()) {
         // This column expression wasn't stored in correlated column map before
-        Error<PlannerException>("Correlated expression isn't found.");
+        String error_message = "Correlated expression isn't found.";
+        UnrecoverableError(error_message);
     }
 
     expression->SetBinding(base_binding_.table_idx, base_binding_.column_idx + entry->second);
@@ -55,7 +58,8 @@ SharedPtr<BaseExpression> RewriteCorrelatedExpressions::VisitReplace(const Share
         return nullptr;
     }
 
-    Error<PlannerException>("Not support rewrite nested correlated subquery in the subquery plan");
+    Status status = Status::SyntaxError("Not support rewrite nested correlated subquery in the subquery plan");
+    RecoverableError(status);
     return nullptr;
 }
 

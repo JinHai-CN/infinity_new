@@ -14,15 +14,16 @@
 
 module;
 
+module corrlated_expr_detector;
+
 import stl;
 import logical_node;
 import base_expression;
 import column_expression;
 import subquery_expression;
-
+import status;
 import infinity_exception;
-
-module corrlated_expr_detector;
+import logger;
 
 namespace infinity {
 
@@ -35,7 +36,8 @@ SharedPtr<BaseExpression> CorrelatedExpressionsDetector::VisitReplace(const Shar
     }
 
     if (expression->depth() > 1) {
-        Error<PlannerException>("Column expression with depth > 1 is detected");
+        Status status = Status::SyntaxError("Column expression with depth > 1 is detected");
+        RecoverableError(status);
     }
 
     is_correlated_ = true;
@@ -48,7 +50,8 @@ SharedPtr<BaseExpression> CorrelatedExpressionsDetector::VisitReplace(const Shar
         return nullptr;
     }
 
-    Error<PlannerException>("Not support nested correlated subquery in the subquery plan");
+    Status status = Status::SyntaxError("Not support nested correlated subquery in the subquery plan");
+    RecoverableError(status);
     return nullptr;
 }
 

@@ -14,25 +14,26 @@
 
 module;
 
-#include <cmath>
+module substract;
 
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
+import logger;
 import third_party;
-
-module substract;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
 struct SubFunction {
     template <typename TA, typename TB, typename TC>
     static inline bool Run(TA, TB, TC &) {
-        Error<NotImplementException>("Not implement");
+        String error_message = "Not implement: SubFunction::Run";
+        UnrecoverableError(error_message);
     }
 };
 
@@ -71,8 +72,29 @@ inline bool SubFunction::Run(BigIntT left, BigIntT right, BigIntT &result) {
 // HugeIntT - HugeIntT = HugeIntT, and check overflow
 template <>
 inline bool SubFunction::Run(HugeIntT, HugeIntT, HugeIntT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
+}
+
+// Float16T - Float16T = Float16T, and check overflow
+template <>
+inline bool SubFunction::Run(Float16T left, Float16T right, Float16T &result) {
+    result = left - right;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
+}
+
+// BFloat16T - BFloat16T = BFloat16T, and check overflow
+template <>
+inline bool SubFunction::Run(BFloat16T left, BFloat16T right, BFloat16T &result) {
+    result = left - right;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
 }
 
 // FloatT - FloatT = FloatT, and check overflow
@@ -98,7 +120,8 @@ inline bool SubFunction::Run(DoubleT left, DoubleT right, DoubleT &result) {
 // Decimal - Decimal = Decimal
 template <>
 inline bool SubFunction::Run(DecimalT, DecimalT, DecimalT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
@@ -129,39 +152,44 @@ inline bool SubFunction::Run(TimestampT left, IntervalT right, TimestampT &resul
 // Mixed Type - i64
 template <>
 inline bool SubFunction::Run(MixedT, BigIntT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // i64 - Mixed Type
 template <>
 inline bool SubFunction::Run(BigIntT, MixedT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // Mixed Type - f64
 template <>
 inline bool SubFunction::Run(MixedT, DoubleT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // f64 - Mixed Type
 template <>
 inline bool SubFunction::Run(DoubleT, MixedT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // Mixed Type - Mixed Type
 template <>
 inline bool SubFunction::Run(MixedT, MixedT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: SubFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
-void RegisterSubtractFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterSubtractFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "-";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -208,6 +236,18 @@ void RegisterSubtractFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                        {DataType(LogicalType::kDouble)},
                                        &ScalarFunction::BinaryFunctionWithFailure<double, double, double, SubFunction>);
     function_set_ptr->AddFunction(sub_function_double);
+
+    ScalarFunction sub_function_float16(func_name,
+                                        {DataType(LogicalType::kFloat16), DataType(LogicalType::kFloat16)},
+                                        {DataType(LogicalType::kFloat16)},
+                                        &ScalarFunction::BinaryFunctionWithFailure<Float16T, Float16T, Float16T, SubFunction>);
+    function_set_ptr->AddFunction(sub_function_float16);
+
+    ScalarFunction sub_function_bfloat16(func_name,
+                                         {DataType(LogicalType::kBFloat16), DataType(LogicalType::kBFloat16)},
+                                         {DataType(LogicalType::kBFloat16)},
+                                         &ScalarFunction::BinaryFunctionWithFailure<BFloat16T, BFloat16T, BFloat16T, SubFunction>);
+    function_set_ptr->AddFunction(sub_function_bfloat16);
 
     ScalarFunction sub_function_decimal(func_name,
                                         {DataType(LogicalType::kDecimal), DataType(LogicalType::kDecimal)},
@@ -269,7 +309,7 @@ void RegisterSubtractFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                             &ScalarFunction::BinaryFunctionWithFailure<MixedT, MixedT, MixedT, SubFunction>);
     function_set_ptr->AddFunction(sub_function_mixed_mixed);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

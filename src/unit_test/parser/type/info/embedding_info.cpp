@@ -12,18 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
 #include "json.hpp"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+import internal_types;
 import logger;
 import stl;
 import infinity_context;
+import embedding_info;
+import knn_expr;
+import parser_assert;
+import parser_defaults;
 
+using namespace infinity;
 class EmbeddingInfoTest : public BaseTest {};
 
 TEST_F(EmbeddingInfoTest, embedding_info_A) {
@@ -32,17 +38,17 @@ TEST_F(EmbeddingInfoTest, embedding_info_A) {
     EXPECT_THROW(EmbeddingInfo::Make(EmbeddingDataType::kElemFloat, EMBEDDING_LIMIT + 1), ParserException);
 
     auto embedding_info_ptr = EmbeddingInfo::Make(EmbeddingDataType::kElemBit, 256);
-    EXPECT_EQ(embedding_info_ptr->Size(), 32);
-    EXPECT_EQ(embedding_info_ptr->Dimension(), 256);
+    EXPECT_EQ(embedding_info_ptr->Size(), 32u);
+    EXPECT_EQ(embedding_info_ptr->Dimension(), 256u);
     EXPECT_EQ(embedding_info_ptr->Type(), EmbeddingDataType::kElemBit);
 
     embedding_info_ptr = EmbeddingInfo::Make(EmbeddingDataType::kElemInt64, EMBEDDING_LIMIT);
-    EXPECT_EQ(embedding_info_ptr->Size(), EMBEDDING_LIMIT * 8);
-    EXPECT_EQ(embedding_info_ptr->Dimension(), EMBEDDING_LIMIT);
+    EXPECT_EQ(embedding_info_ptr->Size(), SizeT(EMBEDDING_LIMIT * 8));
+    EXPECT_EQ(embedding_info_ptr->Dimension(), (u64)EMBEDDING_LIMIT);
     EXPECT_EQ(embedding_info_ptr->Type(), EmbeddingDataType::kElemInt64);
 
     nlohmann::json json;
     json["type_info"] = embedding_info_ptr->Serialize();
-    std::cout << json.dump() << std::endl;
+    //    std::cout << json.dump() << std::endl;
     //    EXPECT_EQ(json.dump(), "{\"type_info\":{\"precision\":38,\"scale\":38}}");
 }

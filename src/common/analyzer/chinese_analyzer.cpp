@@ -15,7 +15,12 @@
 module;
 
 #include "string_utils.h"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-variable"
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
 #include <cppjieba/Jieba.hpp>
+#pragma clang diagnostic pop
 
 #include <cstring>
 #include <filesystem>
@@ -40,18 +45,21 @@ static const String STOP_WORD_PATH = "jieba/dict/stop_words.utf8";
 
 namespace fs = std::filesystem;
 
-ChineseAnalyzer::ChineseAnalyzer(const String &path) : dict_path_(path) {}
+ChineseAnalyzer::ChineseAnalyzer(const String &path) : dict_path_(path) { cjk_ = true; }
 
 ChineseAnalyzer::ChineseAnalyzer(const ChineseAnalyzer &other) {
+    cjk_ = true;
     own_jieba_ = false;
     jieba_ = other.jieba_;
+    stopwords_ = other.stopwords_;
 }
 ChineseAnalyzer::~ChineseAnalyzer() {
-    if (own_jieba_ && jieba_)
+    if (own_jieba_ && jieba_) {
         delete jieba_;
+    }
 }
 
-bool ChineseAnalyzer::Load() {
+Status ChineseAnalyzer::Load() {
     fs::path root(dict_path_);
     fs::path dict_path(root / DICT_PATH);
     fs::path hmm_path(root / HMM_PATH);
@@ -60,52 +68,79 @@ bool ChineseAnalyzer::Load() {
     fs::path stopwords_path(root / STOP_WORD_PATH);
 
     if (!fs::exists(dict_path)) {
-        LOG_INFO(Format("Invalid jieba config {} dict for jieba_analyzer does not exist", dict_path.string()));
-        return false;
+        // LOG_INFO(fmt::format("Invalid jieba config {} dict for jieba_analyzer does not exist", dict_path.string()));
+        return Status::InvalidAnalyzerFile(dict_path);
     }
     if (!fs::exists(hmm_path)) {
-        LOG_INFO(Format("Invalid jieba config {} hmm for jieba_analyzer does not exist", hmm_path.string()));
-        return false;
+        // LOG_INFO(fmt::format("Invalid jieba config {} hmm for jieba_analyzer does not exist", hmm_path.string()));
+        return Status::InvalidAnalyzerFile(hmm_path);
     }
     if (!fs::exists(userdict_path)) {
-        LOG_INFO(Format("Invalid jieba config {} user_dict for jieba_analyzer does not exist", userdict_path.string()));
-        return false;
+        // LOG_INFO(fmt::format("Invalid jieba config {} user_dict for jieba_analyzer does not exist", userdict_path.string()));
+        return Status::InvalidAnalyzerFile(userdict_path);
     }
     if (!fs::exists(idf_path)) {
-        LOG_INFO(Format("Invalid jieba config {} idf for jieba_analyzer does not exist", idf_path.string()));
-        return false;
+        // LOG_INFO(fmt::format("Invalid jieba config {} idf for jieba_analyzer does not exist", idf_path.string()));
+        return Status::InvalidAnalyzerFile(idf_path);
     }
     if (!fs::exists(stopwords_path)) {
-        LOG_INFO(Format("Invalid jieba config {} stopword for jieba_analyzer does not exist", stopwords_path.string()));
-        return false;
+        // LOG_INFO(fmt::format("Invalid jieba config {} stopword for jieba_analyzer does not exist", stopwords_path.string()));
+        return Status::InvalidAnalyzerFile(stopwords_path);
     }
 
     try {
         jieba_ = new cppjieba::Jieba(dict_path.string(), hmm_path.string(), userdict_path.string(), idf_path.string(), stopwords_path.string());
     } catch (const std::exception &e) {
-        return false;
+        return Status::InvalidAnalyzerFile("Failed to load Jieba analyzer");
     }
     own_jieba_ = true;
     LoadStopwordsDict(stopwords_path.string());
-    return true;
+    return Status::OK();
 }
 
 void ChineseAnalyzer::LoadStopwordsDict(const String &stopwords_path) {
     std::ifstream ifs(stopwords_path);
     String line;
+    stopwords_ = MakeShared<FlatHashSet<String>>();
     while (getline(ifs, line)) {
-        stopwords_.insert(line);
+        stopwords_->insert(line);
     }
 }
 
-int ChineseAnalyzer::AnalyzeImpl(const Term &input, void *data, HookTypeForJieba func) {
-    Parse(input.text_);
-    for (u32 i = 0; i < cut_words_.size(); ++i) {
-        if (!Accept_token(cut_words_[i].word))
+void ChineseAnalyzer::Parse(const String &input) {
+    if (cut_grain_ == CutGrain::kCoarse)
+        jieba_->Cut(input, cut_words_, true);
+    else
+        jieba_->CutForSearch(input, cut_words_);
+    local_offset_ = -1;
+    cursor_ = -1;
+    cut_size_ = cut_words_.size();
+    ResetToken();
+}
+
+bool ChineseAnalyzer::NextToken() {
+    while (DoNext()) {
+        is_index_ = true;
+        offset_ = local_offset_;
+        token_ = cut_words_[cursor_].word.c_str();
+        len_ = cut_words_[cursor_].word.length();
+
+        return true;
+    }
+    ResetToken();
+    return false;
+}
+
+bool ChineseAnalyzer::DoNext() {
+    while (cursor_ < (cut_size_ - 1)) {
+        cursor_++;
+        if (Accept_token(cut_words_[cursor_].word)) {
+            ++local_offset_;
+            return true;
+        } else {
             continue;
-        func(data, cut_words_[i]);
+        }
     }
-    return cut_words_.back().offset + 1;
+    return false;
 }
-
 } // namespace infinity

@@ -14,14 +14,15 @@
 
 module;
 
-import stl;
-
 export module inequals;
+
+import stl;
 
 namespace infinity {
 
-class NewCatalog;
+class Catalog;
 
-export void RegisterInEqualsFunction(const UniquePtr<NewCatalog> &catalog_ptr);
+export void RegisterInEqualFunction(const UniquePtr<Catalog> &catalog_ptr);
+export void RegisterInEqualAliasFunction(const UniquePtr<Catalog> &catalog_ptr);
 
-}
+} // namespace infinity

@@ -14,29 +14,41 @@
 
 module;
 
-#include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
+module index_base;
+
 import stl;
 import serialize;
-import index_ivfflat;
+import index_ivf;
 import index_hnsw;
+import index_diskann;
 import index_full_text;
+import index_secondary;
+import index_emvb;
+import index_bmp;
+import bmp_util;
 import third_party;
-import parser;
-import infinity_exception;
+import status;
 
-module index_base;
+import infinity_exception;
+import create_index_info;
+import index_defines;
+import logger;
 
 namespace infinity {
 
 String MetricTypeToString(MetricType metric_type) {
     switch (metric_type) {
-        case MetricType::kMerticInnerProduct: {
+        case MetricType::kMetricCosine: {
+            return "cosine";
+        }
+        case MetricType::kMetricInnerProduct: {
             return "ip";
         }
-        case MetricType::kMerticL2: {
+        case MetricType::kMetricL2: {
             return "l2";
         }
         case MetricType::kInvalid: {
@@ -46,10 +58,12 @@ String MetricTypeToString(MetricType metric_type) {
 }
 
 MetricType StringToMetricType(const String &str) {
-    if (str == "ip") {
-        return MetricType::kMerticInnerProduct;
+    if (str == "cos" or str == "cosine") {
+        return MetricType::kMetricCosine;
+    } else if (str == "ip") {
+        return MetricType::kMetricInnerProduct;
     } else if (str == "l2") {
-        return MetricType::kMerticL2;
+        return MetricType::kMetricL2;
     } else {
         return MetricType::kInvalid;
     }
@@ -68,6 +82,10 @@ int32_t IndexBase::GetSizeInBytes() const {
     int32_t size = 0;
     size += sizeof(index_type_);
     size += sizeof(int32_t);
+    size += index_name_->length();
+    size += sizeof(int32_t);
+    size += index_comment_->length();
+    size += sizeof(int32_t);
     size += file_name_.length();
     size += sizeof(int32_t);
     for (const String &column_name : column_names_) {
@@ -78,6 +96,8 @@ int32_t IndexBase::GetSizeInBytes() const {
 
 void IndexBase::WriteAdv(char *&ptr) const {
     WriteBufAdv(ptr, index_type_);
+    WriteBufAdv(ptr, *index_name_);
+    WriteBufAdv(ptr, *index_comment_);
     WriteBufAdv(ptr, file_name_);
     WriteBufAdv(ptr, static_cast<int32_t>(column_names_.size()));
     for (const String &column_name : column_names_) {
@@ -85,13 +105,16 @@ void IndexBase::WriteAdv(char *&ptr) const {
     }
 }
 
-SharedPtr<IndexBase> IndexBase::ReadAdv(char *&ptr, int32_t maxbytes) {
-//    char *const ptr_end = ptr + maxbytes;
+SharedPtr<IndexBase> IndexBase::ReadAdv(const char *&ptr, int32_t maxbytes) {
+    const char *const ptr_end = ptr + maxbytes;
     if (maxbytes <= 0) {
-        Error<StorageException>("ptr goes out of range when reading IndexBase");
+        String error_message = "ptr goes out of range when reading IndexBase";
+        UnrecoverableError(error_message);
     }
     IndexType index_type = ReadBufAdv<IndexType>(ptr);
     Vector<String> column_names;
+    SharedPtr<String> index_name = MakeShared<String>(ReadBufAdv<String>(ptr));
+    SharedPtr<String> index_comment = MakeShared<String>(ReadBufAdv<String>(ptr));
     String file_name = ReadBufAdv<String>(ptr);
     int32_t column_names_size = ReadBufAdv<int32_t>(ptr);
     for (int32_t i = 0; i < column_names_size; ++i) {
@@ -99,35 +122,76 @@ SharedPtr<IndexBase> IndexBase::ReadAdv(char *&ptr, int32_t maxbytes) {
     }
     SharedPtr<IndexBase> res = nullptr;
     switch (index_type) {
-        case IndexType::kIVFFlat: {
-            size_t centroids_count = ReadBufAdv<size_t>(ptr);
-            MetricType metric_type = ReadBufAdv<MetricType>(ptr);
-            res = MakeShared<IndexIVFFlat>(file_name, column_names, centroids_count, metric_type);
+        case IndexType::kIVF: {
+            const auto ivf_option = ReadBufAdv<IndexIVFOption>(ptr);
+            res = MakeShared<IndexIVF>(index_name, index_comment, file_name, column_names, ivf_option);
             break;
         }
         case IndexType::kHnsw: {
             MetricType metric_type = ReadBufAdv<MetricType>(ptr);
             HnswEncodeType encode_type = ReadBufAdv<HnswEncodeType>(ptr);
+            HnswBuildType build_type = ReadBufAdv<HnswBuildType>(ptr);
             SizeT M = ReadBufAdv<SizeT>(ptr);
             SizeT ef_construction = ReadBufAdv<SizeT>(ptr);
-            SizeT ef = ReadBufAdv<SizeT>(ptr);
-            res = MakeShared<IndexHnsw>(file_name, column_names, metric_type, encode_type, M, ef_construction, ef);
+            SizeT block_size = ReadBufAdv<SizeT>(ptr);
+            Optional<LSGConfig> lsg_config = None;
+            if (ReadBufAdv<bool>(ptr)) {
+                lsg_config = LSGConfig::ReadAdv(ptr);
+            }
+            res = MakeShared<
+                IndexHnsw>(index_name, index_comment, file_name, column_names, metric_type, encode_type, build_type, M, ef_construction, block_size, lsg_config);
             break;
         }
-        case IndexType::kIRSFullText: {
+        case IndexType::kDiskAnn: {
+            MetricType metric_type = ReadBufAdv<MetricType>(ptr);
+            DiskAnnEncodeType encode_type = ReadBufAdv<DiskAnnEncodeType>(ptr);
+            SizeT R = ReadBufAdv<SizeT>(ptr);
+            SizeT L = ReadBufAdv<SizeT>(ptr);
+            SizeT num_pq_chunks = ReadBufAdv<SizeT>(ptr);
+            SizeT num_parts = ReadBufAdv<SizeT>(ptr);
+            res = MakeShared<
+                IndexDiskAnn>(index_name, index_comment, file_name, column_names, metric_type, encode_type, R, L, num_pq_chunks, num_parts);
+            break;
+        }
+        case IndexType::kFullText: {
             String analyzer = ReadBufAdv<String>(ptr);
-            res = MakeShared<IndexFullText>(file_name, column_names, analyzer);
+            u8 flag = ReadBufAdv<u8>(ptr);
+            res = MakeShared<IndexFullText>(index_name, index_comment, file_name, column_names, analyzer, optionflag_t(flag));
+            break;
+        }
+        case IndexType::kSecondary: {
+            res = MakeShared<IndexSecondary>(index_name, index_comment, file_name, std::move(column_names));
+            break;
+        }
+        case IndexType::kEMVB: {
+            u32 residual_pq_subspace_num = ReadBufAdv<u32>(ptr);
+            u32 residual_pq_subspace_bits = ReadBufAdv<u32>(ptr);
+            res = MakeShared<IndexEMVB>(index_name,
+                                        index_comment,
+                                        file_name,
+                                        std::move(column_names),
+                                        residual_pq_subspace_num,
+                                        residual_pq_subspace_bits);
+            break;
+        }
+        case IndexType::kBMP: {
+            SizeT block_size = ReadBufAdv<SizeT>(ptr);
+            BMPCompressType compress_type = ReadBufAdv<BMPCompressType>(ptr);
+            res = MakeShared<IndexBMP>(index_name, index_comment, file_name, std::move(column_names), block_size, compress_type);
             break;
         }
         case IndexType::kInvalid: {
-            Error<StorageException>("Error index method while reading");
+            String error_message = "Error index method while reading";
+            UnrecoverableError(error_message);
         }
         default: {
-            Error<StorageException>("Not implemented");
+            Status status = Status::NotSupport("Not implemented");
+            RecoverableError(status);
         }
     }
-    if (maxbytes < 0) {
-        Error<StorageException>("ptr goes out of range when reading IndexBase");
+    if (ptr_end < ptr) {
+        String error_message = "ptr goes out of range when reading IndexBase";
+        UnrecoverableError(error_message);
     }
     return res;
 }
@@ -145,49 +209,116 @@ String IndexBase::ToString() const {
     return ss.str();
 }
 
-Json IndexBase::Serialize() const {
-    Json res;
-    res["file_name"] = file_name_;
+nlohmann::json IndexBase::Serialize() const {
+    nlohmann::json res;
     res["index_type"] = IndexInfo::IndexTypeToString(index_type_);
+    res["index_name"] = *index_name_;
+    res["index_comment"] = *index_comment_;
+    res["file_name"] = file_name_;
     res["column_names"] = column_names_;
     return res;
 }
 
-SharedPtr<IndexBase> IndexBase::Deserialize(const Json &index_def_json) {
+SharedPtr<IndexBase> IndexBase::Deserialize(const nlohmann::json &index_def_json) {
     SharedPtr<IndexBase> res = nullptr;
     String index_type_name = index_def_json["index_type"];
     IndexType index_type = IndexInfo::StringToIndexType(index_type_name);
+    SharedPtr<String> index_name = MakeShared<String>(index_def_json["index_name"]);
+
+    SharedPtr<String> index_comment;
+    if (index_def_json.contains("index_comment")) {
+        index_comment = MakeShared<String>(index_def_json["index_comment"]);
+    } else {
+        index_comment = MakeShared<String>();
+    }
+
     String file_name = index_def_json["file_name"];
     Vector<String> column_names = index_def_json["column_names"];
     switch (index_type) {
-        case IndexType::kIVFFlat: {
-            size_t centroids_count = index_def_json["centroids_count"];
-            MetricType metric_type = StringToMetricType(index_def_json["metric_type"]);
-            auto ptr = MakeShared<IndexIVFFlat>(file_name, Move(column_names), centroids_count, metric_type);
-            res = std::static_pointer_cast<IndexBase>(ptr);
+        case IndexType::kIVF: {
+            const auto ivf_option = IndexIVF::DeserializeIndexIVFOption(index_def_json["ivf_option"]);
+            res = MakeShared<IndexIVF>(index_name, index_comment, file_name, std::move(column_names), ivf_option);
             break;
         }
         case IndexType::kHnsw: {
             SizeT M = index_def_json["M"];
             SizeT ef_construction = index_def_json["ef_construction"];
-            SizeT ef = index_def_json["ef"];
+            SizeT block_size = index_def_json["block_size"];
             MetricType metric_type = StringToMetricType(index_def_json["metric_type"]);
             HnswEncodeType encode_type = StringToHnswEncodeType(index_def_json["encode_type"]);
-            auto ptr = MakeShared<IndexHnsw>(file_name, Move(column_names), metric_type, encode_type, M, ef_construction, ef);
-            res = std::static_pointer_cast<IndexBase>(ptr);
+            HnswBuildType build_type = HnswBuildType::kPlain;
+            if (index_def_json.contains("build_type")) {
+                build_type = StringToHnswBuildType(index_def_json["build_type"]);
+            }
+            Optional<LSGConfig> lsg_config = None;
+            if (index_def_json.contains("lsg_config")) {
+                lsg_config = LSGConfig::FromString(index_def_json["lsg_config"]);
+            }
+            res = MakeShared<IndexHnsw>(index_name,
+                                        index_comment,
+                                        file_name,
+                                        std::move(column_names),
+                                        metric_type,
+                                        encode_type,
+                                        build_type,
+                                        M,
+                                        ef_construction,
+                                        block_size,
+                                        lsg_config);
             break;
         }
-        case IndexType::kIRSFullText: {
+        case IndexType::kDiskAnn: {
+            SizeT R = index_def_json["R"];
+            SizeT L = index_def_json["L"];
+            SizeT num_pq_chunks = index_def_json["num_pq_chunks"];
+            SizeT num_parts = index_def_json["num_parts"];
+            MetricType metric_type = StringToMetricType(index_def_json["metric_type"]);
+            DiskAnnEncodeType encode_type = StringToDiskAnnEncodeType(index_def_json["encode_type"]);
+            res = MakeShared<IndexDiskAnn>(index_name,
+                                           index_comment,
+                                           file_name,
+                                           std::move(column_names),
+                                           metric_type,
+                                           encode_type,
+                                           R,
+                                           L,
+                                           num_pq_chunks,
+                                           num_parts);
+            break;
+        }
+        case IndexType::kFullText: {
             String analyzer = index_def_json["analyzer"];
-            auto ptr = MakeShared<IndexFullText>(file_name, Move(column_names), analyzer);
-            res = std::static_pointer_cast<IndexBase>(ptr);
+            res = MakeShared<IndexFullText>(index_name, index_comment, file_name, std::move(column_names), analyzer);
+            break;
+        }
+        case IndexType::kSecondary: {
+            res = MakeShared<IndexSecondary>(index_name, index_comment, file_name, std::move(column_names));
+            break;
+        }
+        case IndexType::kEMVB: {
+            u32 residual_pq_subspace_num = index_def_json["pq_subspace_num"];
+            u32 residual_pq_subspace_bits = index_def_json["pq_subspace_bits"];
+            res = MakeShared<IndexEMVB>(index_name,
+                                        index_comment,
+                                        file_name,
+                                        std::move(column_names),
+                                        residual_pq_subspace_num,
+                                        residual_pq_subspace_bits);
+            break;
+        }
+        case IndexType::kBMP: {
+            SizeT block_size = index_def_json["block_size"];
+            auto compress_type = static_cast<BMPCompressType>(index_def_json["compress_type"]);
+            res = MakeShared<IndexBMP>(index_name, index_comment, file_name, std::move(column_names), block_size, compress_type);
             break;
         }
         case IndexType::kInvalid: {
-            Error<StorageException>("Error index method while deserializing");
+            String error_message = "Error index method while deserializing";
+            UnrecoverableError(error_message);
         }
         default: {
-            Error<StorageException>("Not implemented");
+            Status status = Status::NotSupport("Not implemented");
+            RecoverableError(status);
         }
     }
     return res;

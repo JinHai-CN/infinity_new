@@ -24,21 +24,19 @@ import physical_sink;
 import data_table;
 import data_block;
 import knn_scan_data;
+import create_index_data;
+import logger;
+import third_party;
+import compact_state_data;
+import infinity_context;
 
 export module fragment_context;
 
 namespace infinity {
 
 class PlanFragment;
+export class FragmentContext;
 
-//class KnnScanSharedData;
-
-// enum class FragmentStatus {
-//     kNotStart,
-//     k
-//     kStart,
-//     kFinish,
-// };
 export enum class FragmentType {
     kInvalid,
     kSerialMaterialize,
@@ -46,28 +44,79 @@ export enum class FragmentType {
     kParallelStream,
 };
 
-class PlanFragment;
+export String FragmentType2String(FragmentType type) {
+    switch (type) {
+        case FragmentType::kInvalid:
+            return String("Invalid");
+        case FragmentType::kSerialMaterialize:
+            return String("SerialMaterialize");
+        case FragmentType::kParallelMaterialize:
+            return String("ParallelMaterialize");
+        case FragmentType::kParallelStream:
+            return String("ParallelStream");
+    }
+}
+
+export class Notifier {
+    SizeT all_task_n_ = 0;
+    bool error_ = false;
+    FragmentContext *error_fragment_ctx_ = nullptr;
+
+    std::mutex locker_{};
+    std::condition_variable cv_{};
+
+    bool Check() const { return all_task_n_ == 0; };
+
+public:
+    void SetTaskN(SizeT all_task_n) { all_task_n_ = all_task_n; }
+
+    void Wait() {
+        std::unique_lock<std::mutex> lk(locker_);
+        cv_.wait(lk, [&] { return this->Check(); });
+    }
+
+    bool StartTask() {
+        std::unique_lock<std::mutex> lk(locker_);
+        return !error_;
+    }
+
+    void SetError(FragmentContext *fragment_ctx) {
+        std::unique_lock<std::mutex> lk(locker_);
+        if (!error_) {
+            error_fragment_ctx_ = fragment_ctx;
+            error_ = true;
+        }
+    }
+
+    void FinishTask() {
+        std::unique_lock<std::mutex> lk(locker_);
+        --all_task_n_;
+        if (this->Check()) {
+            cv_.notify_one();
+        }
+    }
+
+    FragmentContext *error_fragment_ctx() const { return error_fragment_ctx_; }
+};
 
 export class FragmentContext {
 public:
-    static void
-    BuildTask(QueryContext *query_context, FragmentContext *parent_context, PlanFragment *fragment_ptr, Vector<FragmentTask *> &tasks);
+    static void BuildTask(QueryContext *query_context, FragmentContext *parent_context, PlanFragment *plan_fragment_ptr, Notifier *notifier);
 
 public:
-    explicit FragmentContext(PlanFragment *fragment_ptr, QueryContext *query_context);
+    explicit FragmentContext(PlanFragment *plan_fragment_ptr, QueryContext *query_context, Notifier *notifier);
 
-    virtual ~FragmentContext() = default;
+    virtual ~FragmentContext();
 
-    inline void IncreaseTask() { task_n_.fetch_add(1); }
+    inline void IncreaseTask() { unfinished_task_n_.fetch_add(1); }
 
     inline void FlushProfiler(TaskProfiler &profiler) {
-        if(!query_context_->is_enable_profiling()) {
-            return ;
+        if(profiler.Enable()) {
+            query_context_->FlushProfiler(std::move(profiler));
         }
-        query_context_->FlushProfiler(Move(profiler));
     }
 
-    void FinishTask();
+    bool TryFinishFragment();
 
     Vector<PhysicalOperator *> &GetOperators();
 
@@ -75,78 +124,102 @@ public:
 
     [[nodiscard]] PhysicalSource *GetSourceOperator() const;
 
-    void CreateTasks(i64 parallel_count, i64 operator_count);
+    void CreateTasks(i64 parallel_count, i64 operator_count, FragmentContext *parent_context);
 
     inline Vector<UniquePtr<FragmentTask>> &Tasks() { return tasks_; }
 
-    [[nodiscard]] inline bool IsMaterialize() const { return fragment_type_ == FragmentType::kSerialMaterialize || fragment_type_ == FragmentType::kParallelMaterialize; }
-
+    [[nodiscard]] inline bool IsMaterialize() const {
+        return fragment_type_ == FragmentType::kSerialMaterialize || fragment_type_ == FragmentType::kParallelMaterialize;
+    }
 
     inline SharedPtr<DataTable> GetResult() {
-        UniqueLock<Mutex> lk(locker_);
-        cv_.wait(lk, [&] { return completed_; });
+        notifier_->Wait();
+
+        if (notifier_->error_fragment_ctx() != nullptr) {
+            return notifier_->error_fragment_ctx()->GetResultInternal();
+        }
 
         return GetResultInternal();
     }
 
-    inline void Complete() {
-        UniqueLock<Mutex> lk(locker_);
-        completed_ = true;
-        cv_.notify_one();
-    }
-
     inline QueryContext *query_context() { return query_context_; }
 
-    inline PlanFragment *fragment_ptr() { return fragment_ptr_; }
+    inline PlanFragment *plan_fragment_ptr() { return plan_fragment_ptr_; }
 
     [[nodiscard]] inline FragmentType ContextType() const { return fragment_type_; }
+
+    void DumpFragmentCtx();
+
+    Notifier *notifier() { return notifier_; }
+
+private:
+    bool TryStartFragment() {
+        u64 unfinished_child = unfinished_child_n_.fetch_sub(1);
+        return unfinished_child == 1;
+    }
+
+    bool TryFinishFragmentInner() {
+        u64 unfinished_task = unfinished_task_n_.fetch_sub(1);
+        return unfinished_task == 1;
+    }
+
+    void MakeSourceState(i64 parallel_count);
+
+    void MakeSinkState(i64 parallel_count);
 
 protected:
     virtual SharedPtr<DataTable> GetResultInternal() = 0;
 
 protected:
-    atomic_u64 task_n_{0};
+    Notifier *notifier_{};
 
-    Mutex locker_{};
-    CondVar cv_{};
+    PlanFragment *plan_fragment_ptr_{};
 
-    PlanFragment *fragment_ptr_{};
-    //    HashMap<u64, UniquePtr<FragmentTask>> tasks_;
+    QueryContext *query_context_{};
+
     Vector<UniquePtr<FragmentTask>> tasks_{};
 
-    bool finish_building_{false};
-    bool completed_{false};
-    i64 finished_task_count_{};
     Vector<SharedPtr<DataBlock>> data_array_{};
 
     FragmentType fragment_type_{FragmentType::kInvalid};
-    QueryContext *query_context_{};
+
+    atomic_u64 unfinished_task_n_{0};
+    atomic_u64 unfinished_child_n_{0};
 };
 
 export class SerialMaterializedFragmentCtx final : public FragmentContext {
 public:
-    explicit inline SerialMaterializedFragmentCtx(PlanFragment *fragment_ptr, QueryContext *query_context)
-        : FragmentContext(fragment_ptr, query_context) {}
+    explicit inline SerialMaterializedFragmentCtx(PlanFragment *plan_fragment_ptr, QueryContext *query_context, Notifier *notifier)
+        : FragmentContext(plan_fragment_ptr, query_context, notifier) {}
 
     ~SerialMaterializedFragmentCtx() final = default;
 
     SharedPtr<DataTable> GetResultInternal() final;
 
 public:
-    UniquePtr<KnnScanSharedData> shared_data_{};
+    UniquePtr<KnnScanSharedData> knn_scan_shared_data_{};
+
+    SharedPtr<Vector<UniquePtr<CreateIndexSharedData>>> create_index_shared_data_array_{};
+
+    SharedPtr<CompactStateData> compact_state_data_{};
 };
 
 export class ParallelMaterializedFragmentCtx final : public FragmentContext {
 public:
-    explicit inline ParallelMaterializedFragmentCtx(PlanFragment *fragment_ptr, QueryContext *query_context)
-        : FragmentContext(fragment_ptr, query_context) {}
+    explicit inline ParallelMaterializedFragmentCtx(PlanFragment *plan_fragment_ptr, QueryContext *query_context, Notifier *notifier)
+        : FragmentContext(plan_fragment_ptr, query_context, notifier) {}
 
     ~ParallelMaterializedFragmentCtx() final = default;
 
     SharedPtr<DataTable> GetResultInternal() final;
 
 public:
-    UniquePtr<KnnScanSharedData> shared_data_{};
+    UniquePtr<KnnScanSharedData> knn_scan_shared_data_{};
+
+    UniquePtr<CreateIndexSharedData> create_index_shared_data_{};
+    SharedPtr<Vector<UniquePtr<CreateIndexSharedData>>> create_index_shared_data_array_{};
+
+    SharedPtr<CompactStateData> compact_state_data_{};
 
 protected:
     HashMap<u64, Vector<SharedPtr<DataBlock>>> task_results_{};
@@ -154,8 +227,8 @@ protected:
 
 export class ParallelStreamFragmentCtx final : public FragmentContext {
 public:
-    explicit inline ParallelStreamFragmentCtx(PlanFragment *fragment_ptr, QueryContext *query_context)
-        : FragmentContext(fragment_ptr, query_context) {}
+    explicit inline ParallelStreamFragmentCtx(PlanFragment *plan_fragment_ptr, QueryContext *query_context, Notifier *notifier)
+        : FragmentContext(plan_fragment_ptr, query_context, notifier) {}
 
     ~ParallelStreamFragmentCtx() final = default;
 

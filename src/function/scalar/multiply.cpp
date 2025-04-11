@@ -14,25 +14,27 @@
 
 module;
 
-#include <cmath>
+module multiply;
 
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module multiply;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 struct MulFunction {
     template <typename TA, typename TB, typename TC>
     static inline bool Run(TA, TB, TC &) {
-        Error<NotImplementException>("Not implement");
+        String error_message = "Not implement: MulFunction::Run";
+        UnrecoverableError(error_message);
         return false;
     }
 };
@@ -73,6 +75,26 @@ inline bool MulFunction::Run(BigIntT left, BigIntT right, BigIntT &result) {
     return true;
 }
 
+// Float16T * Float16T = Float16T, and check overflow
+template <>
+inline bool MulFunction::Run(Float16T left, Float16T right, Float16T &result) {
+    result = left * right;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
+}
+
+// BFloat16T * BFloat16T = BFloat16T, and check overflow
+template <>
+inline bool MulFunction::Run(BFloat16T left, BFloat16T right, BFloat16T &result) {
+    result = left * right;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
+}
+
 // FloatT * FloatT = FloatT, and check overflow
 template <>
 inline bool MulFunction::Run(FloatT left, FloatT right, FloatT &result) {
@@ -96,14 +118,16 @@ inline bool MulFunction::Run(DoubleT left, DoubleT right, DoubleT &result) {
 // Decimal * Decimal = Decimal
 template <>
 inline bool MulFunction::Run(DecimalT, DecimalT, DecimalT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MulFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // Mixed Type * i64
 template <>
 inline bool MulFunction::Run(MixedT, BigIntT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MulFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
@@ -116,7 +140,8 @@ inline bool MulFunction::Run(BigIntT left, MixedT right, MixedT &result) {
 // Mixed Type * f64
 template <>
 inline bool MulFunction::Run(MixedT, DoubleT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MulFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
@@ -129,11 +154,12 @@ inline bool MulFunction::Run(DoubleT left, MixedT right, MixedT &result) {
 // Mixed Type * Mixed Type
 template <>
 inline bool MulFunction::Run(MixedT, MixedT, MixedT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MulFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
-void RegisterMulFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterMulFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "*";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -180,6 +206,18 @@ void RegisterMulFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                        &ScalarFunction::BinaryFunctionWithFailure<DoubleT, DoubleT, DoubleT, MulFunction>);
     function_set_ptr->AddFunction(mul_function_double);
 
+    ScalarFunction mul_function_float16(func_name,
+                                        {DataType(LogicalType::kFloat16), DataType(LogicalType::kFloat16)},
+                                        {DataType(LogicalType::kFloat16)},
+                                        &ScalarFunction::BinaryFunctionWithFailure<Float16T, Float16T, Float16T, MulFunction>);
+    function_set_ptr->AddFunction(mul_function_float16);
+
+    ScalarFunction mul_function_bfloat16(func_name,
+                                         {DataType(LogicalType::kBFloat16), DataType(LogicalType::kBFloat16)},
+                                         {DataType(LogicalType::kBFloat16)},
+                                         &ScalarFunction::BinaryFunctionWithFailure<BFloat16T, BFloat16T, BFloat16T, MulFunction>);
+    function_set_ptr->AddFunction(mul_function_bfloat16);
+
     ScalarFunction mul_function_Decimal(func_name,
                                         {DataType(LogicalType::kDecimal), DataType(LogicalType::kDecimal)},
                                         {DataType(LogicalType::kDecimal)},
@@ -216,7 +254,7 @@ void RegisterMulFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                             &ScalarFunction::BinaryFunctionWithFailure<MixedT, MixedT, MixedT, MulFunction>);
     function_set_ptr->AddFunction(add_function_mixed_mixed);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

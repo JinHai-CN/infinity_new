@@ -14,23 +14,34 @@
 
 module;
 
+module bind_context;
+
 import stl;
-import parser;
+
 import binding;
 import third_party;
-
+import status;
 import infinity_exception;
 import base_expression;
 import column_expression;
 import column_identifer;
-import catalog;
-import block_index;
 
-module bind_context;
+import block_index;
+import column_expr;
+import logger;
+import knn_expr;
+import match_sparse_expr;
+import global_resource_usage;
+import meta_info;
 
 namespace infinity {
 
-BindContext::~BindContext() { Destroy(); }
+BindContext::~BindContext() {
+    Destroy();
+#ifdef INFINITY_DEBUG
+    GlobalResourceUsage::DecrObjectCount("BindContext");
+#endif
+}
 
 void BindContext::Destroy() {
     // TODO: Bind context need to release the resource carefully.
@@ -131,7 +142,7 @@ void BindContext::AddSubqueryBinding(const String &name,
                                      u64 table_index,
                                      SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                                      SharedPtr<Vector<String>> column_names) {
-    auto binding = Binding::MakeBinding(BindingType::kSubquery, name, table_index, Move(column_types), Move(column_names));
+    auto binding = Binding::MakeBinding(BindingType::kSubquery, name, table_index, std::move(column_types), std::move(column_names));
     AddBinding(binding);
     // Consider the subquery as the table
     table_names_.emplace_back(name);
@@ -143,7 +154,7 @@ void BindContext::AddCTEBinding(const String &name,
                                 u64 table_index,
                                 SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                                 SharedPtr<Vector<String>> column_names) {
-    auto binding = Binding::MakeBinding(BindingType::kCTE, name, table_index, Move(column_types), Move(column_names));
+    auto binding = Binding::MakeBinding(BindingType::kCTE, name, table_index, std::move(column_types), std::move(column_names));
     AddBinding(binding);
     // Consider the CTE as the table
     table_names_.emplace_back(name);
@@ -155,23 +166,23 @@ void BindContext::AddViewBinding(const String &name,
                                  u64 table_index,
                                  SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                                  SharedPtr<Vector<String>> column_names) {
-    auto binding = Binding::MakeBinding(BindingType::kView, name, table_index, Move(column_types), Move(column_names));
+    auto binding = Binding::MakeBinding(BindingType::kView, name, table_index, std::move(column_types), std::move(column_names));
     AddBinding(binding);
 }
 
 void BindContext::AddTableBinding(const String &table_alias,
                                   u64 table_index,
-                                  TableEntry *table_collection_entry_ptr,
+                                  SharedPtr<TableInfo> table_info,
                                   SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                                   SharedPtr<Vector<String>> column_names,
                                   SharedPtr<BlockIndex> block_index) {
     auto binding = Binding::MakeBinding(BindingType::kTable,
                                         table_alias,
                                         table_index,
-                                        table_collection_entry_ptr,
-                                        Move(column_types),
-                                        Move(column_names),
-                                        Move(block_index));
+                                        table_info,
+                                        std::move(column_types),
+                                        std::move(column_names),
+                                        std::move(block_index));
     AddBinding(binding);
     table_names_.emplace_back(table_alias);
     table_name2table_index_[table_alias] = table_index;
@@ -201,7 +212,8 @@ void BindContext::AddBindContext(const SharedPtr<BindContext> &other_ptr) {
     for (const auto &table_name2index_pair : other_ptr->table_name2table_index_) {
         const String &table_name = table_name2index_pair.first;
         if (table_name2table_index_.contains(table_name)) {
-            Error<PlannerException>(Format("{} was bound before", table_name));
+            String error_message = fmt::format("{} was bound before", table_name);
+            UnrecoverableError(error_message);
         }
         table_name2table_index_[table_name] = table_name2index_pair.second;
     }
@@ -209,7 +221,8 @@ void BindContext::AddBindContext(const SharedPtr<BindContext> &other_ptr) {
     for (const auto &table_index2name_pair : other_ptr->table_table_index2table_name_) {
         u64 table_index = table_index2name_pair.first;
         if (table_table_index2table_name_.contains(table_index)) {
-            Error<PlannerException>(Format("Table index: {} is bound before", table_index));
+            String error_message = fmt::format("Table index: {} is bound before", table_index);
+            UnrecoverableError(error_message);
         }
         table_table_index2table_name_[table_index] = table_index2name_pair.second;
     }
@@ -217,7 +230,8 @@ void BindContext::AddBindContext(const SharedPtr<BindContext> &other_ptr) {
     for (auto &name_binding_pair : other_ptr->binding_by_name_) {
         auto &binding_name = name_binding_pair.first;
         if (binding_by_name_.contains(binding_name)) {
-            Error<PlannerException>(Format("Table: {} was bound before", binding_name));
+            String error_message = fmt::format("Table: {} was bound before", binding_name);
+            UnrecoverableError(error_message);
         }
         this->binding_by_name_.emplace(name_binding_pair);
     }
@@ -262,7 +276,8 @@ SharedPtr<ColumnExpression> BindContext::ResolveColumnId(const ColumnIdentifier 
             // TODO: What will happen, when different tables have the same column name?
             Vector<String> &binding_names = binding_names_by_column_[column_name_ref];
             if (binding_names.size() > 1) {
-                Error<PlannerException>(Format("Ambiguous column table_name: {}", column_identifier.ToString()));
+                Status status = Status::SyntaxError(fmt::format("Ambiguous column table_name: {}", column_identifier.ToString()));
+                RecoverableError(status);
             }
 
             String &binding_name = binding_names[0];
@@ -270,7 +285,8 @@ SharedPtr<ColumnExpression> BindContext::ResolveColumnId(const ColumnIdentifier 
             auto binding_iter = binding_by_name_.find(binding_name);
             if (binding_iter == binding_by_name_.end()) {
                 // Found the binding, but the binding don't have the column, which should happen.
-                Error<PlannerException>(Format("{} doesn't exist.", column_identifier.ToString()));
+                Status status = Status::SyntaxError(fmt::format("{} doesn't exist.", column_identifier.ToString()));
+                RecoverableError(status);
             }
 
             const auto &binding = binding_iter->second;
@@ -286,7 +302,8 @@ SharedPtr<ColumnExpression> BindContext::ResolveColumnId(const ColumnIdentifier 
                 bound_column_expr->source_position_.binding_name_ = binding->table_name_;
             } else {
                 // Found the binding, but the binding don't have the column, which should happen.
-                Error<PlannerException>(Format("{} doesn't exist.", column_identifier.ToString()));
+                Status status = Status::SyntaxError(fmt::format("{} doesn't exist.", column_identifier.ToString()));
+                RecoverableError(status);
             }
         } else {
             // Table isn't found in current bind context, maybe its parent has it.
@@ -309,7 +326,8 @@ SharedPtr<ColumnExpression> BindContext::ResolveColumnId(const ColumnIdentifier 
                 bound_column_expr->source_position_ = SourcePosition(binding_context_id_, ExprSourceType::kBinding);
                 bound_column_expr->source_position_.binding_name_ = binding->table_name_;
             } else {
-                Error<PlannerException>(Format("{} doesn't exist.", column_identifier.ToString()));
+                Status status = Status::SyntaxError(fmt::format("{} doesn't exist.", column_identifier.ToString()));
+                RecoverableError(status);
             }
         } else {
             // Table isn't found in current bind context, maybe its parent has it.
@@ -350,6 +368,82 @@ const Binding *BindContext::GetBindingFromCurrentOrParentByName(const String &bi
         return nullptr;
     }
     return binding_iter->second.get();
+}
+
+void BindContext::BoundSearch(ParsedExpr *expr) {
+    if (expr == nullptr) {
+        return;
+    }
+    auto search_expr = (SearchExpr *)expr;
+    bool conflict = false;
+    allow_score = !search_expr->fusion_exprs_.empty();
+    if (!search_expr->fusion_exprs_.empty())
+        return;
+
+    KnnDistanceType first_distance_type = KnnDistanceType::kInvalid;
+    SparseMetricType first_metric_type = SparseMetricType::kInvalid;
+    for (SizeT i = 0; !conflict && i < search_expr->match_exprs_.size(); i++) {
+        auto &match_expr = search_expr->match_exprs_[i];
+        switch (match_expr->type_) {
+            case ParsedExprType::kKnn: {
+                auto knn_expr = (KnnExpr *)match_expr;
+                if (first_distance_type == KnnDistanceType::kInvalid) {
+                    first_distance_type = knn_expr->distance_type_;
+                    switch (first_distance_type) {
+                        case KnnDistanceType::kL2:
+                        case KnnDistanceType::kHamming: {
+                            allow_distance = true;
+                            break;
+                        }
+                        case KnnDistanceType::kInnerProduct:
+                        case KnnDistanceType::kCosine: {
+                            allow_similarity = true;
+                            break;
+                        }
+                        default: {
+                            String error_message = "Invalid KNN metric type";
+                            UnrecoverableError(error_message);
+                        }
+                    }
+                } else if (first_distance_type != knn_expr->distance_type_) {
+                    conflict = true;
+                    allow_distance = false;
+                    allow_similarity = false;
+                }
+                break;
+            }
+            case ParsedExprType::kMatchSparse: {
+                auto match_sparse_expr = (MatchSparseExpr *)match_expr;
+                if (first_metric_type == SparseMetricType::kInvalid) {
+                    first_metric_type = match_sparse_expr->metric_type_;
+                    switch (first_metric_type) {
+                        case SparseMetricType::kInnerProduct: {
+                            allow_similarity = true;
+                            break;
+                        }
+                        default: {
+                            String error_message = "Invalid sparse metric type";
+                            UnrecoverableError(error_message);
+                        }
+                    }
+                } else if (first_metric_type != match_sparse_expr->metric_type_) {
+                    conflict = true;
+                    allow_distance = false;
+                    allow_similarity = false;
+                }
+                break;
+            }
+            case ParsedExprType::kMatchTensor:
+            case ParsedExprType::kMatch: {
+                allow_score = true;
+                break;
+            }
+            default: {
+                String error_message = "Invalid match expr type";
+                UnrecoverableError(error_message);
+            }
+        }
+    }
 }
 
 // void

@@ -16,7 +16,7 @@ def generate(generate_if_exists: bool, copy_dir: str):
 
     os.makedirs(sort_dir, exist_ok=True)
     os.makedirs(slt_dir, exist_ok=True)
-    if os.path.exists(agg_path) and os.path.exists(slt_path) and generate_if_exists:
+    if os.path.exists(agg_path) and os.path.exists(slt_path) and not generate_if_exists:
         print(
             "File {} and {} already existed exists. Skip Generating.".format(
                 slt_path, agg_path
@@ -52,12 +52,10 @@ def generate(generate_if_exists: bool, copy_dir: str):
         slt_file.write("\n")
         slt_file.write("query I\n")
         slt_file.write(
-            "COPY {} FROM '{}' WITH ( DELIMITER ',' );\n".format(
+            "COPY {} FROM '{}' WITH ( DELIMITER ',', FORMAT CSV );\n".format(
                 table_name, copy_path
             )
         )
-
-
 
         slt_file.write("\n")
         slt_file.write("query I\n")
@@ -67,7 +65,6 @@ def generate(generate_if_exists: bool, copy_dir: str):
             slt_file.write(str(i) + " " + str(i)+".000000")
             slt_file.write("\n")
         slt_file.write("\n")
-
 
         # select max(c1) from test_simple_agg_big
 
@@ -142,7 +139,7 @@ def generate(generate_if_exists: bool, copy_dir: str):
         slt_file.write("\n")
         slt_file.write("query I\n")
         slt_file.write(
-            "COPY {} FROM '{}' WITH ( DELIMITER ',' );\n".format(
+            "COPY {} FROM '{}' WITH ( DELIMITER ',', FORMAT CSV );\n".format(
                 table_name, copy_path
             )
         )
@@ -206,7 +203,8 @@ def generate(generate_if_exists: bool, copy_dir: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate limit data for test")
+    parser = argparse.ArgumentParser(
+        description="Generate limit data for test")
 
     parser.add_argument(
         "-g",
@@ -219,7 +217,7 @@ if __name__ == "__main__":
         "-c",
         "--copy",
         type=str,
-        default="/tmp/infinity/test_data",
+        default="/var/infinity/test_data",
         dest="copy_dir",
     )
     args = parser.parse_args()

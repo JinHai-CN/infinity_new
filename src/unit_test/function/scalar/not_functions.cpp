@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -34,18 +35,24 @@ import data_block;
 import base_expression;
 import column_vector;
 import not_func;
+import logical_type;
+import internal_types;
+import data_type;
 
-class NotFunctionsTest : public BaseTest {};
+using namespace infinity;
+class NotFunctionsTest : public BaseTestParamStr {};
 
-TEST_F(NotFunctionsTest, not_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, NotFunctionsTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(NotFunctionsTest, not_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterNotFunction(catalog_ptr);
 
     String op = "not";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kScalar);
     SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 

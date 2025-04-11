@@ -14,34 +14,39 @@
 
 module;
 
+export module physical_update;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
-import catalog;
+import meta_info;
 import base_expression;
 import load_meta;
 import infinity_exception;
-
-export module physical_update;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 export class PhysicalUpdate : public PhysicalOperator {
 public:
-    explicit PhysicalUpdate(u64 id,
+    explicit PhysicalUpdate(const u64 id,
                             UniquePtr<PhysicalOperator> left,
-                            TableEntry *table_entry_ptr,
+                            SharedPtr<TableInfo> table_info,
                             const Vector<Pair<SizeT, SharedPtr<BaseExpression>>> &update_columns,
+                            const Vector<SharedPtr<BaseExpression>> &all_columns_in_table,
+                            const Vector<SharedPtr<BaseExpression>> &final_result_columns,
                             SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kUpdate, Move(left), nullptr, id, load_metas), table_entry_ptr_(table_entry_ptr),
-          update_columns_(update_columns) {}
+        : PhysicalOperator(PhysicalOperatorType::kUpdate, std::move(left), nullptr, id, std::move(load_metas)), table_info_(std::move(table_info)),
+          update_columns_(update_columns), all_columns_in_table_(all_columns_in_table), final_result_columns_(final_result_columns) {}
 
     ~PhysicalUpdate() override = default;
 
-    void Init() override;
+    void Init(QueryContext *query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
@@ -49,15 +54,13 @@ public:
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
 
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
-
-    TableEntry *table_entry_ptr_;
+    SharedPtr<TableInfo> table_info_{};
     const Vector<Pair<SizeT, SharedPtr<BaseExpression>>> &update_columns_;
+    const Vector<SharedPtr<BaseExpression>> &all_columns_in_table_;
+    const Vector<SharedPtr<BaseExpression>> &final_result_columns_;
 
 private:
+
     SharedPtr<Vector<String>> output_names_{};
     SharedPtr<Vector<SharedPtr<DataType>>> output_types_{};
 };

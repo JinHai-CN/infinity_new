@@ -1,16 +1,19 @@
 module;
 
+#include <cassert>
+
+module in_doc_pos_iterator;
+
 import stl;
 import index_defines;
 import in_doc_pos_state;
-import pos_list_format_option;
-import pos_list_decoder;
-module in_doc_pos_iterator;
+import position_list_format_option;
+import position_list_decoder;
 
 namespace infinity {
-InDocPositionIterator::InDocPositionIterator(PositionListFormatOption option)
+InDocPositionIterator::InDocPositionIterator(const PositionListFormatOption &option)
     : current_pos_(-1), visited_pos_in_buffer_(-1), visited_pos_in_doc_(-1), pos_count_in_buffer_(0), offset_in_record_(0), total_pos_count_(0),
-      current_field_id_(-1), option_(option) {}
+      current_field_id_(-1), option_(option), state_(option) {}
 
 void InDocPositionIterator::Init(const InDocPositionState &state) {
     PositionListDecoder *pos_decoder = state.GetPositionListDecoder();
@@ -38,8 +41,14 @@ void InDocPositionIterator::Init(const InDocPositionState &state) {
 }
 
 void InDocPositionIterator::SeekPosition(pos_t pos, pos_t &result) {
+    assert(pos != INVALID_POSITION && pos >= 0);
+    if (current_pos_ != i64(-1) && (i64)pos <= current_pos_) {
+        // seek backwards is disallowed, while seek to current position or forward is allowed
+        result = (pos_t)current_pos_;
+        return;
+    }
     pos = pos >= (current_pos_ + 1) ? pos : (current_pos_ + 1);
-    while (pos > current_pos_) {
+    while ((i64)pos > current_pos_) {
         if (++visited_pos_in_doc_ > (i32)total_pos_count_) {
             result = INVALID_POSITION;
             return;
@@ -58,7 +67,7 @@ void InDocPositionIterator::SeekPosition(pos_t pos, pos_t &result) {
         }
         current_pos_ += pos_buffer_[visited_pos_in_buffer_];
     }
-    result = current_pos_;
+    result = (pos_t)current_pos_;
 }
 
 } // namespace infinity

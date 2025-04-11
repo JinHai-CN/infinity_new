@@ -1,24 +1,16 @@
 # NOTICE: This Dockerfile depends on BuildKit
-# NOTICE: You should prepare the following files
-# NOTICE: You can use the download_deps_infinity_builder_centos7.sh script to download them
-# bison-3.8.2.tar.xz
-# binutils-2.41.tar.xz
-# gcc-13.2.0.tar.xz
-# cmake-3.28.1-linux-x86_64.tar.gz
-# ninja-linux.zip
-# llvm-project-17.0.6.src.tar.xz
-# boost_1_81_0.tar.bz2
-# flex-2.6.4.tar.gz
-# liburing-2.5.tar.gz
-# libevent-2.1.12-stable.tar.gz
-# lz4-1.9.4.tar.gz
+# NOTICE: You can use the download_deps_infinity_builder_centos7.sh script to download dependencies.
 
-FROM centos:7
+FROM centos:7.9.2009
 
-RUN yum -y upgrade \
-    && yum -y install git make wget which vim file gcc-c++ \
+RUN rm -f /etc/yum.repos.d/* && sed -i 's/^enabled=1/enabled=0/' /etc/yum/pluginconf.d/fastestmirror.conf
+# https://www.getpagespeed.com/server-setup/how-to-fix-yum-after-centos-6-went-eol
+COPY centos7-vault.repo /etc/yum.repos.d/
+
+RUN yum -y install git make wget which vim file gcc-c++ \
         python3 python3-devel gettext-devel openssl-devel \
-        unzip bzip2 libtool m4 tree rpm-build postgresql \
+        unzip bzip2 libtool m4 tree rpm-build postgresql graphviz\
+    && yum clean all \
     && echo '/usr/local/lib' >> /etc/ld.so.conf.d/local.conf \
     && echo '/usr/local/lib64' >> /etc/ld.so.conf.d/local.conf
 
@@ -29,6 +21,7 @@ RUN --mount=type=bind,source=bison-3.8.2.tar.xz,target=/root/bison-3.8.2.tar.xz 
     && ldconfig && cd /root && rm -rf bison-3.8.2
 
 # Install binutils-2.41
+# Failed to build binutils-2.42
 RUN --mount=type=bind,source=binutils-2.41.tar.xz,target=/root/binutils-2.41.tar.xz \
     cd /root && tar xf binutils-2.41.tar.xz && cd binutils-2.41 \
     && ./configure --enable-gold \
@@ -42,47 +35,47 @@ RUN --mount=type=bind,source=gcc-13.2.0.tar.xz,target=/root/gcc-13.2.0.tar.xz \
     && cd /root && mkdir build-gcc && cd build-gcc \
     && ../gcc-13.2.0/configure --enable-languages=c,c++ \
         --disable-multilib --with-pic \
-    && make -j12 && make install-strip \
+    && make -j16 && make install-strip \
     && cd /root && rm -rf build-gcc && rm -rf gcc-13.2.0 \
     && ln -s gcc /usr/local/bin/cc && ldconfig
 
 ENV LIBRARY_PATH=/usr/local/lib:/usr/local/lib64
 
-# Install cmake-3.28.1
-RUN --mount=type=bind,source=cmake-3.28.1-linux-x86_64.tar.gz,target=/root/cmake-3.28.1-linux-x86_64.tar.gz \
-    cd /root && tar xf cmake-3.28.1-linux-x86_64.tar.gz \
-    && cp -rf cmake-3.28.1-linux-x86_64/bin/* /usr/local/bin \
-    && cp -rf cmake-3.28.1-linux-x86_64/share/* /usr/local/share \
-    && rm -rf cmake-3.28.1-linux-x86_64
+# Install cmake-3.30.1
+RUN --mount=type=bind,source=cmake-3.30.1-linux-x86_64.tar.gz,target=/root/cmake-3.30.1-linux-x86_64.tar.gz \
+    cd /root && tar xf cmake-3.30.1-linux-x86_64.tar.gz \
+    && cp -rf cmake-3.30.1-linux-x86_64/bin/* /usr/local/bin \
+    && cp -rf cmake-3.30.1-linux-x86_64/share/* /usr/local/share \
+    && rm -rf cmake-3.30.1-linux-x86_64
 
-# Install ninja-1.11.1
+# Install ninja-1.12.1
 RUN --mount=type=bind,source=ninja-linux.zip,target=/root/ninja-linux.zip \
     cd /root && unzip ninja-linux.zip \
     && cp ninja /usr/local/bin && rm ninja
 
-# Install clang-17.0.6
+# Install clang-18.1.8
 # Add -DCLANG_DEFAULT_LINKER=lld to use lld by default
 # infinity seems to be incompatible with the lld linker
-RUN --mount=type=bind,source=llvm-project-17.0.6.src.tar.xz,target=/root/llvm-project-17.0.6.src.tar.xz \
-    cd /root && tar xf llvm-project-17.0.6.src.tar.xz \
-    && cd llvm-project-17.0.6.src && mkdir build && cd build \
+RUN --mount=type=bind,source=llvm-project-18.1.8.src.tar.xz,target=/root/llvm-project-18.1.8.src.tar.xz \
+    cd /root && tar xf llvm-project-18.1.8.src.tar.xz \
+    && cd llvm-project-18.1.8.src && mkdir build && cd build \
     && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_JOB_POOLS:STRING=link_pool=1 \
+        -DCMAKE_JOB_POOLS:STRING=link_pool=3 \
         -DCMAKE_JOB_POOL_LINK:STRING=link_pool \
         -DGCC_INSTALL_PREFIX=/usr/local \
         -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra;lld;lldb" \
-        -DLLVM_ENABLE_RUNTIMES="compiler-rt" \
-        -DLLVM_INSTALL_TOOLCHAIN_ONLY=ON \
+        -DLLVM_ENABLE_RUNTIMES="compiler-rt;libcxx;libcxxabi;libunwind" \
+        -DLIBCXXABI_USE_LLVM_UNWINDER=ON \
         -DLLVM_TARGETS_TO_BUILD=X86 ../llvm \
-    && ninja -j12 install/strip \
-    && ldconfig && cd /root && rm -rf llvm-project-17.0.6.src
+    && ninja install/strip \
+    && ldconfig && cd /root && rm -rf llvm-project-18.1.8.src
 
-# Install boost-1.81.0
-RUN --mount=type=bind,source=boost_1_81_0.tar.bz2,target=/root/boost_1_81_0.tar.bz2 \
-    cd /root && tar xf boost_1_81_0.tar.bz2 \
-    && cd boost_1_81_0 && ./bootstrap.sh --with-python=python3 \
-    && ./b2 -j12 install \
-    && ldconfig && cd /root && rm -rf boost_1_81_0
+# Install boost-1.86.0
+RUN --mount=type=bind,source=boost_1_86_0.tar.bz2,target=/root/boost_1_86_0.tar.bz2 \
+    cd /root && tar xf boost_1_86_0.tar.bz2 \
+    && cd boost_1_86_0 && ./bootstrap.sh \
+    && ./b2 --without-python -j12 install \
+    && ldconfig && cd /root && rm -rf boost_1_86_0
 
 # Install flex-2.6.4
 RUN --mount=type=bind,source=flex-2.6.4.tar.gz,target=/root/flex-2.6.4.tar.gz  \
@@ -91,27 +84,185 @@ RUN --mount=type=bind,source=flex-2.6.4.tar.gz,target=/root/flex-2.6.4.tar.gz  \
     && make -j && make install \
     && ldconfig && cd /root && rm -rf flex-2.6.4
 
-# Install liburing-2.5
-RUN --mount=type=bind,source=liburing-2.5.tar.gz,target=/root/liburing-2.5.tar.gz  \
-    cd /root && tar xf liburing-2.5.tar.gz \
-    && cd liburing-liburing-2.5 && make -j install \
-    && ldconfig && cd /root && rm -rf liburing-liburing-2.5
-
 # Install libevent-2.1.12
 RUN --mount=type=bind,source=libevent-2.1.12-stable.tar.gz,target=/root/libevent-2.1.12-stable.tar.gz  \
     cd /root && tar xf libevent-2.1.12-stable.tar.gz \
     && cd libevent-2.1.12-stable && mkdir build && cd build \
     && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_FLAGS="-fPIC" .. \
-    && ninja -j0 install \
+    && ninja install \
     && ldconfig && cd /root && rm -rf libevent-2.1.12-stable
 
-# Install lz4-1.9.4
-RUN --mount=type=bind,source=lz4-1.9.4.tar.gz,target=/root/lz4-1.9.4.tar.gz  \
-    cd /root && tar xf lz4-1.9.4.tar.gz \
-    && cd lz4-1.9.4 && CFLAGS="-fPIC" make -j install \
-    && ldconfig && cd /root && rm -rf lz4-1.9.4
+# Install lz4-1.10.0
+RUN --mount=type=bind,source=lz4-1.10.0.tar.gz,target=/root/lz4-1.10.0.tar.gz  \
+    cd /root && tar xf lz4-1.10.0.tar.gz \
+    && cd lz4-1.10.0 && CFLAGS="-fPIC" make -j install \
+    && ldconfig && cd /root && rm -rf lz4-1.10.0
+
+# Install zlib-1.3.1
+RUN --mount=type=bind,source=zlib-1.3.1.tar.gz,target=/root/zlib-1.3.1.tar.gz  \
+    cd /root && tar xf zlib-1.3.1.tar.gz \
+    && cd zlib-1.3.1 && ./configure && CFLAGS="-fPIC" make -j install \
+    && ldconfig && cd /root && rm -rf zlib-1.3.1
+
+# Install zstd-1.5.5
+RUN --mount=type=bind,source=zstd-1.5.5.tar.gz,target=/root/zstd-1.5.5.tar.gz  \
+    cd /root && tar xf zstd-1.5.5.tar.gz \
+    && cd zstd-1.5.5 && make -j lib-mt && make install \
+    && ldconfig && cd /root && rm -rf zstd-1.5.5
+
+# Install bzip2-1.0.8
+RUN --mount=type=bind,source=bzip2-1.0.8.tar.gz,target=/root/bzip2-1.0.8.tar.gz  \
+    cd /root && tar xf bzip2-1.0.8.tar.gz \
+    && cd bzip2-1.0.8 && make install \
+    && ldconfig && cd /root && rm -rf bzip2-1.0.8
+
+# Install brotli-1.1.0
+RUN --mount=type=bind,source=v1.1.0.tar.gz,target=/root/v1.1.0.tar.gz  \
+    cd /root && tar xf v1.1.0.tar.gz \
+    && cd brotli-1.1.0 && mkdir out && cd out && cmake -DCMAKE_BUILD_TYPE=Release .. && cmake --build . --config Release --target install \
+    && ldconfig && cd /root && rm -rf brotli-1.1.0
+
+# Install jemalloc-5.3.0
+# Known issue: Composition of `-fsanitize=address`, staticly linked jemalloc and `mallctl` cause crash at initialization.
+# Refers to https://github.com/jemalloc/jemalloc/issues/2454
+RUN --mount=type=bind,source=jemalloc-5.3.0.tar.bz2,target=/root/jemalloc-5.3.0.tar.bz2  \
+    cd /root && tar xjf jemalloc-5.3.0.tar.bz2 \
+    && cd jemalloc-5.3.0 && CFLAGS="-fPIC" CXXFLAGS="-fPIC" ./configure --enable-static --disable-libdl --enable-prof --enable-prof-libunwind --disable-initial-exec-tls && make -j install \
+    && ldconfig && cd /root && rm -rf jemalloc-5.3.0
+
+# Install gperftools-2.15
+RUN --mount=type=bind,source=gperftools-2.15.tar.gz,target=/root/gperftools-2.15.tar.gz  \
+    cd /root && tar xzf gperftools-2.15.tar.gz \
+    && cd gperftools-2.15 && ./configure && make -j && make install \
+    && ldconfig && cd /root && rm -rf gperftools-2.15
+
+# download https://github.com/risinglightdb/sqllogictest-rs/releases/download/v0.20.2/sqllogictest-bin-v0.20.2-x86_64-unknown-linux-musl.tar.gz
+RUN --mount=type=bind,source=sqllogictest-bin-v0.20.2-x86_64-unknown-linux-musl.tar.gz,target=/root/sqllogictest-bin-v0.20.2-x86_64-unknown-linux-musl.tar.gz \
+    cd /tmp && tar xzf /root/sqllogictest-bin-v0.20.2-x86_64-unknown-linux-musl.tar.gz && cp -rf sqllogictest /usr/local/bin && rm -fr /tmp/*
+
+# OpenSSL
+# pyhton 3.6+ ssl module requires openssl 1.1.1+
+# "OpenSSL 1.1.x is not fully source compatible with OpenSSL 1.0.2." refers to https://github.com/openssl/openssl/issues/9772.
+# This means installing to /usr/local/lib may break app compilation.
+RUN --mount=type=bind,source=openssl-1.1.1w.tar.gz,target=/root/openssl-1.1.1w.tar.gz  \
+    cd /root && tar xzf openssl-1.1.1w.tar.gz \
+    && cd openssl-1.1.1w && ./config --prefix=/usr/local/openssl11 --openssldir=/usr/local/openssl11 shared \
+    && make -j && make install \
+    && ldconfig && cd /root && rm -rf openssl-1.1.1w
+
+# packages need by python optional modules: _dbm _gdbm _lzma _sqlite3 _tkinter _uuid
+# Too old: ncurses-devel sqlite-devel
+# TODO: failed to build ncurses 5.4, 5.7, 5.9
+RUN yum install -y gdbm-devel sqlite-devel xz-devel libffi-devel libuuid-devel bzip2-devel readline-devel tk-devel \
+    && yum clean all
+
+# We need build a wheel for each supported Python minor version. Refers to https://github.com/wjakob/nanobind/pull/561.
+# Install Python 3.10
+RUN --mount=type=bind,source=Python-3.10.15.tar.xz,target=/root/Python-3.10.15.tar.xz  \
+    cd /root && tar xJf Python-3.10.15.tar.xz \
+    && cd Python-3.10.15 && ./configure --with-openssl=/usr/local/openssl11 --with-openssl-rpath=auto --enable-shared && make -j && make altinstall \
+    && ldconfig && cd /root && rm -rf Python-3.10.15
+
+# Install Python 3.11
+RUN --mount=type=bind,source=Python-3.11.10.tar.xz,target=/root/Python-3.11.10.tar.xz  \
+cd /root && tar xJf Python-3.11.10.tar.xz \
+&& cd Python-3.11.10 && ./configure --with-openssl=/usr/local/openssl11 --with-openssl-rpath=auto --enable-shared && make -j && make altinstall \
+&& ldconfig && cd /root && rm -rf Python-3.11.10
+
+# Install Python 3.12
+RUN --mount=type=bind,source=Python-3.12.7.tar.xz,target=/root/Python-3.12.7.tar.xz  \
+cd /root && tar xJf Python-3.12.7.tar.xz \
+&& cd Python-3.12.7 && ./configure --with-openssl=/usr/local/openssl11 --with-openssl-rpath=auto --enable-shared && make -j && make altinstall \
+&& ldconfig && cd /root && rm -rf Python-3.12.7
+
+# Install Python 3.13
+RUN --mount=type=bind,source=Python-3.13.0.tar.xz,target=/root/Python-3.13.0.tar.xz  \
+cd /root && tar xJf Python-3.13.0.tar.xz \
+&& cd Python-3.13.0 && ./configure --with-openssl=/usr/local/openssl11 --with-openssl-rpath=auto --enable-shared && make -j && make altinstall \
+&& ldconfig && cd /root && rm -rf Python-3.13.0
+
+RUN /usr/local/bin/pip3.10 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple && /usr/local/bin/pip3.10 config set global.trusted-host "pypi.tuna.tsinghua.edu.cn mirrors.pku.edu.cn" && /usr/local/bin/pip3.10 config set global.extra-index-url "https://mirrors.pku.edu.cn/pypi/web/simple"
+
+# Install tools for building and uploading a python wheel.
+RUN /usr/local/bin/pip3.10 install wheel auditwheel patchelf twine
+
+# Create a python virtual environment for each python version. Set PATH so that the shell activate a virtual environment automatically when entering a container from this image.
+RUN --mount=type=bind,source=python/requirements.txt,target=/root/requirements.txt /usr/local/bin/python3.10 -m venv /usr/local/venv310 && source /usr/local/venv310/bin/activate && pip3 install --no-input wheel && pip3 install --no-input -r /root/requirements.txt
+
+RUN --mount=type=bind,source=python/requirements.txt,target=/root/requirements.txt /usr/local/bin/python3.11 -m venv /usr/local/venv311 && source /usr/local/venv311/bin/activate && pip3 install --no-input wheel && pip3 install --no-input -r /root/requirements.txt
+
+RUN --mount=type=bind,source=python/requirements.txt,target=/root/requirements.txt /usr/local/bin/python3.12 -m venv /usr/local/venv312 && source /usr/local/venv312/bin/activate && pip3 install --no-input wheel && pip3 install --no-input -r /root/requirements.txt
+
+# https://github.com/llvm/llvm-project/issues/96210
+# https://github.com/llvm/llvm-project/issues/57276
+RUN cp /usr/local/include/x86_64-unknown-linux-gnu/c++/v1/__config_site /usr/local/include/c++/v1
+
+# Install thrift 0.20.0
+RUN --mount=type=bind,source=thrift-0.20.0.tar.gz,target=/root/thrift-0.20.0.tar.gz  \
+    cd /root && tar xzf thrift-0.20.0.tar.gz \
+    && cd thrift-0.20.0/build && cmake -G Ninja .. && ninja thrift-compiler \
+    && cp compiler/cpp/bin/thrift /usr/local/bin/thrift \
+    && cd /root && rm -rf thrift-0.20.0
+
+RUN yum -y install expat-static perl-core libpcap-devel \
+    && yum clean all
+
+RUN --mount=type=bind,source=openssl-3.0.15.tar.gz,target=/root/openssl-3.0.15.tar.gz  \
+    cd /root && tar xzf openssl-3.0.15.tar.gz \
+    && cd openssl-3.0.15 && ./config --prefix=/usr/local/openssl30 --openssldir=/usr/local/openssl30 shared zlib \
+    && make -j && make install \
+    && ldconfig && cd /root && rm -rf openssl-3.0.15
+
+RUN git clone --single-branch --depth=1 https://github.com/adrian-thurston/colm.git \
+    && cd colm \
+    && ./autogen.sh \
+    && ./configure --prefix=/usr/local/colm \
+    && make -j 12 install \
+    && rm -rf ../colm
+
+RUN git clone --single-branch --depth=1 https://github.com/adrian-thurston/ragel.git \
+    && cd ragel \
+    && ./autogen.sh \
+    && ./configure --prefix=/usr/local/ragel --with-colm=/usr/local/colm \
+    && make -j 12 install \
+    && rm -rf ../ragel
+
+ENV PATH="/usr/local/venv310/bin:/usr/local/ragel/bin:$PATH"
 
 ENV CC=clang CXX=clang++ LZ4_ROOT=/usr/local
+
+RUN git clone --single-branch --depth=1 https://github.com/VectorCamp/vectorscan.git \
+    && cd vectorscan \
+    && mkdir build \
+    && cd build \
+    && cmake -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=On ..  \
+    && make -j 12 install \
+    && rm -rf ../../vectorscan
+
+# Install iproute2
+RUN --mount=type=bind,source=iproute2-6.9.0.tar.gz,target=/root/iproute2-6.9.0.tar.gz \
+cd /root \
+&& tar -zxf iproute2-6.9.0.tar.gz && cd iproute2-6.9.0 \
+&& ./configure --prefix=/usr/local/iproute2 \
+&& make && make install \
+&& ip -V
+
+# test requirements
+RUN --mount=type=bind,source=python/test_cluster/requirements.txt,target=/root/requirements1.txt \
+    cd /root \
+    && /usr/local/bin/python3.10 -m venv /usr/local/venv310 && source /usr/local/venv310/bin/activate \
+    && pip3 install -r requirements1.txt
+
+RUN yum install -y sudo bridge-utils iptables
+
+# Install Docker
+# https://docs.docker.com/engine/install/centos/#install-using-the-convenience-script
+# RUN --mount=type=bind,source=get-docker.sh,target=/root/get-docker.sh \
+#     cd /root && sh get-docker.sh
+RUN --mount=type=bind,source=docker-27.3.1.tgz,target=/root/docker-27.3.1.tgz \
+    cd /root \
+    && tar zxf docker-27.3.1.tgz \
+    && sudo cp docker/* /usr/bin
 
 ENTRYPOINT [ "bash", "-c", "while true; do sleep 60; done"]

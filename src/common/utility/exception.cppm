@@ -16,163 +16,58 @@ module;
 export module infinity_exception;
 
 import stl;
+import status;
 
 namespace infinity {
 
-export void PrintStacktrace(const String& err_msg);
+export void PrintStacktrace(const String &err_msg);
+export void PrintTransactionHistory();
 
-export class Exception : public StdException {
+export class RecoverableException : public std::exception {
 public:
-    explicit Exception(String message) : message_(Move(message)) {}
-    [[nodiscard]] inline const char *what() const noexcept override { return message_.c_str(); }
+    explicit RecoverableException(Status status) : status_(std::move(status)) {}
+    [[nodiscard]] inline const char *what() const noexcept override { return status_.message(); }
 
-protected:
-    template <typename... Args>
-    static String BuildMessage(Args... params);
+    RecoverableException(const RecoverableException &other) : status_(other.status_.clone()) {}
+
+    inline ErrorCode ErrorCode() const { return status_.code(); }
+
+    inline std::string_view ErrorMessage() const { return status_.message(); }
 
 private:
-    template <typename T, typename... Args>
-    static String BuildMessageInternal(Vector<String> &values, T param, Args... params);
+    Status status_;
+};
 
-    static String BuildMessageInternal(Vector<String> &values);
+export class UnrecoverableException : public std::exception {
+public:
+    explicit UnrecoverableException(String message) : message_(std::move(message)) {}
+    [[nodiscard]] inline const char *what() const noexcept override { return message_.c_str(); }
 
+private:
     String message_;
 };
 
-String Exception::BuildMessageInternal(Vector<String> &values) {
-    auto values_count = values.size();
-    if (values_count > 0) {
-        String msg(values[0]);
-        for (SizeT idx = 1; idx < values_count; ++idx) {
-            msg.append(" ").append(values[idx]);
-        }
-        return msg;
-    }
-    return String();
-}
+#define ADD_LOG_INFO
 
-template <typename... Args>
-String Exception::BuildMessage(Args... params) {
-    Vector<String> values;
-    return BuildMessageInternal(values, params...);
-}
+#if defined(INFINITY_DEBUG) || defined(ADD_LOG_INFO)
 
-template <typename T, typename... Args>
-String Exception::BuildMessageInternal(Vector<String> &values, T param, Args... params) {
-    values.push_back(Move(param));
-    return BuildMessageInternal(values, params...);
-}
+export void RecoverableError(Status status,
+                             const char *file_name = std::source_location::current().file_name(),
+                             u32 line = std::source_location::current().line());
 
-export class ClientException : public Exception {
-public:
-    template <typename... Args>
-    explicit ClientException(Args... params) : Exception(BuildMessage(String("Client Error:"), params...)) {}
-};
+export void UnrecoverableError(const String &message,
+                               const char *file_name = std::source_location::current().file_name(),
+                               u32 line = std::source_location::current().line());
 
-export class CatalogException : public Exception {
-public:
-    template <typename... Args>
-    explicit CatalogException(Args... params) : Exception(BuildMessage(String("Catalog Error:"), params...)) {}
-};
+export std::string_view GetErrorMsg(const String &message);
 
-export class NetworkException : public Exception {
-public:
-    template <typename... Args>
-    explicit NetworkException(Args... params) : Exception(BuildMessage(String("Network Error:"), params...)) {}
-};
+#else
 
-export class PlannerException : public Exception {
-public:
-    template <typename... Args>
-    explicit PlannerException(Args... params) : Exception(BuildMessage(String("Planner Error:"), params...)) {}
-};
+export void RecoverableError(Status status);
 
-export class OptimizerException : public Exception {
-public:
-    template <typename... Args>
-    explicit OptimizerException(Args... params) : Exception(BuildMessage(String("Optimizer Error:"), params...)) {}
-};
+export void UnrecoverableError(const String &message);
 
-export class ExecutorException : public Exception {
-public:
-    template <typename... Args>
-    explicit ExecutorException(Args... params) : Exception(BuildMessage(String("Executor Error:"), params...)) {}
-};
-
-export class SchedulerException : public Exception {
-public:
-    template <typename... Args>
-    explicit SchedulerException(Args... params) : Exception(BuildMessage(String("Scheduler Error:"), params...)) {}
-};
-
-export class StorageException : public Exception {
-public:
-    template <typename... Args>
-    explicit StorageException(Args... params) : Exception(BuildMessage(String("Storage Error:"), params...)) {}
-};
-
-export class TypeException : public Exception {
-public:
-    template <typename... Args>
-    explicit TypeException(Args... params) : Exception(BuildMessage(String("Type Error:"), params...)) {}
-};
-
-export class FunctionException : public Exception {
-public:
-    template <typename... Args>
-    explicit FunctionException(Args... params) : Exception(BuildMessage(String("Function Error:"), params...)) {}
-};
-
-export class NotImplementException : public Exception {
-public:
-    template <typename... Args>
-    explicit NotImplementException(Args... params) : Exception(BuildMessage(String("NotImplement Error:"), params...)) {}
-};
-
-export class TransactionException : public Exception {
-public:
-    template <typename... Args>
-    explicit TransactionException(Args... params) : Exception(BuildMessage(String("Transaction Error:"), params...)) {}
-};
-
-export class ProfilerException : public Exception {
-public:
-    template <typename... Args>
-    explicit ProfilerException(Args... params) : Exception(BuildMessage(String("Profiler Error:"), params...)) {}
-};
-
-export class QueryException : public Exception {
-public:
-    template <typename... Args>
-    explicit QueryException(Args... params) : Exception(BuildMessage(String("Query failed due to: "), params...)) {}
-};
-
-#ifdef INFINITY_DEBUG
-
-export template <typename ExceptionType>
-inline void
-Error(const String &message, const char *file_name = std::source_location::current().file_name(), u32 line = std::source_location::current().line()) {
-    String err_msg = message;
-    err_msg.append(" @").append(infinity::TrimPath(file_name)).append(":").append(ToStr(line));
-    throw ExceptionType(err_msg);
-}
-
-export void
-Error(const String &message, const char *file_name = std::source_location::current().file_name(), u32 line = std::source_location::current().line());
-
-#elif
-
-export template <typename ExceptionType>
-inline void Assert(bool is_true, const String &message) {
-    if (!(is_true)) {
-        throw ExceptionType(message);
-    }
-}
-
-export template <typename ExceptionType>
-inline void Error(const String &message) {
-    return Assert<ExceptionType>(false, message);
-}
+export std::string_view GetErrorMsg(const String &message);
 
 #endif
 

@@ -14,8 +14,10 @@
 
 module;
 
+export module physical_cross_product;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -23,26 +25,22 @@ import physical_operator_type;
 import data_table;
 import load_meta;
 import infinity_exception;
-
-export module physical_cross_product;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 export class PhysicalCrossProduct final : public PhysicalOperator {
 public:
     explicit PhysicalCrossProduct(u64 id, UniquePtr<PhysicalOperator> left, UniquePtr<PhysicalOperator> right, SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kCrossProduct, Move(left), Move(right), id, load_metas) {}
+        : PhysicalOperator(PhysicalOperatorType::kCrossProduct, std::move(left), std::move(right), id, load_metas) {}
 
     ~PhysicalCrossProduct() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     SharedPtr<Vector<String>> GetOutputNames() const final;
 

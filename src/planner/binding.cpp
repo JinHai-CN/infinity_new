@@ -14,16 +14,16 @@
 
 module;
 
-import stl;
-import parser;
-import block_index;
-import catalog;
-
-import infinity_exception;
-
 module binding;
 
+import stl;
+import block_index;
+import infinity_exception;
+import logger;
+
 namespace infinity {
+
+Binding::~Binding() = default;
 
 SharedPtr<Binding> Binding::MakeBinding(BindingType binding_type,
                                         const String &name,
@@ -37,10 +37,11 @@ SharedPtr<Binding> Binding::MakeBinding(BindingType binding_type,
 
     SizeT column_count = column_names->size();
     if (column_count != column_types->size()) {
-        Error<PlannerException>("Make binding error: column size isn't valid.");
+        String error_message = "Make binding error: column size isn't valid.";
+        UnrecoverableError(error_message);
     }
-    binding->column_types_ = Move(column_types);
-    binding->column_names_ = Move(column_names);
+    binding->column_types_ = std::move(column_types);
+    binding->column_names_ = std::move(column_names);
 
     for (SizeT idx = 0; idx < column_count; ++idx) {
         binding->name2index_[binding->column_names_->at(idx)] = static_cast<i64>(idx);
@@ -51,14 +52,14 @@ SharedPtr<Binding> Binding::MakeBinding(BindingType binding_type,
 SharedPtr<Binding> Binding::MakeBinding(BindingType binding_type,
                                         const String &binding_alias,
                                         u64 table_index,
-                                        TableEntry *table_ptr,
+                                        SharedPtr<TableInfo> table_info,
                                         SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                                         SharedPtr<Vector<String>> column_names,
                                         SharedPtr<BlockIndex> block_index) {
-    auto binding = MakeBinding(binding_type, binding_alias, table_index, Move(column_types), Move(column_names));
-    binding->table_collection_entry_ptr_ = table_ptr;
-    binding->block_index_ = Move(block_index);
-    //    binding->logical_node_ptr_ = Move(logical_node_ptr);
+    auto binding = MakeBinding(binding_type, binding_alias, table_index, std::move(column_types), std::move(column_names));
+    binding->table_info_ = table_info;
+    binding->block_index_ = std::move(block_index);
+    //    binding->logical_node_ptr_ = std::move(logical_node_ptr);
     //    binding->logical_node_id_ = logical_node_id;
     return binding;
 }

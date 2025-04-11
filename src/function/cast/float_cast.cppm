@@ -14,19 +14,20 @@
 
 module;
 
-#include <cmath>
+export module float_cast;
 
-import parser;
 import stl;
 import bound_cast_func;
 import vector_buffer;
 import column_vector_cast;
-
+import logical_type;
 import infinity_exception;
 import third_party;
 import column_vector;
-
-export module float_cast;
+import internal_types;
+import data_type;
+import status;
+import logger;
 
 namespace infinity {
 
@@ -36,7 +37,8 @@ export struct FloatTryCastToVarlen;
 export template <class SourceType>
 inline BoundCastFunc BindFloatCast(const DataType &source, const DataType &target) {
     if (source.type() == target.type()) {
-        Error<FunctionException>("Can't cast from the same type");
+        String error_message = "Can't cast from the same type";
+        UnrecoverableError(error_message);
     }
     switch (target.type()) {
         case LogicalType::kTinyInt: {
@@ -60,14 +62,27 @@ inline BoundCastFunc BindFloatCast(const DataType &source, const DataType &targe
         case LogicalType::kDouble: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<SourceType, DoubleT, FloatTryCastToFixlen>);
         }
+        case LogicalType::kFloat16: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<SourceType, Float16T, FloatTryCastToFixlen>);
+        }
+        case LogicalType::kBFloat16: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<SourceType, BFloat16T, FloatTryCastToFixlen>);
+        }
         case LogicalType::kDecimal: {
-            Error<NotImplementException>(Format("Not implement cast from numeric to decimal128 type.", source.ToString(), target.ToString()));
+            String error_message = fmt::format("Not implement cast from numeric to decimal128 type.", source.ToString(), target.ToString());
+            UnrecoverableError(error_message);
         }
         case LogicalType::kVarchar: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVectorToVarlen<SourceType, VarcharT, FloatTryCastToVarlen>);
         }
+        case LogicalType::kBoolean:
+        case LogicalType::kEmbedding: {
+            Status status = Status::NotSupport(fmt::format("Attempt to cast from {} to {}", source.ToString(), target.ToString()));
+            RecoverableError(status);
+        }
         default: {
-            Error<TypeException>(Format("Attempt to cast from {} to {}", source.ToString(), target.ToString()));
+            String error_message = fmt::format("Attempt to cast from {} to {}", source.ToString(), target.ToString());
+            UnrecoverableError(error_message);
         }
     }
     return BoundCastFunc(nullptr);
@@ -76,22 +91,33 @@ inline BoundCastFunc BindFloatCast(const DataType &source, const DataType &targe
 struct FloatTryCastToFixlen {
     template <typename SourceType, typename TargetType>
     static inline bool Run(SourceType, TargetType &) {
-        Error<FunctionException>(
-            Format("Not implemented to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>()));
+        String error_message =
+            fmt::format("Not implemented to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>());
+        UnrecoverableError(error_message);
         return false;
     }
 };
 
 struct FloatTryCastToVarlen {
     template <typename SourceType, typename TargetType>
-    static inline bool Run(SourceType, TargetType &, const SharedPtr<ColumnVector> &) {
-        Error<FunctionException>(
-            Format("Not support to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>()));
+    static inline bool Run(SourceType, TargetType &, ColumnVector *) {
+        String error_message =
+            fmt::format("Not support to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>());
+        UnrecoverableError(error_message);
         return false;
     }
 };
 
 // Cast FloatT to other numeric type
+template <>
+inline bool FloatTryCastToFixlen::Run(FloatT source, u8 &target) {
+    if (source < 0.0f || source > 255.0f) {
+        return false;
+    }
+    target = static_cast<u8>(source);
+    return true;
+}
+
 template <>
 inline bool FloatTryCastToFixlen::Run(FloatT source, TinyIntT &target) {
     if (source < -128.0f || source > 127.0f) {
@@ -134,7 +160,8 @@ inline bool FloatTryCastToFixlen::Run(FloatT source, BigIntT &target) {
 // TODO: Cast from float to hugeint
 template <>
 inline bool FloatTryCastToFixlen::Run(FloatT, HugeIntT &) {
-    Error<NotImplementException>("Not implemented");
+    String error_message = "Not implement: FloatTryCastToFixlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
@@ -144,36 +171,44 @@ inline bool FloatTryCastToFixlen::Run(FloatT source, DoubleT &target) {
     return true;
 }
 
+template <>
+inline bool FloatTryCastToFixlen::Run(FloatT source, Float16T &target) {
+    target = source;
+    return true;
+}
+
+template <>
+inline bool FloatTryCastToFixlen::Run(FloatT source, BFloat16T &target) {
+    target = source;
+    return true;
+}
+
 // TODO
 template <>
 inline bool FloatTryCastToFixlen::Run(FloatT, DecimalT &) {
-    Error<NotImplementException>("Not implemented");
+    String error_message = "Not implement: FloatTryCastToFixlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // Cast FloatT to varlen type
 template <>
-inline bool FloatTryCastToVarlen::Run(FloatT source, VarcharT &target, const SharedPtr<ColumnVector> &vector_ptr) {
-    target.is_value_ = false;
-    String tmp_str = ToStr(source);
-    target.length_ = static_cast<u32>(tmp_str.size());
-
-    if (target.length_ <= VARCHAR_INLINE_LEN) {
-        Memcpy(target.short_.data_, tmp_str.c_str(), target.length_);
-    } else {
-        Memcpy(target.vector_.prefix_, tmp_str.c_str(), VARCHAR_PREFIX_LEN);
-        if (vector_ptr->buffer_->buffer_type_ != VectorBufferType::kHeap) {
-            Error<TypeException>("Varchar column vector should use MemoryVectorBuffer. ");
-        }
-        auto [chunk_id, chunk_offset] = vector_ptr->buffer_->fix_heap_mgr_->AppendToHeap(tmp_str.c_str(), target.length_);
-        target.vector_.chunk_id_ = chunk_id;
-        target.vector_.chunk_offset_ = chunk_offset;
-    }
-
+inline bool FloatTryCastToVarlen::Run(FloatT source, VarcharT &target, ColumnVector *vector_ptr) {
+    String tmp_str = std::to_string(source);
+    vector_ptr->AppendVarcharInner({tmp_str.data(), tmp_str.size()}, target);
     return true;
 }
 
 // Cast DoubleT to other numeric type
+template <>
+inline bool FloatTryCastToFixlen::Run(DoubleT source, u8 &target) {
+    if (source < 0.0f || source > 255.0f) {
+        return false;
+    }
+    target = static_cast<u8>(source);
+    return true;
+}
+
 template <>
 inline bool FloatTryCastToFixlen::Run(DoubleT source, TinyIntT &target) {
     if (source < -128.0f || source > 127.0f) {
@@ -216,7 +251,8 @@ inline bool FloatTryCastToFixlen::Run(DoubleT source, BigIntT &target) {
 // TODO: Cast from double to hugeint
 template <>
 inline bool FloatTryCastToFixlen::Run(DoubleT, HugeIntT &) {
-    Error<NotImplementException>("Not implemented");
+    String error_message = "Not implement: FloatTryCastToFixlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
@@ -226,35 +262,80 @@ inline bool FloatTryCastToFixlen::Run(DoubleT source, FloatT &target) {
     return true;
 }
 
+template <>
+inline bool FloatTryCastToFixlen::Run(DoubleT source, Float16T &target) {
+    target = static_cast<float>(source);
+    return true;
+}
+
+template <>
+inline bool FloatTryCastToFixlen::Run(DoubleT source, BFloat16T &target) {
+    target = static_cast<float>(source);
+    return true;
+}
+
 // TODO
 template <>
 inline bool FloatTryCastToFixlen::Run(DoubleT, DecimalT &) {
-    Error<NotImplementException>("Not implemented");
+    String error_message = "Not implement: FloatTryCastToFixlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 // Cast double to varlen type
 template <>
-inline bool FloatTryCastToVarlen::Run(DoubleT source, VarcharT &target, const SharedPtr<ColumnVector> &vector_ptr) {
+inline bool FloatTryCastToVarlen::Run(DoubleT source, VarcharT &target, ColumnVector *vector_ptr) {
     // TODO: High-performance to_string implementation is needed.
-    target.is_value_ = false;
-    String tmp_str = ToStr(source);
-    target.length_ = static_cast<u32>(tmp_str.size());
-
-    if (target.length_ <= VARCHAR_INLINE_LEN) {
-        Memcpy(target.short_.data_, tmp_str.c_str(), target.length_);
-    } else {
-        Memcpy(target.vector_.prefix_, tmp_str.c_str(), VARCHAR_PREFIX_LEN);
-        if (vector_ptr->buffer_->buffer_type_ != VectorBufferType::kHeap) {
-            Error<TypeException>("Varchar column vector should use MemoryVectorBuffer. ");
-        }
-        auto [chunk_id, chunk_offset] = vector_ptr->buffer_->fix_heap_mgr_->AppendToHeap(tmp_str.c_str(), target.length_);
-        target.vector_.chunk_id_ = chunk_id;
-        target.vector_.chunk_offset_ = chunk_offset;
-    }
-
+    String tmp_str = std::to_string(source);
+    vector_ptr->AppendVarcharInner({tmp_str.data(), tmp_str.size()}, target);
 
     return true;
+}
+
+// FOR_EACH
+#define PARENS ()
+#define EXPAND(...) EXPAND4(EXPAND4(EXPAND4(EXPAND4(__VA_ARGS__))))
+#define EXPAND4(...) EXPAND3(EXPAND3(EXPAND3(EXPAND3(__VA_ARGS__))))
+#define EXPAND3(...) EXPAND2(EXPAND2(EXPAND2(EXPAND2(__VA_ARGS__))))
+#define EXPAND2(...) EXPAND1(EXPAND1(EXPAND1(EXPAND1(__VA_ARGS__))))
+#define EXPAND1(...) __VA_ARGS__
+#define FOR_EACH(macro, ...) __VA_OPT__(EXPAND(FOR_EACH_HELPER(macro, __VA_ARGS__)))
+#define FOR_EACH_HELPER(macro, a1, ...) macro(a1) __VA_OPT__(FOR_EACH_AGAIN PARENS(macro, __VA_ARGS__))
+#define FOR_EACH_AGAIN() FOR_EACH_HELPER
+
+// reuse
+#define FLOAT_TRY_CAST_TO_FIXLEN_REUSE(SOURCE_TYPE, TARGET_TYPE)                                                                                     \
+    template <>                                                                                                                                      \
+    inline bool FloatTryCastToFixlen::Run(SOURCE_TYPE source, TARGET_TYPE &target) {                                                                 \
+        return FloatTryCastToFixlen::Run(static_cast<float>(source), target);                                                                        \
+    }
+#define FLOAT16_TRY_CAST_TO_FIXLEN_REUSE(TARGET_TYPE) FLOAT_TRY_CAST_TO_FIXLEN_REUSE(Float16T, TARGET_TYPE)
+#define BFLOAT16_TRY_CAST_TO_FIXLEN_REUSE(TARGET_TYPE) FLOAT_TRY_CAST_TO_FIXLEN_REUSE(BFloat16T, TARGET_TYPE)
+
+// apply
+FOR_EACH(FLOAT16_TRY_CAST_TO_FIXLEN_REUSE, u8, TinyIntT, SmallIntT, IntegerT, BigIntT, HugeIntT, DoubleT, BFloat16T, DecimalT)
+FOR_EACH(BFLOAT16_TRY_CAST_TO_FIXLEN_REUSE, u8, TinyIntT, SmallIntT, IntegerT, BigIntT, HugeIntT, DoubleT, Float16T, DecimalT)
+
+template <>
+inline bool FloatTryCastToFixlen::Run(Float16T source, FloatT &target) {
+    target = static_cast<float>(source);
+    return true;
+}
+
+template <>
+inline bool FloatTryCastToFixlen::Run(BFloat16T source, FloatT &target) {
+    target = static_cast<float>(source);
+    return true;
+}
+
+template <>
+inline bool FloatTryCastToVarlen::Run(Float16T source, VarcharT &target, ColumnVector *vector_ptr) {
+    return FloatTryCastToVarlen::Run(static_cast<float>(source), target, vector_ptr);
+}
+
+template <>
+inline bool FloatTryCastToVarlen::Run(BFloat16T source, VarcharT &target, ColumnVector *vector_ptr) {
+    return FloatTryCastToVarlen::Run(static_cast<float>(source), target, vector_ptr);
 }
 
 } // namespace infinity

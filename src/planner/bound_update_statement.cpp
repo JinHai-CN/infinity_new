@@ -14,7 +14,9 @@
 
 module;
 
-#include <memory>
+#include <vector>
+
+module bound_update_statement;
 
 import bound_statement;
 import table_ref;
@@ -24,7 +26,7 @@ import logical_node;
 import query_context;
 import stl;
 import infinity_exception;
-
+import status;
 import base_table_ref;
 import subquery_table_ref;
 import expression_transformer;
@@ -35,10 +37,9 @@ import logical_table_scan;
 import logical_filter;
 import logical_update;
 import subquery_unnest;
-import parser;
+import logger;
 import conjunction_expression;
-
-module bound_update_statement;
+import table_reference;
 
 namespace infinity {
 
@@ -46,26 +47,33 @@ SharedPtr<LogicalNode> BoundUpdateStatement::BuildPlan(QueryContext *query_conte
     const SharedPtr<BindContext> &bind_context = this->bind_context_;
     SharedPtr<LogicalNode> current_node;
     if (where_conditions_.empty()) {
-        Error<PlannerException>("where_conditions_ shall not be empty");
+        Status status = Status::SyntaxError("where_conditions_ shall not be empty");
+        RecoverableError(status);
     }
-    SharedPtr<LogicalNode> from = BuildFrom(table_ref_ptr_, query_context, bind_context);
+    SharedPtr<LogicalNode> table_scan_node = BuildFrom(table_ref_ptr_, query_context, bind_context);
     if (!where_conditions_.empty()) {
-        current_node = BuildFilter(from, where_conditions_, query_context, bind_context);
-        current_node->set_left_node(from);
+        SharedPtr<LogicalNode> filter_node = BuildFilter(table_scan_node, where_conditions_, query_context, bind_context);
+        filter_node->set_left_node(table_scan_node);
+        current_node = filter_node;
     } else {
-        current_node = from;
+        current_node = table_scan_node;
     }
 
     auto base_table_ref = std::static_pointer_cast<BaseTableRef>(table_ref_ptr_);
-    SharedPtr<LogicalNode> upd = MakeShared<LogicalUpdate>(bind_context->GetNewLogicalNodeId(), base_table_ref->table_entry_ptr_, update_columns_);
-    upd->set_left_node(current_node);
-    return upd;
+    auto update_node = MakeShared<LogicalUpdate>(bind_context->GetNewLogicalNodeId(),
+                                                 base_table_ref->table_info_,
+                                                 update_columns_,
+                                                 all_columns_in_table_,
+                                                 final_result_columns_);
+    update_node->set_left_node(current_node);
+    return update_node;
 }
 
 SharedPtr<LogicalNode>
 BoundUpdateStatement::BuildFrom(SharedPtr<TableRef> &table_ref, QueryContext *query_context, const SharedPtr<BindContext> &bind_context) {
-    if (table_ref == nullptr || table_ref->type_ != TableRefType::kTable) {
-        Error<PlannerException>("unsupported!");
+    if (table_ref.get() == nullptr || table_ref->type_ != TableRefType::kTable) {
+        String error_message = "Unsupported";
+        UnrecoverableError(error_message);
     }
     return BuildBaseTable(table_ref, query_context, bind_context);
 }
@@ -105,7 +113,7 @@ void BoundUpdateStatement::BuildSubquery(SharedPtr<LogicalNode> &root,
                                          SharedPtr<BaseExpression> &condition,
                                          QueryContext *query_context,
                                          const SharedPtr<BindContext> &bind_context) {
-    if (condition == nullptr) {
+    if (condition.get() == nullptr) {
         return;
     }
 
@@ -114,7 +122,8 @@ void BoundUpdateStatement::BuildSubquery(SharedPtr<LogicalNode> &root,
     if (condition->type() == ExpressionType::kSubQuery) {
         if (building_subquery_) {
             // nested subquery
-            Error<PlannerException>("Nested subquery detected");
+            Status status = Status::SyntaxError("Nested subquery detected");
+            RecoverableError(status);
         }
         condition = UnnestSubquery(root, condition, query_context, bind_context);
     }

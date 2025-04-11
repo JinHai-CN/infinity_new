@@ -13,29 +13,42 @@
 // limitations under the License.
 module;
 
-import stl;
-import parser;
-import index_def;
-
 export module table_def;
 
+import stl;
+
+import index_base;
+import column_def;
+import global_resource_usage;
 
 namespace infinity {
 
 export class TableDef {
 
 public:
-    static inline SharedPtr<TableDef> Make(SharedPtr<String> schema, SharedPtr<String> table_name, Vector<SharedPtr<ColumnDef>> columns) {
-        return MakeShared<TableDef>(Move(schema), Move(table_name), Move(columns));
+    static inline SharedPtr<TableDef>
+    Make(SharedPtr<String> schema, SharedPtr<String> table_name, SharedPtr<String> table_comment, Vector<SharedPtr<ColumnDef>> columns) {
+        return MakeShared<TableDef>(std::move(schema), std::move(table_name), std::move(table_comment), std::move(columns));
     }
 
 public:
-    explicit TableDef(SharedPtr<String> schema, SharedPtr<String> table_name, Vector<SharedPtr<ColumnDef>> columns)
-            : schema_name_(Move(schema)), table_name_(Move(table_name)), columns_(Move(columns)) {
+    explicit TableDef(SharedPtr<String> schema, SharedPtr<String> table_name, SharedPtr<String> table_comment, Vector<SharedPtr<ColumnDef>> columns)
+        : schema_name_(std::move(schema)), table_name_(std::move(table_name)), table_comment_(std::move(table_comment)),
+          columns_(std::move(columns)) {
         SizeT column_count = columns_.size();
         for (SizeT idx = 0; idx < column_count; ++idx) {
             column_name2id_[columns_[idx]->name()] = idx;
         }
+
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("BaseResult");
+#endif
+    }
+
+    virtual ~TableDef() {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::DecrObjectCount("BaseResult");
+#endif
     }
 
     bool operator==(const TableDef &other) const;
@@ -48,15 +61,19 @@ public:
     // Write to a char buffer
     void WriteAdv(char *&ptr) const;
     // Read from a serialized version
-    static SharedPtr<TableDef> ReadAdv(char *&ptr, i32 maxbytes);
+    static SharedPtr<TableDef> ReadAdv(const char *&ptr, i32 maxbytes);
 
     [[nodiscard]] inline const Vector<SharedPtr<ColumnDef>> &columns() const { return columns_; }
+
+    [[nodiscard]] inline Vector<SharedPtr<ColumnDef>> &columns() { return columns_; }
 
     [[nodiscard]] inline SizeT column_count() const { return columns_.size(); }
 
     [[nodiscard]] inline const SharedPtr<String> &table_name() const { return table_name_; }
 
     [[nodiscard]] inline const SharedPtr<String> &schema_name() const { return schema_name_; }
+
+    [[nodiscard]] inline const SharedPtr<String> &table_comment() const { return table_comment_; }
 
     [[nodiscard]] inline SizeT GetColIdByName(const String &name) const {
         if (column_name2id_.contains(name)) {
@@ -73,9 +90,9 @@ public:
 private:
     SharedPtr<String> schema_name_{};
     SharedPtr<String> table_name_{};
+    SharedPtr<String> table_comment_{};
     Vector<SharedPtr<ColumnDef>> columns_{};
     HashMap<String, SizeT> column_name2id_{};
-    Vector<IndexDef> indexes_{};
 };
 
 } // namespace infinity

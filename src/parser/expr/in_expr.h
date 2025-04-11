@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "expr.h"
+#include "parsed_expr.h"
 #include <string>
 #include <vector>
 
@@ -22,7 +22,7 @@ namespace infinity {
 
 class InExpr : public ParsedExpr {
 public:
-    explicit InExpr(bool not_in = false) : ParsedExpr(ParsedExprType::kIn), not_in_(not_in) {}
+    explicit InExpr(bool in = true) : ParsedExpr(ParsedExprType::kIn), in_(in) {}
 
     ~InExpr() override;
 
@@ -31,7 +31,7 @@ public:
 public:
     ParsedExpr *left_{nullptr};
     std::vector<ParsedExpr *> *arguments_{nullptr};
-    bool not_in_{false};
+    bool in_{false};
 };
 
 } // namespace infinity

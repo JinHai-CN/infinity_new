@@ -14,29 +14,23 @@
 
 module;
 
-import stl;
-import file_system;
-import file_system_type;
-
 export module file_writer;
+
+import stl;
+import local_file_handle;
 
 namespace infinity {
 
 export class FileWriter {
 public:
-    explicit FileWriter(FileSystem &fs, const String &path, SizeT buffer_size, u8 file_flags = FileFlags::WRITE_FLAG | FileFlags::CREATE_FLAG)
-        : fs_(fs), path_(path), data_(MakeUnique<char_t[]>(buffer_size)), offset_(0), total_written_(0), buffer_size_(buffer_size) {
-        // Fixme: This function might throw exception
-        file_handler_ = fs.OpenFile(path, file_flags, FileLockType::kWriteLock);
-    }
+    explicit FileWriter(const String &path, SizeT buffer_size);
 
-    FileSystem &fs_;
     String path_{};
     UniquePtr<char_t[]> data_{};
     SizeT offset_{};
     SizeT total_written_{};
     SizeT buffer_size_{};
-    UniquePtr<FileHandler> file_handler_{};
+    UniquePtr<LocalFileHandle> file_handle_{};
 
 public:
     void WriteByte(const u8 b);

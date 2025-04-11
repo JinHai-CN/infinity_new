@@ -14,12 +14,13 @@
 
 module;
 
+export module base_table;
+
 import stl;
 import table_entry_type;
-
+import logger;
 import infinity_exception;
-
-export module base_table;
+import global_resource_usage;
 
 namespace infinity {
 
@@ -38,7 +39,8 @@ inline String ToString(BaseTableType type) {
             return "Collection";
         }
         default: {
-            Error<ExecutorException>("Invalid base table type");
+            String error_message = "Invalid base table type";
+            UnrecoverableError(error_message);
         }
     }
 
@@ -48,7 +50,20 @@ inline String ToString(BaseTableType type) {
 export class BaseTable {
 public:
     explicit BaseTable(TableEntryType kind, SharedPtr<String> schema_name, SharedPtr<String> table_name)
-            : kind_(kind), schema_name_(Move(schema_name)), table_name_(Move(table_name)) {}
+        : kind_(kind), schema_name_(std::move(schema_name)), table_name_(std::move(table_name)) {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("BaseTable");
+#endif
+    }
+
+    BaseTable(const BaseTable &other_table) = delete;
+    BaseTable(BaseTable &&other) = delete;
+
+    virtual ~BaseTable() {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::DecrObjectCount("BaseTable");
+#endif
+    }
 
     [[nodiscard]] inline TableEntryType kind() const { return kind_; }
 

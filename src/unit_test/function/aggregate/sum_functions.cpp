@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -32,18 +33,24 @@ import column_expression;
 import value;
 import default_values;
 import data_block;
+import internal_types;
+import logical_type;
+import data_type;
 
-class SumFunctionTest : public BaseTest {};
+using namespace infinity;
+class SumFunctionTest : public BaseTestParamStr {};
 
-TEST_F(SumFunctionTest, avg_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, SumFunctionTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(SumFunctionTest, sum_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterSumFunction(catalog_ptr);
 
     String op = "sum";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kAggregate);
     SharedPtr<AggregateFunctionSet> aggregate_function_set = std::static_pointer_cast<AggregateFunctionSet>(function_set);
     {
@@ -68,10 +75,11 @@ TEST_F(SumFunctionTest, avg_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(sum, result);
     }
@@ -98,10 +106,11 @@ TEST_F(SumFunctionTest, avg_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(sum, result);
     }
@@ -128,10 +137,11 @@ TEST_F(SumFunctionTest, avg_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(sum, result);
     }
@@ -158,10 +168,11 @@ TEST_F(SumFunctionTest, avg_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_EQ(sum, result);
     }
@@ -188,10 +199,11 @@ TEST_F(SumFunctionTest, avg_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(sum, result);
     }
@@ -218,10 +230,11 @@ TEST_F(SumFunctionTest, avg_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(sum, result);
     }
@@ -230,6 +243,6 @@ TEST_F(SumFunctionTest, avg_func) {
         DataType data_type(LogicalType::kBoolean);
         SharedPtr<ColumnExpression> col_expr_ptr = MakeShared<ColumnExpression>(data_type, "t1", 1, "c1", 0, 0);
 
-        EXPECT_THROW(aggregate_function_set->GetMostMatchFunction(col_expr_ptr), PlannerException);
+        EXPECT_THROW(aggregate_function_set->GetMostMatchFunction(col_expr_ptr), RecoverableException);
     }
 }

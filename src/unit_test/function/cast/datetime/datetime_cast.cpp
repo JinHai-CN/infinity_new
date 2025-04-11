@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,8 +36,17 @@ import cast_table;
 import column_vector;
 import datetime_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import data_type;
 
-class DateTimeCastTest : public BaseTest {};
+using namespace infinity;
+
+class DateTimeCastTest : public BaseTest {
+    void SetUp() override { BaseTest::SetUp(); }
+
+    void TearDown() override { BaseTest::TearDown(); }
+};
 
 TEST_F(DateTimeCastTest, datetime_cast0) {
     using namespace infinity;
@@ -46,23 +55,23 @@ TEST_F(DateTimeCastTest, datetime_cast0) {
     {
         DateTimeT source;
         TinyIntT target;
-        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), FunctionException);
-        EXPECT_THROW(DateTimeTryCastToVarlen::Run(source, target, nullptr), FunctionException);
+        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), UnrecoverableException);
+        EXPECT_THROW(DateTimeTryCastToVarlen::Run(source, target, nullptr), UnrecoverableException);
     }
     {
         DateTimeT source;
         DateT target;
-        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), FunctionException);
+        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
     {
         DateTimeT source;
         TimeT target;
-        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), FunctionException);
+        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
     {
         DateTimeT source;
         TimestampT target;
-        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), FunctionException);
+        EXPECT_THROW(DateTimeTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
     {
         DateTimeT source;
@@ -72,7 +81,7 @@ TEST_F(DateTimeCastTest, datetime_cast0) {
         SharedPtr<ColumnVector> col_varchar_ptr = MakeShared<ColumnVector>(data_type);
         col_varchar_ptr->Initialize();
 
-        EXPECT_THROW(DateTimeTryCastToVarlen::Run(source, target, col_varchar_ptr), FunctionException);
+        EXPECT_THROW(DateTimeTryCastToVarlen::Run(source, target, col_varchar_ptr.get()), UnrecoverableException);
     }
 }
 
@@ -82,7 +91,7 @@ TEST_F(DateTimeCastTest, datetime_cast1) {
     // Call BindDateCast with wrong type of parameters
     {
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindDateTimeCast(target_type), TypeException);
+        EXPECT_THROW(BindDateTimeCast(target_type), UnrecoverableException);
     }
 
     SharedPtr<DataType> source_type = MakeShared<DataType>(LogicalType::kDateTime);
@@ -110,7 +119,7 @@ TEST_F(DateTimeCastTest, datetime_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), FunctionException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
     // cast datetime column vector to time column vector
     {
@@ -122,7 +131,7 @@ TEST_F(DateTimeCastTest, datetime_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), FunctionException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
     // cast datetime column vector to timestamp column vector
     {
@@ -134,7 +143,7 @@ TEST_F(DateTimeCastTest, datetime_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), FunctionException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 
     // cast datetime column vector to varchar column vector
@@ -147,6 +156,6 @@ TEST_F(DateTimeCastTest, datetime_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), FunctionException);
+        EXPECT_THROW(source2target_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 }

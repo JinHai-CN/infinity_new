@@ -14,6 +14,8 @@
 
 module;
 
+export module bound_update_statement;
+
 import bound_statement;
 import table_ref;
 import base_expression;
@@ -22,22 +24,16 @@ import logical_node;
 import query_context;
 import stl;
 
-export module bound_update_statement;
-
 namespace infinity {
-
-// class BindContext;
-// class QueryContext;
-// class BaseExpression;
 
 export struct BoundUpdateStatement final : public BoundStatement {
 public:
     static inline UniquePtr<BoundUpdateStatement> Make(SharedPtr<BindContext> bind_context) {
-        return MakeUnique<BoundUpdateStatement>(Move(bind_context));
+        return MakeUnique<BoundUpdateStatement>(std::move(bind_context));
     }
 
 public:
-    inline explicit BoundUpdateStatement(SharedPtr<BindContext> bind_context) : bind_context_(Move(bind_context)) {}
+    inline explicit BoundUpdateStatement(SharedPtr<BindContext> bind_context) : bind_context_(std::move(bind_context)) {}
 
     SharedPtr<LogicalNode> BuildPlan(QueryContext *query_context) final;
 
@@ -70,6 +66,8 @@ public:
     Vector<SharedPtr<BaseExpression>> where_conditions_{};
 
     Vector<Pair<SizeT, SharedPtr<BaseExpression>>> update_columns_{};
+    Vector<SharedPtr<BaseExpression>> all_columns_in_table_{};
+    Vector<SharedPtr<BaseExpression>> final_result_columns_{};
 
     // For build subquery
     bool building_subquery_{false};

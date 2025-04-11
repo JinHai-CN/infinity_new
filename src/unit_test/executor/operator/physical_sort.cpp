@@ -13,13 +13,14 @@
 // limitations under the License.
 
 #if 0
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -31,6 +32,7 @@ import data_block;
 import physical_sort;
 //import sql_runner;
 
+using namespace infinity;
 class PhysicalSortTest : public BaseTest {};
 
 TEST_F(PhysicalSortTest, test1) {
@@ -50,7 +52,7 @@ TEST_F(PhysicalSortTest, test1) {
     SharedPtr<ColumnDef> col_def = MakeShared<ColumnDef>(0,
                                                          col_type,
                                                          col_name,
-                                                         HashSet<ConstraintType>());
+                                                         std::set<ConstraintType>());
     columns.emplace_back(col_def);
 
     col_type = MakeShared<DataType>(LogicalType::kBigInt);
@@ -59,10 +61,10 @@ TEST_F(PhysicalSortTest, test1) {
     col_def = MakeShared<ColumnDef>(1,
                                     col_type,
                                     col_name,
-                                    HashSet<ConstraintType>());
+                                    std::set<ConstraintType>());
     columns.emplace_back(col_def);
 
-    SharedPtr<TableDef> table_def = TableDef::Make(MakeShared<String>("default"),
+    SharedPtr<TableDef> table_def = TableDef::Make(MakeShared<String>("default_db"),
                                                    MakeShared<String>("input_table"),
                                                    columns);
 

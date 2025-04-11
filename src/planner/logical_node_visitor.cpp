@@ -14,8 +14,9 @@
 
 module;
 
-#include <memory>
 #include <vector>
+
+module logical_node_visitor;
 
 import stl;
 import base_expression;
@@ -32,10 +33,17 @@ import logical_limit;
 import logical_filter;
 import logical_project;
 import logical_sort;
+import logical_top;
 import logical_insert;
 import logical_update;
 import logical_knn_scan;
-
+import logical_index_scan;
+import logical_match;
+import logical_match_tensor_scan;
+import logical_match_scan_base;
+import logical_fusion;
+import logical_unnest;
+import logical_unnest_aggregate;
 import aggregate_expression;
 import between_expression;
 import case_expression;
@@ -49,8 +57,6 @@ import knn_expression;
 import conjunction_expression;
 import logger;
 
-module logical_node_visitor;
-
 namespace infinity {
 
 void LogicalNodeVisitor::VisitNodeChildren(LogicalNode &op) {
@@ -59,6 +65,11 @@ void LogicalNodeVisitor::VisitNodeChildren(LogicalNode &op) {
     }
     if (op.right_node()) {
         VisitNode(*op.right_node());
+    }
+    if (op.operator_type() == LogicalNodeType::kFusion) {
+        for (const auto &fusion = static_cast<const LogicalFusion &>(op); auto &child : fusion.other_children_) {
+            VisitNode(*child);
+        }
     }
 }
 
@@ -83,10 +94,10 @@ void LogicalNodeVisitor::VisitNodeExpression(LogicalNode &op) {
         }
         case LogicalNodeType::kLimit: {
             auto &node = (LogicalLimit &)op;
-            if (node.limit_expression_ != nullptr) {
+            if (node.limit_expression_.get() != nullptr) {
                 VisitExpression(node.limit_expression_);
             }
-            if (node.offset_expression_ != nullptr) {
+            if (node.offset_expression_.get() != nullptr) {
                 VisitExpression(node.offset_expression_);
             }
             break;
@@ -94,6 +105,26 @@ void LogicalNodeVisitor::VisitNodeExpression(LogicalNode &op) {
         case LogicalNodeType::kFilter: {
             auto &node = (LogicalFilter &)op;
             VisitExpression(node.expression());
+            break;
+        }
+        case LogicalNodeType::kUnnest: {
+            auto &node = (LogicalUnnest &)op;
+            for (auto &expression : node.expression_list()) {
+                VisitExpression(expression);
+            }
+            break;
+        }
+        case LogicalNodeType::kUnnestAggregate: {
+            auto &node = (LogicalUnnestAggregate &)op;
+            for (auto &expression : node.unnest_expression_list()) {
+                VisitExpression(expression);
+            }
+            for (auto &expression : node.groups()) {
+                VisitExpression(expression);
+            }
+            for (auto &expression : node.aggregates()) {
+                VisitExpression(expression);
+            }
             break;
         }
         case LogicalNodeType::kProjection: {
@@ -110,6 +141,13 @@ void LogicalNodeVisitor::VisitNodeExpression(LogicalNode &op) {
             }
             break;
         }
+        case LogicalNodeType::kTop: {
+            auto &node = (LogicalTop &)op;
+            for (auto &expression : node.sort_expressions_) {
+                VisitExpression(expression);
+            }
+            break;
+        }
         case LogicalNodeType::kInsert: {
             auto &node = (LogicalInsert &)op;
             for (auto &value : node.value_list())
@@ -120,21 +158,39 @@ void LogicalNodeVisitor::VisitNodeExpression(LogicalNode &op) {
         }
         case LogicalNodeType::kUpdate: {
             auto &node = (LogicalUpdate &)op;
+            for (auto &column : node.all_columns_in_table_) {
+                VisitExpression(column);
+            }
+            for (auto &column : node.final_result_columns_) {
+                VisitExpression(column);
+            }
             for (auto &update_column_pair : node.update_columns_) {
-                SharedPtr<BaseExpression> &expression = update_column_pair.second;
-                VisitExpression(expression);
+                VisitExpression(update_column_pair.second);
             }
             break;
         }
-        case LogicalNodeType::kKnnScan: {
-            auto &node = (LogicalKnnScan &)op;
-            if(node.filter_expression_) {
-                VisitExpression(node.filter_expression_);
+        case LogicalNodeType::kKnnScan:
+        case LogicalNodeType::kMatchTensorScan:
+        case LogicalNodeType::kMatchSparseScan: {
+            auto &node = static_cast<LogicalMatchScanBase &>(op);
+            if (node.common_query_filter_ and node.common_query_filter_->leftover_filter_) {
+                VisitExpression(node.common_query_filter_->leftover_filter_);
             }
+            break;
+        }
+        case LogicalNodeType::kMatch: {
+            auto &node = (LogicalMatch &)op;
+            if (node.common_query_filter_ and node.common_query_filter_->leftover_filter_) {
+                VisitExpression(node.common_query_filter_->leftover_filter_);
+            }
+            break;
+        }
+        case LogicalNodeType::kIndexScan: {
+            // always keep the original expression
             break;
         }
         default: {
-//            LOG_TRACE(Format("Visit logical node: {}", op.name()));
+            //            LOG_TRACE(fmt::format("Visit logical node: {}", op.name()));
         }
     }
 }
@@ -142,7 +198,15 @@ void LogicalNodeVisitor::VisitNodeExpression(LogicalNode &op) {
 void LogicalNodeVisitor::VisitExpression(SharedPtr<BaseExpression> &expression) {
     SharedPtr<BaseExpression> result;
     switch (expression->type()) {
-
+        case ExpressionType::kUnnest: {
+            auto unnest_expression = static_pointer_cast<UnnestExpression>(expression);
+            VisitExpression(unnest_expression->arguments()[0]);
+            result = VisitReplace(unnest_expression);
+            if (result.get() != nullptr) {
+                expression = result;
+            }
+            break;
+        }
         case ExpressionType::kAggregate: {
             auto aggregate_expression = static_pointer_cast<AggregateExpression>(expression);
             for (auto &argument : aggregate_expression->arguments()) {
@@ -170,7 +234,8 @@ void LogicalNodeVisitor::VisitExpression(SharedPtr<BaseExpression> &expression) 
         case ExpressionType::kCase: {
             auto case_expression = static_pointer_cast<CaseExpression>(expression);
             if (!case_expression->arguments().empty()) {
-                Error<PlannerException>("Case expression shouldn't have arguments");
+                String error_message = "Case expression shouldn't have arguments";
+                UnrecoverableError(error_message);
             }
             for (auto &case_expr : case_expression->CaseExpr()) {
                 VisitExpression(case_expr.then_expr_);
@@ -200,12 +265,14 @@ void LogicalNodeVisitor::VisitExpression(SharedPtr<BaseExpression> &expression) 
         case ExpressionType::kColumn: {
             auto column_expression = static_pointer_cast<ColumnExpression>(expression);
             if (!column_expression->arguments().empty()) {
-                Error<PlannerException>("Column expression shouldn't have arguments");
+                String error_message = "Case expression shouldn't have arguments";
+                UnrecoverableError(error_message);
             }
 
             result = VisitReplace(column_expression);
             if (result.get() == nullptr) {
-                Error<PlannerException>("Visit column expression will always rewrite the expression");
+                String error_message = "Visit column expression will always rewrite the expression";
+                UnrecoverableError(error_message);
             }
             expression = result;
             break;
@@ -226,7 +293,8 @@ void LogicalNodeVisitor::VisitExpression(SharedPtr<BaseExpression> &expression) 
             auto value_expression = static_pointer_cast<ValueExpression>(expression);
 
             if (!value_expression->arguments().empty()) {
-                Error<PlannerException>("Column expression shouldn't have arguments");
+                String error_message = "Case expression shouldn't have arguments";
+                UnrecoverableError(error_message);
             }
 
             result = VisitReplace(value_expression);
@@ -254,7 +322,8 @@ void LogicalNodeVisitor::VisitExpression(SharedPtr<BaseExpression> &expression) 
 
             result = VisitReplace(subquery_expression);
             if (result.get() != nullptr) {
-                Error<PlannerException>("Visit subquery expression will always rewrite the expression");
+                String error_message = "Visit subquery expression will always rewrite the expression";
+                UnrecoverableError(error_message);
             }
             break;
         }
@@ -271,8 +340,12 @@ void LogicalNodeVisitor::VisitExpression(SharedPtr<BaseExpression> &expression) 
         case ExpressionType::kReference: {
             break;
         }
+        case ExpressionType::kFilterFullText: {
+            break;
+        }
         default: {
-            Error<PlannerException>(Format("Unexpected expression type: {}", expression->Name()));
+            String error_message = fmt::format("Unexpected expression type: {}", expression->Name());
+            UnrecoverableError(error_message);
         }
     }
 }
@@ -399,5 +472,7 @@ SharedPtr<BaseExpression> LogicalNodeVisitor::VisitReplace(const SharedPtr<InExp
 SharedPtr<BaseExpression> LogicalNodeVisitor::VisitReplace(const SharedPtr<SubqueryExpression> &) { return nullptr; }
 
 SharedPtr<BaseExpression> LogicalNodeVisitor::VisitReplace(const SharedPtr<KnnExpression> &) { return nullptr; }
+
+SharedPtr<BaseExpression> LogicalNodeVisitor::VisitReplace(const SharedPtr<UnnestExpression> &) { return nullptr; }
 
 } // namespace infinity

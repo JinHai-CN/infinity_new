@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #if 0
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -79,11 +80,11 @@ TEST_F(LogicalPlannerTest, test1) {
     }
     {
         const String sql_text = "select sum(b), b from t1 group by a;";
-        EXPECT_THROW(SQLRunner::Run(sql_text, true), PlannerException);
+        EXPECT_THROW(SQLRunner::Run(sql_text, true), UnrecoverableException);
     }
     {
         const String sql_text = "select sum(b), b from t1;";
-        EXPECT_THROW(SQLRunner::Run(sql_text, true), PlannerException);
+        EXPECT_THROW(SQLRunner::Run(sql_text, true), UnrecoverableException);
     }
 
     {

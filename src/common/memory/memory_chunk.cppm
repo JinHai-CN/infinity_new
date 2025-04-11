@@ -18,8 +18,6 @@ public:
 public:
     void *Allocate(SizeT num_bytes);
 
-    void *Allocate(SizeT num_bytes, SizeT align);
-
     bool IsInChunk(const void *ptr) const { return ptr >= (void *)this && ptr < (void *)((char *)this + pos_); }
 
     bool IsEmpty() const { return (pos_ >= size_); }
@@ -42,7 +40,7 @@ public:
         }
         auto nDataBytes = size_ - holder_;
         auto p = (char *)(this) + holder_;
-        Memset(p, 0, nDataBytes);
+        std::memset(p, 0, nDataBytes);
     }
 
 protected:

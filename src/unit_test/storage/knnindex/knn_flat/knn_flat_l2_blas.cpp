@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
@@ -20,10 +21,14 @@ import stl;
 import global_resource_usage;
 import third_party;
 import logger;
-import parser;
-import knn_flat_l2_blas;
+
+import deprecated_knn_flat_l2_blas;
 import infinity_context;
-import bitmask;
+import roaring_bitmap;
+import knn_expr;
+import internal_types;
+
+using namespace infinity;
 
 class KnnFlatL2BlasTest : public BaseTest {};
 
@@ -96,8 +101,8 @@ TEST_F(KnnFlatL2BlasTest, test1) {
     EXPECT_FLOAT_EQ(id_array[3].segment_offset_, 3);
 
     {
-        KnnFlatL2Blas <f32> knn_distance_m(query_embedding.get(), 1, top_k, dimension, EmbeddingDataType::kElemFloat);
-        auto p_bitmask = Bitmask::Make(64);
+        KnnFlatL2Blas<f32> knn_distance_m(query_embedding.get(), 1, top_k, dimension, EmbeddingDataType::kElemFloat);
+        auto p_bitmask = Bitmask::MakeSharedAllTrue(base_embedding_count);
         p_bitmask->SetFalse(1);
         {
             knn_distance_m.Begin();

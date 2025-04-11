@@ -2,6 +2,7 @@ import numpy as np
 import random
 import os
 import argparse
+from generate_util.format_data import format_float1
 
 
 def generate(generate_if_exists: bool, copy_dir: str):
@@ -17,7 +18,7 @@ def generate(generate_if_exists: bool, copy_dir: str):
 
     os.makedirs(fvecs_dir, exist_ok=True)
     os.makedirs(slt_dir, exist_ok=True)
-    if os.path.exists(fvecs_path) and os.path.exists(slt_path) and generate_if_exists:
+    if os.path.exists(fvecs_path) and os.path.exists(slt_path) and not generate_if_exists:
         print(
             "File {} and {} already existed exists. Skip Generating.".format(
                 slt_path, fvecs_path
@@ -48,10 +49,10 @@ def generate(generate_if_exists: bool, copy_dir: str):
             fvecs_file.write((dim).to_bytes(4, byteorder="little"))
             fvec = np.random.random(dim).astype(np.float32)
             fvec.tofile(fvecs_file)
-            fvec_str = ",".join(
-                [format(x, ".6g").rstrip("0").rstrip(".") for x in fvec]
-            )
+            fvec_str = ",".join([format_float1(x) for x in fvec])
+            slt_file.write("[")
             slt_file.write(fvec_str)
+            slt_file.write("]")
             slt_file.write("\n")
         slt_file.write("\n")
         slt_file.write("statement ok\n")
@@ -73,7 +74,7 @@ if __name__ == "__main__":
         "-c",
         "--copy",
         type=str,
-        default="/tmp/infinity/test_data",
+        default="/var/infinity/test_data",
         dest="copy_dir",
     )
     args = parser.parse_args()

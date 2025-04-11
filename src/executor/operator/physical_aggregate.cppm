@@ -14,8 +14,10 @@
 
 module;
 
+export module physical_aggregate;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -26,8 +28,9 @@ import base_expression;
 import load_meta;
 import infinity_exception;
 import data_block;
-
-export module physical_aggregate;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -45,29 +48,26 @@ public:
                                Vector<SharedPtr<BaseExpression>> aggregates,
                                u64 aggregate_index,
                                SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kAggregate, Move(left), nullptr, id, load_metas), groups_(Move(groups)),
-          aggregates_(Move(aggregates)), groupby_index_(groupby_index), aggregate_index_(aggregate_index) {}
+        : PhysicalOperator(PhysicalOperatorType::kAggregate, std::move(left), nullptr, id, load_metas), groups_(std::move(groups)),
+          aggregates_(std::move(aggregates)), groupby_index_(groupby_index), aggregate_index_(aggregate_index) {}
 
     ~PhysicalAggregate() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
+    void GroupByInputTable(const Vector<UniquePtr<DataBlock>> &input_blocks, Vector<UniquePtr<DataBlock>> &output_blocks, HashTable &hash_table);
 
-    void GroupByInputTable(const SharedPtr<DataTable> &input_table, SharedPtr<DataTable> &output_table);
-
-    void GenerateGroupByResult(const SharedPtr<DataTable> &input_table, SharedPtr<DataTable> &output_table);
+    void GenerateGroupByResult(const SharedPtr<DataTable> &input_table, SharedPtr<DataTable> &output_table, HashTable &hash_table);
 
     Vector<SharedPtr<BaseExpression>> groups_{};
     Vector<SharedPtr<BaseExpression>> aggregates_{};
-    HashTable hash_table_;
 
-    bool SimpleAggregateExecute(const Vector<UniquePtr<DataBlock>> &input_blocks, Vector<UniquePtr<DataBlock>> &output_blocks);
+    bool SimpleAggregateExecute(const Vector<UniquePtr<DataBlock>> &input_blocks,
+                                Vector<UniquePtr<DataBlock>> &output_blocks,
+                                Vector<UniquePtr<char[]>> &states,
+                                bool task_completed);
 
     inline u64 GroupTableIndex() const { return groupby_index_; }
 
@@ -82,7 +82,6 @@ public:
     Vector<HashRange> GetHashRanges(i64 parallel_count) const;
 
 private:
-    SharedPtr<DataTable> input_table_{};
     u64 groupby_index_{};
     u64 aggregate_index_{};
 };

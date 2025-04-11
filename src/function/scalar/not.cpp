@@ -15,16 +15,20 @@
 module;
 
 #include <type_traits>
+
+module not_func;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module not_func;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -36,7 +40,8 @@ struct NotFunction {
         } else if constexpr (std::is_same_v<std::remove_cv_t<TA>, BooleanT> && std::is_same_v<std::remove_cv_t<TB>, BooleanT>) {
             result = !input;
         } else {
-            Error<TypeException>("NOT function accepts only u8 and BooleanT.");
+            String error_message = "NOT function accepts only u8 and BooleanT.";
+            UnrecoverableError(error_message);
         }
     }
 };
@@ -51,14 +56,14 @@ static void GenerateNotFunction(SharedPtr<ScalarFunctionSet> &function_set_ptr) 
     function_set_ptr->AddFunction(not_function);
 }
 
-void RegisterNotFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterNotFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "NOT";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
 
     GenerateNotFunction(function_set_ptr);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

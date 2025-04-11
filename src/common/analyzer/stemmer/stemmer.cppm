@@ -14,11 +14,9 @@
 
 module;
 
-#include "api.h"
+export module stemmer;
 
 import stl;
-
-export module stemmer;
 
 namespace infinity {
 
@@ -33,6 +31,7 @@ export enum Language {
     STEM_LANG_HUNGARIAN,
     STEM_LANG_ITALIAN,
     STEM_LANG_NORWEGIAN,
+    STEM_LANG_PORT,
     STEM_LANG_PORTUGUESE,
     STEM_LANG_ROMANIAN,
     STEM_LANG_RUSSIAN,

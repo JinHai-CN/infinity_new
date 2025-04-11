@@ -14,17 +14,21 @@
 
 module;
 
+export module physical_drop_index;
+
 import stl;
 
 import physical_operator;
 import physical_operator_type;
 import query_context;
-import parser;
+
 import operator_state;
 import load_meta;
 import infinity_exception;
-
-export module physical_drop_index;
+import internal_types;
+import extra_ddl_info;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -38,20 +42,15 @@ public:
                                SharedPtr<Vector<SharedPtr<DataType>>> output_types,
                                u64 id,
                                SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kDropIndex, nullptr, nullptr, id, load_metas), schema_name_(Move(schema_name)),
-          table_name_(Move(table_name)), index_name_(Move(index_name)), conflict_type_(conflict_type),
-          output_names_(Move(output_names)), output_types_(Move(output_types)) {}
+        : PhysicalOperator(PhysicalOperatorType::kDropIndex, nullptr, nullptr, id, load_metas), schema_name_(std::move(schema_name)),
+          table_name_(std::move(table_name)), index_name_(std::move(index_name)), conflict_type_(conflict_type),
+          output_names_(std::move(output_names)), output_types_(std::move(output_types)) {}
 
     ~PhysicalDropIndex() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) override;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline SharedPtr<Vector<String>> GetOutputNames() const override { return output_names_; }
 

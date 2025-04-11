@@ -25,22 +25,17 @@
 
 namespace infinity {
 
-enum class OptimizeType {
-    kIRS,
-};
-
 class OptimizeStatement : public BaseStatement {
 public:
     explicit OptimizeStatement() : BaseStatement(StatementType::kOptimize) {}
 
     [[nodiscard]] std::string ToString() const final;
 
-    inline OptimizeType type() const { return type_; }
-
-    OptimizeType type_;
-
-    std::string schema_name_{"default"};
+    std::string schema_name_{};
     std::string table_name_{};
+
+    std::string index_name_{};
+    std::vector<std::unique_ptr<InitParameter>> opt_params_{};
 };
 
 } // namespace infinity

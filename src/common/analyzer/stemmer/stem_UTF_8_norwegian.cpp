@@ -235,7 +235,7 @@ static int r_consonant_pair(struct SN_env *z) {
             if (!(find_among_b(z, a_1, 2))) {
                 z->lb = mlimit;
                 return 0;
-            }              /* substring, line 54 */
+            } /* substring, line 54 */
             z->bra = z->c; /* ], line 54 */
             z->lb = mlimit;
         }

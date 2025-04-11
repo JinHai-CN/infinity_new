@@ -14,16 +14,19 @@
 
 module;
 
+export module physical_sink;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
 import load_meta;
 import infinity_exception;
-
-export module physical_sink;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -36,15 +39,21 @@ export enum class SinkType {
     kResult,
 };
 
+export String ToString(SinkType sink_type);
+
 export class PhysicalSink final : public PhysicalOperator {
 public:
-    explicit PhysicalSink(u64 id, SinkType sink_type, SharedPtr<Vector<String>> names, SharedPtr<Vector<SharedPtr<DataType>>> types, SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kSink, nullptr, nullptr, id, load_metas), output_names_(Move(names)), output_types_(Move(types)),
-          type_(sink_type) {}
+    explicit PhysicalSink(u64 id,
+                          SinkType sink_type,
+                          SharedPtr<Vector<String>> names,
+                          SharedPtr<Vector<SharedPtr<DataType>>> types,
+                          SharedPtr<Vector<LoadMeta>> load_metas)
+        : PhysicalOperator(PhysicalOperatorType::kSink, nullptr, nullptr, id, load_metas), output_names_(std::move(names)),
+          output_types_(std::move(types)), type_(sink_type) {}
 
     ~PhysicalSink() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *output_state) final;
 
@@ -53,11 +62,6 @@ public:
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline SinkType sink_type() const { return type_; }
 

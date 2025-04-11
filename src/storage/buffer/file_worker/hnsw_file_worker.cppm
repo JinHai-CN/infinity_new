@@ -14,44 +14,32 @@
 
 module;
 
+export module hnsw_file_worker;
+
 import stl;
 import index_file_worker;
 import hnsw_alg;
-import parser;
+import index_hnsw;
 import index_base;
-
-export module hnsw_file_worker;
+import knn_expr;
+import column_def;
+import internal_types;
+import file_worker_type;
+import file_worker;
+import persistence_manager;
 
 namespace infinity {
 
-export struct CreateFullTextParam : public CreateIndexParam {
-    CreateFullTextParam(const IndexBase *index_base, const ColumnDef *column_def) : CreateIndexParam(index_base, column_def) {}
-};
-
-export struct CreateHnswLVQParam : public CreateIndexParam {
-    const SizeT max_element_{};
-
-    CreateHnswLVQParam(const IndexBase *index_base, const ColumnDef *column_def, SizeT max_element)
-            : CreateIndexParam(index_base, column_def), max_element_(max_element) {}
-};
-
-export struct CreateHnswParam : public CreateIndexParam {
-    const SizeT max_element_{};
-
-    CreateHnswParam(const IndexBase *index_base, const ColumnDef *column_def, SizeT max_element)
-        : CreateIndexParam(index_base, column_def), max_element_(max_element) {}
-};
-
 export class HnswFileWorker : public IndexFileWorker {
-    const SizeT max_element_{};
-
 public:
-    explicit HnswFileWorker(SharedPtr<String> file_dir,
+    explicit HnswFileWorker(SharedPtr<String> data_dir,
+                            SharedPtr<String> temp_dir,
+                            SharedPtr<String> file_dir,
                             SharedPtr<String> file_name,
-                            const IndexBase *index_base,
-                            const ColumnDef *column_def,
-                            SizeT max_element)
-        : IndexFileWorker(file_dir, file_name, index_base, column_def), max_element_(max_element) {}
+                            SharedPtr<IndexBase> index_base,
+                            SharedPtr<ColumnDef> column_def,
+                            PersistenceManager *persistence_manager,
+                            SizeT index_size = 0);
 
     virtual ~HnswFileWorker() override;
 
@@ -59,16 +47,21 @@ public:
 
     void FreeInMemory() override;
 
-protected:
-    void WriteToFileImpl(bool &prepare_success) override;
+    FileWorkerType Type() const override { return FileWorkerType::kHNSWIndexFile; }
 
-    void ReadFromFileImpl() override;
+    SizeT GetMemoryCost() const override { return index_size_; }
+
+protected:
+    bool WriteToFileImpl(bool to_spill, bool &prepare_success, const FileWorkerSaveCtx &ctx) override;
+
+    void ReadFromFileImpl(SizeT file_size, bool from_spill) override;
+
+    bool ReadFromMmapImpl(const void *ptr, SizeT size) override;
+
+    void FreeFromMmapImpl() override;
 
 private:
-    EmbeddingDataType GetType() const;
-
-    SizeT GetDimension() const;
-
+    SizeT index_size_{};
 };
 
 } // namespace infinity

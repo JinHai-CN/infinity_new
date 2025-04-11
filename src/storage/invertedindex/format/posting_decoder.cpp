@@ -1,18 +1,19 @@
 module;
 
+module posting_decoder;
+
 import stl;
 import byte_slice_reader;
 import posting_list_format;
-import bitmap;
 import term_meta;
 import index_defines;
-import posting_value;
-import pos_list_format_option;
+import posting_field;
+import position_list_format_option;
 import doc_list_format_option;
 
 import infinity_exception;
-
-module posting_decoder;
+import third_party;
+import logger;
 
 namespace infinity {
 
@@ -20,17 +21,13 @@ PostingDecoder::PostingDecoder(const PostingFormatOption &posting_format_option)
     : term_meta_(nullptr), doc_id_encoder_(nullptr), tf_list_encoder_(nullptr), doc_payload_encoder_(nullptr), position_encoder_(nullptr),
       decoded_doc_count_(0), decoded_pos_count_(0), posting_data_length_(0), posting_format_option_(posting_format_option) {}
 
-PostingDecoder::~PostingDecoder() {}
-
 void PostingDecoder::Init(TermMeta *term_meta,
                           const SharedPtr<ByteSliceReader> &posting_list_reader,
                           const SharedPtr<ByteSliceReader> &position_list_reader,
-                          const SharedPtr<Bitmap> &tf_bitmap,
                           SizeT posting_data_len) {
     term_meta_ = term_meta;
     posting_list_reader_ = posting_list_reader;
     position_list_reader_ = position_list_reader;
-    tf_bitmap_ = tf_bitmap;
     decoded_doc_count_ = 0;
     decoded_pos_count_ = 0;
 
@@ -48,7 +45,6 @@ void PostingDecoder::Init(TermMeta *term_meta, bool is_doc_list, bool df_first) 
     term_meta_ = term_meta;
     posting_list_reader_.reset();
     position_list_reader_.reset();
-    tf_bitmap_.reset();
     decoded_doc_count_ = 0;
     decoded_pos_count_ = 0;
 
@@ -70,14 +66,16 @@ u32 PostingDecoder::DecodeDocList(docid_t *doc_id_buf, tf_t *tf_list_buf, docpay
     if (tf_list_encoder_) {
         auto tf_len = tf_list_encoder_->Decode((u32 *)tf_list_buf, len, *posting_list_reader_);
         if (doc_len != tf_len) {
-            Error<StorageException>("doc/tf-list collapsed: ");
+            String error_message = "doc/tf-list collapsed";
+            UnrecoverableError(error_message);
         }
     }
 
     if (doc_payload_encoder_) {
         auto payload_len = doc_payload_encoder_->Decode(doc_payload_buf, len, *posting_list_reader_);
         if (payload_len != doc_len) {
-            Error<StorageException>("doc/docpayload-list collapsed: ");
+            String error_message = "doc/docpayload-list collapsed";
+            UnrecoverableError(error_message);
         }
     }
 
@@ -107,14 +105,10 @@ void PostingDecoder::InitDocListEncoder(const DocListFormatOption &doc_list_form
     if (doc_list_format_option.HasDocPayload()) {
         doc_payload_encoder_ = GetDocPayloadEncoder();
     }
-
-    if (doc_list_format_option.HasTfBitmap() && tf_bitmap_.get() == nullptr) {
-        Error<StorageException>("PositionBitmap is Null when HasTfBitmap ");
-    }
 }
 
-void PostingDecoder::InitPosListEncoder(const PositionListFormatOption &pos_list_format_option, ttf_t total_tf) {
-    if (!pos_list_format_option.HasPositionList()) {
+void PostingDecoder::InitPosListEncoder(const PositionListFormatOption &position_list_format_option, ttf_t total_tf) {
+    if (!position_list_format_option.HasPositionList()) {
         return;
     }
     position_encoder_ = GetPosListEncoder();

@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -32,18 +33,24 @@ import column_expression;
 import value;
 import default_values;
 import data_block;
+import internal_types;
+import logical_type;
+import data_type;
 
-class CountFunctionTest : public BaseTest {};
+using namespace infinity;
+class CountFunctionTest : public BaseTestParamStr {};
 
-TEST_F(CountFunctionTest, count_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, CountFunctionTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(CountFunctionTest, count_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterCountFunction(catalog_ptr);
 
     String op = "count";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kAggregate);
     SharedPtr<AggregateFunctionSet> aggregate_function_set = std::static_pointer_cast<AggregateFunctionSet>(function_set);
     {
@@ -66,10 +73,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -93,10 +101,12 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -120,10 +130,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -148,10 +159,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -176,10 +188,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -206,10 +219,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -234,10 +248,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }
@@ -262,10 +277,11 @@ TEST_F(CountFunctionTest, count_func) {
         }
         data_block.Finalize();
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         BigIntT result;
-        result = *(BigIntT *)func.finalize_func_(func.GetState());
+        result = *(BigIntT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, row_count);
     }

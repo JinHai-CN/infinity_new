@@ -14,68 +14,20 @@
 
 #pragma once
 
-#include "type/complex/embedding_type.h"
-#include "type/complex/row_id.h"
+#include "internal_types.h"
 #include "type/logical_type.h"
 #include "type/type_info.h"
-#include "type/complex/varchar.h"
 
 #include <memory>
 #include <vector>
 
+namespace arrow {
+
+class DataType;
+
+}
+
 namespace infinity {
-
-struct Value;
-
-// Bool
-using BooleanT = bool;
-
-// Numeric
-using TinyIntT = int8_t;
-using SmallIntT = int16_t;
-using IntegerT = int32_t;
-using BigIntT = int64_t;
-using HugeIntT = HugeInt;
-
-using FloatT = float;
-using DoubleT = double;
-
-using DecimalT = DecimalType;
-
-// std::string
-//using VarcharT = VarcharType;
-using VarcharT = Varchar;
-
-// Date and Time
-using DateT = DateType;
-using TimeT = TimeType;
-using DateTimeT = DateTimeType;
-using TimestampT = TimestampType;
-using IntervalT = IntervalType;
-
-// Nest types
-using ArrayT = std::vector<Value>;
-using TupleT = std::vector<Value>;
-// using ArrayT = ArrayType;
-// using TupleT = TupleType;
-
-// Geography
-using PointT = PointType;
-using LineT = LineType;
-using LineSegT = LineSegmentType;
-using BoxT = BoxType;
-//using PathT = PathType;
-//using PolygonT = PolygonType;
-using CircleT = CircleType;
-
-// Other
-//using BitmapT = BitmapType;
-using UuidT = UuidType;
-//using BlobT = BlobType;
-using EmbeddingT = EmbeddingType;
-
-// Heterogeneous
-using MixedT = MixedType;
 
 class DataType {
 public:
@@ -108,7 +60,11 @@ public:
 
     bool operator==(const DataType &other) const;
 
+    bool operator==(const arrow::DataType &other) const;
+
     bool operator!=(const DataType &other) const;
+
+    bool operator!=(const arrow::DataType &other) const;
 
     [[nodiscard]] std::string ToString() const;
 
@@ -120,14 +76,89 @@ public:
 
     inline bool IsNumeric() const {
         switch (type_) {
-            case kTinyInt:
-            case kSmallInt:
-            case kInteger:
-            case kBigInt:
-            case kHugeInt:
-            case kFloat:
-            case kDouble:
-            case kDecimal: {
+            case LogicalType::kTinyInt:
+            case LogicalType::kSmallInt:
+            case LogicalType::kInteger:
+            case LogicalType::kBigInt:
+            case LogicalType::kHugeInt:
+            case LogicalType::kFloat:
+            case LogicalType::kDouble:
+            case LogicalType::kFloat16:
+            case LogicalType::kBFloat16:
+            case LogicalType::kDecimal: {
+                return true;
+            }
+            default: {
+                return false;
+            }
+        }
+    }
+
+    [[nodiscard]] inline bool CanBuildSecondaryIndex() const {
+        switch (type_) {
+            case LogicalType::kTinyInt:
+            case LogicalType::kSmallInt:
+            case LogicalType::kInteger:
+            case LogicalType::kBigInt:
+            case LogicalType::kFloat:
+            case LogicalType::kDouble:
+            case LogicalType::kFloat16:  // need to be converted to float and keep order
+            case LogicalType::kBFloat16: // need to be converted to float and keep order
+            case LogicalType::kDate:
+            case LogicalType::kTime:
+            case LogicalType::kDateTime:  // need to be converted to int64 and keep order
+            case LogicalType::kTimestamp: // need to be converted to int64 and keep order
+            case LogicalType::kVarchar:   // need to be converted to int64 by hash
+            {
+                return true;
+            }
+            default: {
+                return false;
+            }
+        }
+    }
+
+    [[nodiscard]] inline bool SupportMinMaxFilter() const {
+        switch (type_) {
+            case LogicalType::kTinyInt:
+            case LogicalType::kSmallInt:
+            case LogicalType::kInteger:
+            case LogicalType::kBigInt:
+            case LogicalType::kHugeInt:
+            case LogicalType::kFloat:
+            case LogicalType::kDouble:
+            case LogicalType::kFloat16:
+            case LogicalType::kBFloat16:
+            case LogicalType::kVarchar:
+            case LogicalType::kDate:
+            case LogicalType::kTime:
+            case LogicalType::kDateTime:
+            case LogicalType::kTimestamp: {
+                return true;
+            }
+            default: {
+                return false;
+            }
+        }
+    }
+
+    [[nodiscard]] inline bool SupportBloomFilter() const {
+        // 1. convert to u64
+        // 2. remove duplicate
+        // 3. build BinaryFuse filter
+        switch (type_) {
+            case LogicalType::kBoolean:
+            case LogicalType::kTinyInt:
+            case LogicalType::kSmallInt:
+            case LogicalType::kInteger:
+            case LogicalType::kBigInt:
+            case LogicalType::kHugeInt:
+            case LogicalType::kDecimal:
+            case LogicalType::kVarchar:
+            case LogicalType::kDate:
+            case LogicalType::kTime:
+            case LogicalType::kDateTime:
+            case LogicalType::kTimestamp: {
                 return true;
             }
             default: {
@@ -142,9 +173,10 @@ public:
         plain_type_ = false;
     }
 
-    nlohmann::json Serialize();
+    nlohmann::json Serialize() const;
 
     static std::shared_ptr<DataType> Deserialize(const nlohmann::json &data_type_json);
+    static std::shared_ptr<DataType> StringDeserialize(const std::string &data_type_string);
 
     // Estimated serialized size in bytes, ensured be no less than Write requires, allowed be larger.
     [[nodiscard]] int32_t GetSizeInBytes() const;
@@ -152,7 +184,7 @@ public:
     // Write to a char buffer
     void WriteAdv(char *&ptr) const;
     // Read from a serialized version
-    static std::shared_ptr<DataType> ReadAdv(char *&ptr, int32_t maxbytes);
+    static std::shared_ptr<DataType> ReadAdv(const char *&ptr, int32_t maxbytes);
 
     [[nodiscard]] inline bool Plain() const { return plain_type_; }
 
@@ -168,6 +200,9 @@ public:
     template <typename T>
     static T StringToValue(const std::string_view &str_view);
 
+    template <typename T, typename IdxT>
+    static std::pair<IdxT, T> StringToSparseValue(const std::string_view &sv);
+
     void MaxDataType(const DataType &right);
 };
 
@@ -181,6 +216,19 @@ template <typename T>
 T DataType::StringToValue(const std::string_view &) {
     ParserError("Unexpected data type.");
     return T();
+}
+
+template <typename T, typename IdxT>
+std::pair<IdxT, T> DataType::StringToSparseValue(const std::string_view &sv) {
+    size_t i = sv.find(':');
+    if (i == std::string::npos) {
+        ParserError("Sparse value format: index:value");
+    }
+    std::string_view idx_str = sv.substr(0, i);
+    std::string_view val_str = sv.substr(i + 1);
+    IdxT idx = StringToValue<IdxT>(idx_str);
+    T val = StringToValue<T>(val_str);
+    return std::make_pair(idx, val);
 }
 
 template <>
@@ -206,6 +254,12 @@ std::string DataType::TypeToString<FloatT>();
 
 template <>
 std::string DataType::TypeToString<DoubleT>();
+
+template <>
+std::string DataType::TypeToString<Float16T>();
+
+template <>
+std::string DataType::TypeToString<BFloat16T>();
 
 template <>
 std::string DataType::TypeToString<DecimalT>();
@@ -244,23 +298,23 @@ std::string DataType::TypeToString<LineSegT>();
 template <>
 std::string DataType::TypeToString<BoxT>();
 
-//template <>
-//std::string DataType::TypeToString<PathT>();
+// template <>
+// std::string DataType::TypeToString<PathT>();
 //
-//template <>
-//std::string DataType::TypeToString<PolygonT>();
+// template <>
+// std::string DataType::TypeToString<PolygonT>();
 
 template <>
 std::string DataType::TypeToString<CircleT>();
 
-//template <>
-//std::string DataType::TypeToString<BitmapT>();
+// template <>
+// std::string DataType::TypeToString<BitmapT>();
 
 template <>
 std::string DataType::TypeToString<UuidT>();
 
-//template <>
-//std::string DataType::TypeToString<BlobT>();
+// template <>
+// std::string DataType::TypeToString<BlobT>();
 
 template <>
 std::string DataType::TypeToString<EmbeddingT>();
@@ -272,7 +326,19 @@ template <>
 std::string DataType::TypeToString<MixedT>();
 
 template <>
+std::string DataType::TypeToString<TensorT>();
+
+template <>
+std::string DataType::TypeToString<TensorArrayT>();
+
+template <>
+std::string DataType::TypeToString<MultiVectorT>();
+
+template <>
 BooleanT DataType::StringToValue<BooleanT>(const std::string_view &str_view);
+
+template <>
+uint8_t DataType::StringToValue<uint8_t>(const std::string_view &str_view);
 
 template <>
 TinyIntT DataType::StringToValue<TinyIntT>(const std::string_view &str_view);
@@ -291,4 +357,11 @@ FloatT DataType::StringToValue<FloatT>(const std::string_view &str_view);
 
 template <>
 DoubleT DataType::StringToValue<DoubleT>(const std::string_view &str_view);
+
+template <>
+Float16T DataType::StringToValue<Float16T>(const std::string_view &str_view);
+
+template <>
+BFloat16T DataType::StringToValue<BFloat16T>(const std::string_view &str_view);
+
 } // namespace infinity

@@ -12,12 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import stl;
 import profiler;
+import infinity_context;
+import global_resource_usage;
+import infinity_exception;
 
-class QueryProfilerTest : public BaseTest {};
+using namespace infinity;
+class QueryProfilerTest : public BaseTest {
+    void SetUp() override {
+        RemoveDbDirs();
+#ifdef INFINITY_DEBUG
+        infinity::GlobalResourceUsage::Init();
+#endif
+        std::shared_ptr<std::string> config_path = nullptr;
+        infinity::InfinityContext::instance().InitPhase1(config_path);
+        infinity::InfinityContext::instance().InitPhase2();
+    }
+
+    void TearDown() override {
+        infinity::InfinityContext::instance().UnInit();
+#ifdef INFINITY_DEBUG
+        EXPECT_EQ(infinity::GlobalResourceUsage::GetObjectCount(), 0);
+        EXPECT_EQ(infinity::GlobalResourceUsage::GetRawMemoryCount(), 0);
+        infinity::GlobalResourceUsage::UnInit();
+#endif
+        BaseTest::TearDown();
+    }
+};
 
 TEST_F(QueryProfilerTest, test1) {
     EXPECT_EQ(infinity::QueryProfiler::QueryPhaseToString(infinity::QueryPhase::kParser), "Parser");
@@ -31,8 +56,8 @@ TEST_F(QueryProfilerTest, test1) {
         infinity::QueryProfiler::QueryPhaseToString(infinity::QueryPhase::kInvalid);
     } catch (std::exception &e) {
         std::string result(e.what());
-        std::string sub = result.substr(0, result.find_first_of('@', 0) - 1);
-        EXPECT_EQ(sub, "Executor Error: Invalid query phase in query profiler");
+        auto sub = infinity::GetErrorMsg(result);
+        EXPECT_EQ(sub, "Invalid query phase in query profiler");
     }
 }
 
@@ -43,7 +68,7 @@ TEST_F(QueryProfilerTest, test2) {
         profiler.StopPhase(infinity::QueryPhase::kParser);
     } catch (std::exception &e) {
         std::string result(e.what());
-        std::string sub = result.substr(0, result.find_first_of('@', 0) - 1);
+        auto sub = infinity::GetErrorMsg(result);
         EXPECT_EQ(sub, "Executor Error: Query phase isn't started, yet");
     }
 
@@ -53,7 +78,7 @@ TEST_F(QueryProfilerTest, test2) {
 
     } catch (std::exception &e) {
         std::string result(e.what());
-        std::string sub = result.substr(0, result.find_first_of('@', 0) - 1);
+        auto sub = infinity::GetErrorMsg(result);
         EXPECT_EQ(sub, "Executor Error: Can't start new query phase before current phase(Parser) is finished");
     }
 }
@@ -61,10 +86,10 @@ TEST_F(QueryProfilerTest, test2) {
 TEST_F(QueryProfilerTest, test3) {
     infinity::QueryProfiler profiler;
     profiler.StartPhase(infinity::QueryPhase::kParser);
-    usleep(1000 * 1000);
+    usleep(1000);
     profiler.StopPhase(infinity::QueryPhase::kParser);
     profiler.StartPhase(infinity::QueryPhase::kLogicalPlan);
-    usleep(1000 * 1000);
+    usleep(1000);
     profiler.StopPhase(infinity::QueryPhase::kLogicalPlan);
     profiler.StartPhase(infinity::QueryPhase::kOptimizer);
     profiler.optimizer().StartRule("OptimizerRule1");
@@ -77,17 +102,17 @@ TEST_F(QueryProfilerTest, test3) {
     profiler.optimizer().StopRule();
     profiler.StopPhase(infinity::QueryPhase::kOptimizer);
     profiler.StartPhase(infinity::QueryPhase::kPhysicalPlan);
-    usleep(1000 * 1000);
+    usleep(1000);
     profiler.StopPhase(infinity::QueryPhase::kPhysicalPlan);
     profiler.StartPhase(infinity::QueryPhase::kPipelineBuild);
-    usleep(1000 * 1000);
+    usleep(1000);
     profiler.StopPhase(infinity::QueryPhase::kPipelineBuild);
     profiler.StartPhase(infinity::QueryPhase::kTaskBuild);
-    usleep(1000 * 1000);
+    usleep(1000);
     profiler.StopPhase(infinity::QueryPhase::kTaskBuild);
     profiler.StartPhase(infinity::QueryPhase::kExecution);
-    usleep(1000 * 1000);
+    usleep(1000);
     profiler.StopPhase(infinity::QueryPhase::kExecution);
 
-    std::cout << profiler.ToString() << std::endl;
+    //    std::cout << profiler.ToString() << std::endl;
 }

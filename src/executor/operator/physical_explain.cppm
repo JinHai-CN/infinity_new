@@ -14,16 +14,22 @@
 
 module;
 
+export module physical_explain;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
 import load_meta;
 import infinity_exception;
-
-export module physical_explain;
+import internal_types;
+import explain_statement;
+import data_type;
+import logger;
+import plan_fragment;
+import profiler;
 
 namespace infinity {
 
@@ -34,30 +40,32 @@ public:
                              SharedPtr<Vector<SharedPtr<String>>> text_array,
                              UniquePtr<PhysicalOperator> left,
                              SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kExplain, Move(left), nullptr, id, load_metas), explain_type_(type), texts_(Move(text_array)) {}
+        : PhysicalOperator(PhysicalOperatorType::kExplain, std::move(left), nullptr, id, load_metas), explain_type_(type),
+          texts_(std::move(text_array)) {}
 
     ~PhysicalExplain() override = default;
 
-    void Init() override;
+    void Init(QueryContext *query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
-    void SetExplainText(SharedPtr<Vector<SharedPtr<String>>> text) { texts_ = Move(text); }
+    void SetExplainText(SharedPtr<Vector<SharedPtr<String>>> text) { texts_ = std::move(text); }
 
-    void SetExplainTaskText(SharedPtr<Vector<SharedPtr<String>>> text) { task_texts_ = Move(text); }
+    void SetExplainTaskText(SharedPtr<Vector<SharedPtr<String>>> text) { task_texts_ = std::move(text); }
+
+    void SetPlanFragment(PlanFragment *plan_fragment_ptr);
 
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
 
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
-
     inline ExplainType explain_type() const { return explain_type_; }
 
     static void AlignParagraphs(Vector<SharedPtr<String>> &array1, Vector<SharedPtr<String>> &array2);
+
+private:
+    void ExplainAnalyze(Vector<SharedPtr<String>> &result, PlanFragment *plan_fragment_ptr, QueryProfiler *query_profiler);
+    void ExplainPipeline(Vector<SharedPtr<String>> &result, PlanFragment *plan_fragment_ptr, QueryProfiler *query_profiler);
 
 private:
     ExplainType explain_type_{ExplainType::kPhysical};
@@ -66,6 +74,8 @@ private:
 
     SharedPtr<Vector<String>> output_names_{};
     SharedPtr<Vector<SharedPtr<DataType>>> output_types_{};
+
+    PlanFragment *plan_fragment_ptr_;
 };
 
 } // namespace infinity

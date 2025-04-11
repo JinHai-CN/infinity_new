@@ -12,18 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import stl;
 import global_resource_usage;
 
+using namespace infinity;
 class GlobalResourceUsageTest : public BaseTest {
-    void SetUp() override { infinity::GlobalResourceUsage::Init(); }
+    void SetUp() override {
+#ifdef INFINITY_DEBUG
+        infinity::GlobalResourceUsage::Init();
+#endif
+    }
 
     void TearDown() override {
+#ifdef INFINITY_DEBUG
         EXPECT_EQ(infinity::GlobalResourceUsage::GetObjectCount(), 0);
         EXPECT_EQ(infinity::GlobalResourceUsage::GetRawMemoryCount(), 0);
         infinity::GlobalResourceUsage::UnInit();
+#endif
     }
 };
 
@@ -31,40 +39,42 @@ TEST_F(GlobalResourceUsageTest, usage_test) {
     using namespace infinity;
 
     // Object count
-    GlobalResourceUsage::IncrObjectCount();
+#ifdef INFINITY_STATS
+    GlobalResourceUsage::IncrObjectCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetObjectCount(), 1);
 
-    GlobalResourceUsage::IncrObjectCount();
+    GlobalResourceUsage::IncrObjectCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetObjectCount(), 2);
 
-    GlobalResourceUsage::DecrObjectCount();
+    GlobalResourceUsage::DecrObjectCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetObjectCount(), 1);
 
-    GlobalResourceUsage::DecrObjectCount();
+    GlobalResourceUsage::DecrObjectCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetObjectCount(), 0);
 
-    GlobalResourceUsage::DecrObjectCount();
+    GlobalResourceUsage::DecrObjectCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetObjectCount(), -1);
 
-    GlobalResourceUsage::IncrObjectCount();
+    GlobalResourceUsage::IncrObjectCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetObjectCount(), 0);
 
     // Raw memory count
-    GlobalResourceUsage::IncrRawMemCount();
+    GlobalResourceUsage::IncrRawMemCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetRawMemoryCount(), 1);
 
-    GlobalResourceUsage::IncrRawMemCount();
+    GlobalResourceUsage::IncrRawMemCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetRawMemoryCount(), 2);
 
-    GlobalResourceUsage::DecrRawMemCount();
+    GlobalResourceUsage::DecrRawMemCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetRawMemoryCount(), 1);
 
-    GlobalResourceUsage::DecrRawMemCount();
+    GlobalResourceUsage::DecrRawMemCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetRawMemoryCount(), 0);
 
-    GlobalResourceUsage::DecrRawMemCount();
+    GlobalResourceUsage::DecrRawMemCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetRawMemoryCount(), -1);
 
-    GlobalResourceUsage::IncrRawMemCount();
+    GlobalResourceUsage::IncrRawMemCount("GlobalResourceUsageTest");
     EXPECT_EQ(GlobalResourceUsage::GetRawMemoryCount(), 0);
+#endif
 }

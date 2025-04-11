@@ -14,17 +14,19 @@
 
 module;
 
+export module geography_cast;
+
 import stl;
 import column_vector;
 import vector_buffer;
 import bound_cast_func;
-import parser;
+import data_type;
 import column_vector_cast;
-
+import logical_type;
 import infinity_exception;
 import third_party;
-
-export module geography_cast;
+import internal_types;
+import logger;
 
 namespace infinity {
 
@@ -33,14 +35,16 @@ export struct GeographyTryCastToVarlen;
 export template <class SourceType>
 inline BoundCastFunc BindGeographyCast(const DataType &source, DataType &target) {
     if (source.type() == target.type()) {
-        Error<FunctionException>("Can't cast from the same type");
+        String error_message = "Can't cast from the same type";
+        UnrecoverableError(error_message);
     }
     switch (target.type()) {
         case LogicalType::kVarchar: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVectorToVarlen<SourceType, VarcharT, GeographyTryCastToVarlen>);
         }
         default: {
-            Error<TypeException>(Format("Can't cast from geography type to {}", target.ToString()));
+            String error_message = fmt::format("Can't cast from geography type to {}", target.ToString());
+            UnrecoverableError(error_message);
         }
     }
     return BoundCastFunc(nullptr);
@@ -48,52 +52,60 @@ inline BoundCastFunc BindGeographyCast(const DataType &source, DataType &target)
 
 struct GeographyTryCastToVarlen {
     template <typename SourceType, typename TargetType>
-    static inline bool Run(const SourceType &, TargetType &, const SharedPtr<ColumnVector> &) {
-        Error<FunctionException>(
-                Format("Not support to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>()));
+    static inline bool Run(const SourceType &, TargetType &, ColumnVector *) {
+        String error_message =
+            fmt::format("Not support to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>());
+        UnrecoverableError(error_message);
         return false;
     }
 };
 
 template <>
-inline bool GeographyTryCastToVarlen::Run(const PointT &, VarcharT &, const SharedPtr<ColumnVector> &) {
-    Error<NotImplementException>("Not implemented");
+inline bool GeographyTryCastToVarlen::Run(const PointT &, VarcharT &, ColumnVector *) {
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 template <>
-inline bool GeographyTryCastToVarlen::Run(const LineT &, VarcharT &, const SharedPtr<ColumnVector> &) {
-    Error<NotImplementException>("Not implemented");
+inline bool GeographyTryCastToVarlen::Run(const LineT &, VarcharT &, ColumnVector *) {
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 template <>
-inline bool GeographyTryCastToVarlen::Run(const LineSegT &, VarcharT &, const SharedPtr<ColumnVector> &) {
-    Error<NotImplementException>("Not implemented");
+inline bool GeographyTryCastToVarlen::Run(const LineSegT &, VarcharT &, ColumnVector *) {
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 template <>
-inline bool GeographyTryCastToVarlen::Run(const BoxT &, VarcharT &, const SharedPtr<ColumnVector> &) {
-    Error<NotImplementException>("Not implemented");
+inline bool GeographyTryCastToVarlen::Run(const BoxT &, VarcharT &, ColumnVector *) {
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 #if 0
 template <>
 inline bool GeographyTryCastToVarlen::Run(const PathT &source, VarcharT &target, const SharedPtr<ColumnVector> &vector_ptr) {
-    Error<NotImplementException>("Not implemented");
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 template <>
 inline bool GeographyTryCastToVarlen::Run(const PolygonT &source, VarcharT &target, const SharedPtr<ColumnVector> &vector_ptr) {
-    Error<NotImplementException>("Not implemented");
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 #endif
 template <>
-inline bool GeographyTryCastToVarlen::Run(const CircleT &, VarcharT &, const SharedPtr<ColumnVector> &) {
-    Error<NotImplementException>("Not implemented");
+inline bool GeographyTryCastToVarlen::Run(const CircleT &, VarcharT &, ColumnVector *) {
+    String error_message = "Not implement: GeographyTryCastToVarlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 

@@ -14,31 +14,34 @@
 
 module;
 
+export module search_expression;
+
 import stl;
-import parser;
 import base_expression;
 import fusion_expression;
 import match_expression;
 import knn_expression;
-
-export module search_expression;
+import match_tensor_expression;
+import match_sparse_expression;
+import logical_type;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
-export class SearchExpression : public BaseExpression {
+export class SearchExpression final : public BaseExpression {
 public:
-    SearchExpression(Vector<SharedPtr<MatchExpression>> &match_exprs,
-                     Vector<SharedPtr<KnnExpression>> &knn_exprs,
-                     SharedPtr<FusionExpression> fusion_expr);
+    SearchExpression(Vector<SharedPtr<BaseExpression>> &match_exprs, Vector<SharedPtr<FusionExpression>> &fusion_exprs);
 
     inline DataType Type() const override { return DataType(LogicalType::kFloat); }
 
     String ToString() const override;
 
 public:
-    Vector<SharedPtr<MatchExpression>> match_exprs_{};
-    Vector<SharedPtr<KnnExpression>> knn_exprs_{};
-    SharedPtr<FusionExpression> fusion_expr_{};
+    // Eash match_expr shall be one of MatchExpression, KnnExpression, MatchTensorExpression, MatchSparseExpression
+    Vector<SharedPtr<BaseExpression>> match_exprs_{};
+    Vector<SharedPtr<FusionExpression>> fusion_exprs_{};
+    bool have_filter_in_subsearch_{false};
 };
 
 } // namespace infinity

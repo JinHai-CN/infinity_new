@@ -14,21 +14,29 @@
 
 module;
 
-import stl;
 #include <sstream>
-import column_binding;
-import parser;
-import base_expression;
-import logical_node_type;
-import default_values;
-import base_table_ref;
 
 module logical_table_scan;
+
+import stl;
+import logical_node_type;
+import column_binding;
+import logical_node;
+
+import match_expression;
+import base_table_ref;
+import table_entry;
+import logical_type;
+import base_expression;
+import default_values;
+import internal_types;
+import data_type;
+import meta_info;
 
 namespace infinity {
 
 LogicalTableScan::LogicalTableScan(u64 node_id, SharedPtr<BaseTableRef> base_table_ref, bool add_row_id)
-    : LogicalNode(node_id, LogicalNodeType::kTableScan), base_table_ref_(Move(base_table_ref)), add_row_id_(add_row_id) {}
+    : LogicalNode(node_id, LogicalNodeType::kTableScan), base_table_ref_(std::move(base_table_ref)), add_row_id_(add_row_id) {}
 
 Vector<ColumnBinding> LogicalTableScan::GetColumnBindings() const {
     Vector<ColumnBinding> result;
@@ -55,15 +63,14 @@ SharedPtr<Vector<String>> LogicalTableScan::GetOutputNames() const {
 }
 
 SharedPtr<Vector<SharedPtr<DataType>>> LogicalTableScan::GetOutputTypes() const {
-    Vector<SharedPtr<DataType>> result_types = *base_table_ref_->column_types_;
-    result_types.reserve(result_types.size() + 1);
+    auto result_types = MakeShared<Vector<SharedPtr<DataType>>>(*(base_table_ref_->column_types_)); // copy initialization
     if (add_row_id_) {
-        result_types.emplace_back(MakeShared<DataType>(LogicalType::kRowID));
+        result_types->emplace_back(MakeShared<DataType>(LogicalType::kRowID));
     }
-    return MakeShared<Vector<SharedPtr<DataType>>>(result_types);
+    return result_types;
 }
 
-TableEntry *LogicalTableScan::table_collection_ptr() const { return base_table_ref_->table_entry_ptr_; }
+TableInfo *LogicalTableScan::table_info() const { return base_table_ref_->table_info_.get(); }
 
 String LogicalTableScan::TableAlias() const { return base_table_ref_->alias_; }
 
@@ -76,7 +83,7 @@ String LogicalTableScan::ToString(i64 &space) const {
         space -= 4;
         arrow_str = "->  ";
     }
-    ss << String(space, ' ') << arrow_str << "TableScan: " << *base_table_ref_->table_entry_ptr_->GetTableName() << ", on: ";
+    ss << String(space, ' ') << arrow_str << "TableScan: " << *base_table_ref_->table_info_->table_name_ << ", on: ";
     SizeT column_count = base_table_ref_->column_names_->size();
     for (SizeT i = 0; i < column_count - 1; ++i) {
         ss << base_table_ref_->column_names_->at(i) << " ";

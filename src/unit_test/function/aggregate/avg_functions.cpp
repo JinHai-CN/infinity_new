@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -32,18 +33,24 @@ import column_expression;
 import value;
 import default_values;
 import data_block;
+import internal_types;
+import logical_type;
+import data_type;
+using namespace infinity;
 
-class AvgFunctionTest : public BaseTest {};
+class AvgFunctionTest : public BaseTestParamStr {};
 
-TEST_F(AvgFunctionTest, avg_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, AvgFunctionTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(AvgFunctionTest, avg_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterAvgFunction(catalog_ptr);
 
     String op = "avg";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kAggregate);
     SharedPtr<AggregateFunctionSet> aggregate_function_set = std::static_pointer_cast<AggregateFunctionSet>(function_set);
     {
@@ -83,10 +90,11 @@ TEST_F(AvgFunctionTest, avg_func) {
             }
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, sum / row_count);
     }
@@ -119,10 +127,11 @@ TEST_F(AvgFunctionTest, avg_func) {
             EXPECT_EQ(v.value_.small_int, static_cast<SmallIntT>(i));
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, sum / row_count);
     }
@@ -155,10 +164,11 @@ TEST_F(AvgFunctionTest, avg_func) {
             EXPECT_EQ(v.value_.integer, static_cast<IntegerT>(2 * i));
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, sum / row_count);
     }
@@ -191,10 +201,11 @@ TEST_F(AvgFunctionTest, avg_func) {
             EXPECT_EQ(v.value_.big_int, static_cast<BigIntT>(2 * i));
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, sum / row_count);
     }
@@ -227,10 +238,11 @@ TEST_F(AvgFunctionTest, avg_func) {
             EXPECT_FLOAT_EQ(v.value_.float32, static_cast<FloatT>(2 * i));
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, sum / row_count);
     }
@@ -263,10 +275,11 @@ TEST_F(AvgFunctionTest, avg_func) {
             EXPECT_FLOAT_EQ(v.value_.float64, static_cast<DoubleT>(2 * i));
         }
 
-        func.init_func_(func.GetState());
-        func.update_func_(func.GetState(), data_block.column_vectors[0]);
+        auto data_state = func.InitState();
+        func.init_func_(data_state.get());
+        func.update_func_(data_state.get(), data_block.column_vectors[0]);
         DoubleT result;
-        result = *(DoubleT *)func.finalize_func_(func.GetState());
+        result = *(DoubleT *)func.finalize_func_(data_state.get());
 
         EXPECT_FLOAT_EQ(result, sum / row_count);
     }
@@ -285,6 +298,6 @@ TEST_F(AvgFunctionTest, avg_func) {
         DataType data_type(LogicalType::kBoolean);
         SharedPtr<ColumnExpression> col_expr_ptr = MakeShared<ColumnExpression>(data_type, "t1", 1, "c1", 0, 0);
 
-        EXPECT_THROW(aggregate_function_set->GetMostMatchFunction(col_expr_ptr), PlannerException);
+        EXPECT_THROW(aggregate_function_set->GetMostMatchFunction(col_expr_ptr), RecoverableException);
     }
 }

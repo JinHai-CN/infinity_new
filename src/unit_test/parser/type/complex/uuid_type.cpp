@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
+import internal_types;
+
+using namespace infinity;
 
 class UuidTypeTest : public BaseTest {};
 
@@ -43,14 +47,14 @@ TEST_F(UuidTypeTest, Uuid) {
     uuid3 = uuid2;
     EXPECT_STREQ(uuid3.ToString().c_str(), uuid_str);
 
-    // Move assignment
+    // std::move assignment
     UuidT uuid4{};
-    uuid4 = Move(uuid2);
+    uuid4 = std::move(uuid2);
     EXPECT_STREQ(uuid4.ToString().c_str(), uuid_str);
     EXPECT_STREQ(uuid2.ToString().c_str(), "");
 
-    // Move constructor
-    UuidT uuid5(Move(uuid3));
+    // std::move constructor
+    UuidT uuid5(std::move(uuid3));
     EXPECT_STREQ(uuid5.ToString().c_str(), uuid_str);
     EXPECT_STREQ(uuid3.ToString().c_str(), "");
 

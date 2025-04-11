@@ -49,7 +49,7 @@ public:
 public:
     void Copy(char *blob_ptr, uint64_t blob_size);
 
-    void Move(char *blob_ptr, uint64_t blob_size);
+    void std::move(char *blob_ptr, uint64_t blob_size);
 
     inline void Reset() {
         if (size != 0) {
@@ -67,4 +67,3 @@ public:
 } // namespace infinity
 
 #endif
-

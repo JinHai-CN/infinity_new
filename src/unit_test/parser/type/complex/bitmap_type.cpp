@@ -12,17 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
+import parser_assert;
+
 #if 0
+
+using namespace infinity;
 class BitmapTypeTest : public BaseTest {};
 
 TEST_F(BitmapTypeTest, bitmap1) {
@@ -98,7 +103,7 @@ TEST_F(BitmapTypeTest, bitmap1) {
         }
     }
 
-    BitmapT bt4 = Move(bt3);
+    BitmapT bt4 = std::move(bt3);
 
     for (u64 i = 0; i < 100; ++i) {
         if (i % 2 == 0) {
@@ -133,7 +138,7 @@ TEST_F(BitmapTypeTest, bitmap1) {
     EXPECT_THROW(bt5.GetBit(50), ParserException);
     EXPECT_THROW(bt5.SetBit(50, false), ParserException);
 
-    bt5 = Move(bt2);
+    bt5 = std::move(bt2);
 
     for (u64 i = 0; i < 100; ++i) {
         if (i % 2 == 0) {
@@ -147,7 +152,7 @@ TEST_F(BitmapTypeTest, bitmap1) {
     EXPECT_EQ(bt2.count, 0);
 
     // Constructor
-    u64 *ptr = new u64[2]{};
+    u64 *ptr = new u64[2];
 
     BitmapT bt6(ptr, 100);
     for (u64 i = 0; i < 100; ++i) {
@@ -243,7 +248,7 @@ TEST_F(BitmapTypeTest, bitmap2) {
         }
     }
 
-    BitmapT bt4 = Move(bt3);
+    BitmapT bt4 = std::move(bt3);
 
     for (u64 i = 0; i < 100; ++i) {
         if (i % 2 == 0) {
@@ -278,7 +283,7 @@ TEST_F(BitmapTypeTest, bitmap2) {
     EXPECT_THROW(bt5.GetBit(50), ParserException);
     EXPECT_THROW(bt5.SetBit(50, false), ParserException);
 
-    bt5 = Move(bt2);
+    bt5 = std::move(bt2);
 
     for (u64 i = 0; i < 100; ++i) {
         if (i % 2 == 0) {
@@ -292,7 +297,7 @@ TEST_F(BitmapTypeTest, bitmap2) {
     EXPECT_EQ(bt2.count, 0);
 
     // Constructor
-    u64 *ptr = new u64[2]{};
+    u64 *ptr = new u64[2];
 
     BitmapT bt6(ptr, 100);
     for (u64 i = 0; i < 100; ++i) {

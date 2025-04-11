@@ -14,8 +14,10 @@
 
 module;
 
+export module physical_union_all;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -24,8 +26,9 @@ import base_expression;
 import data_table;
 import load_meta;
 import infinity_exception;
-
-export module physical_union_all;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -36,18 +39,13 @@ public:
 
     ~PhysicalUnionAll() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
 private:
     SharedPtr<Vector<String>> output_names_{};

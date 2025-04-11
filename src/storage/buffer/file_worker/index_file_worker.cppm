@@ -14,36 +14,40 @@
 
 module;
 
-import parser;
+export module index_file_worker;
+
 import index_base;
 import file_worker;
 import stl;
-
-export module index_file_worker;
+import column_def;
+import file_worker_type;
+import persistence_manager;
 
 namespace infinity {
 
-export struct CreateIndexParam {
-    virtual ~CreateIndexParam() = default;
-
-    const IndexBase *index_base_{};
-    const ColumnDef *column_def_{};
-
-    CreateIndexParam(const IndexBase *index_base, const ColumnDef *column_def) : index_base_(index_base), column_def_(column_def) {}
-};
-
 export class IndexFileWorker : public FileWorker {
 protected:
-    const ColumnDef *column_def_{};
-    const IndexBase *index_base_{};
+    SharedPtr<ColumnDef> column_def_{};
+    SharedPtr<IndexBase> index_base_{};
 
 public:
-    explicit IndexFileWorker(SharedPtr<String> file_dir, SharedPtr<String> file_name, const IndexBase *index_base, const ColumnDef *column_def)
-        : FileWorker(file_dir, file_name), column_def_(column_def), index_base_(index_base) {}
+    explicit IndexFileWorker(SharedPtr<String> data_dir,
+                             SharedPtr<String> temp_dir,
+                             SharedPtr<String> file_dir,
+                             SharedPtr<String> file_name,
+                             SharedPtr<IndexBase> index_base,
+                             SharedPtr<ColumnDef> column_def,
+                             PersistenceManager *persistence_manager)
+        : FileWorker(std::move(data_dir), std::move(temp_dir), std::move(file_dir), std::move(file_name), persistence_manager),
+          column_def_(std::move(column_def)), index_base_(std::move(index_base)) {}
 
     SizeT GetMemoryCost() const override { return 0; }
 
+    FileWorkerType Type() const override { return FileWorkerType::kIndexFile; }
+
     ~IndexFileWorker() override = default;
+
+    void SetIndexDef(SharedPtr<IndexBase> index_base) { index_base_ = std::move(index_base); }
 };
 
 } // namespace infinity

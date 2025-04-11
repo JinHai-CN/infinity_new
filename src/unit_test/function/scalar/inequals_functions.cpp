@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -34,18 +35,24 @@ import default_values;
 import data_block;
 import base_expression;
 import column_vector;
+import logical_type;
+import internal_types;
+import data_type;
 
-class InEqualsFunctionsTest : public BaseTest {};
+using namespace infinity;
+class InEqualsFunctionsTest : public BaseTestParamStr {};
 
-TEST_F(InEqualsFunctionsTest, inequals_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, InEqualsFunctionsTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(InEqualsFunctionsTest, inequals_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
-    RegisterInEqualsFunction(catalog_ptr);
+    RegisterInEqualFunction(catalog_ptr);
 
     String op = "<>";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kScalar);
     SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -576,11 +583,11 @@ TEST_F(InEqualsFunctionsTest, inequals_func) {
 
         for (SizeT i = 0; i < row_count; ++i) {
             if (i % 2 == 0) {
-                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + ToStr(i)));
-                data_block.AppendValue(1, Value::MakeVarchar("Helloworld" + ToStr(i)));
+                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+                data_block.AppendValue(1, Value::MakeVarchar("Helloworld" + std::to_string(i)));
             } else {
-                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + ToStr(i)));
-                data_block.AppendValue(1, Value::MakeVarchar("helloworld" + ToStr(i)));
+                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+                data_block.AppendValue(1, Value::MakeVarchar("helloworld" + std::to_string(i)));
             }
         }
         data_block.Finalize();
@@ -591,11 +598,11 @@ TEST_F(InEqualsFunctionsTest, inequals_func) {
             EXPECT_EQ(v1.type_.type(), LogicalType::kVarchar);
             EXPECT_EQ(v2.type_.type(), LogicalType::kVarchar);
             if (i % 2 == 0) {
-                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-                EXPECT_EQ(v2.value_.varchar.ToString(), "Helloworld" + ToStr(i));
+                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+                EXPECT_EQ(v2.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
             } else {
-                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-                EXPECT_EQ(v2.value_.varchar.ToString(), "helloworld" + ToStr(i));
+                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+                EXPECT_EQ(v2.value_.varchar.ToString(), "helloworld" + std::to_string(i));
             }
         }
 

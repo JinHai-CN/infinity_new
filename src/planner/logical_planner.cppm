@@ -14,15 +14,36 @@
 
 module;
 
+export module logical_planner;
+
 import stl;
-import parser;
+
 import query_context;
 import bind_context;
 import load_meta;
 import logical_node;
 import status;
-
-export module logical_planner;
+import internal_types;
+import base_statement;
+import select_statement;
+import copy_statement;
+import insert_statement;
+import create_statement;
+import drop_statement;
+import show_statement;
+import flush_statement;
+import optimize_statement;
+import update_statement;
+import delete_statement;
+import prepare_statement;
+import execute_statement;
+import alter_statement;
+import explain_statement;
+import command_statement;
+import compact_statement;
+import data_type;
+import extra_ddl_info;
+import global_resource_usage;
 
 namespace infinity {
 
@@ -31,13 +52,22 @@ public:
     explicit LogicalPlanner(QueryContext *query_context_ptr) : query_context_ptr_(query_context_ptr) {
         names_ptr_ = MakeShared<Vector<String>>();
         types_ptr_ = MakeShared<Vector<DataType>>();
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("LogicalPlanner");
+#endif
+    }
+
+    ~LogicalPlanner() {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::DecrObjectCount("LogicalPlanner");
+#endif
     }
 
     Status Build(const BaseStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     Status BuildSelect(const SelectStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
-    Status BuildInsert(const InsertStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildInsert(InsertStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     Status BuildInsertValue(const InsertStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
@@ -50,9 +80,9 @@ public:
     Status BuildDelete(const DeleteStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Create operator
-    Status BuildCreate(const CreateStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildCreate(CreateStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
-    Status BuildCreateSchema(const CreateStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildCreateDatabase(const CreateStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     Status BuildCreateTable(const CreateStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
@@ -63,7 +93,7 @@ public:
     Status BuildCreateIndex(const CreateStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Drop operator
-    Status BuildDrop(const DropStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildDrop(DropStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     Status BuildDropTable(const DropStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
@@ -81,7 +111,7 @@ public:
     // Execute operator
     Status BuildExecute(const ExecuteStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
-    Status BuildCopy(const CopyStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildCopy(CopyStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Export operator
     Status BuildExport(const CopyStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
@@ -90,33 +120,15 @@ public:
     Status BuildImport(const CopyStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Alter operator
-    Status BuildAlter(const AlterStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildAlter(AlterStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Show operator
-    Status BuildShow(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowColumns(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowSegments(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowIndexes(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowTables(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowViews(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowDatabases(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowConfigs(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowProfiles(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowSessionStatus(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
-
-    Status BuildShowGlobalStatus(const ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildShow(ShowStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Flush
     Status BuildFlush(const FlushStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+
+    Status BuildFlushDelta(const FlushStatement *, SharedPtr<BindContext> &bind_context_ptr);
 
     Status BuildFlushData(const FlushStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
@@ -125,38 +137,34 @@ public:
     Status BuildFlushBuffer(const FlushStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Optimize
-    Status BuildOptimize(const OptimizeStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+    Status BuildOptimize(OptimizeStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     Status BuildCommand(const CommandStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
+
+    Status BuildCompact(const CompactStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
     // Explain
     Status BuildExplain(const ExplainStatement *statement, SharedPtr<BindContext> &bind_context_ptr);
 
-    [[nodiscard]] SharedPtr<LogicalNode> LogicalPlan() const { return logical_plan_; }
+    [[nodiscard]] Vector<SharedPtr<LogicalNode>> LogicalPlans() const {
+        if (logical_plans_.empty()) {
+            return {logical_plan_};
+        }
+        return logical_plans_;
+    }
 
 private:
-    static bool ValidIdentifier(const String &identifier) {
-        if (identifier.empty()) {
-            return false;
-        }
-        if (!IsAlpha(identifier[0]) && identifier[0] != '_') {
-            return false;
-        }
-        for (SizeT i = 1; i < identifier.length(); i++) {
-            char ch = identifier[i];
-            if (!IsAlNum(ch) && ch != '_') {
-                return false;
-            }
-        }
+    void BindSchemaName(String &schema_name) const;
 
-        return true;
-    }
+private:
+    static Status ValidIdentifier(const String &identifier);
 
     QueryContext *query_context_ptr_{};
 
     SharedPtr<Vector<String>> names_ptr_{};
     SharedPtr<Vector<DataType>> types_ptr_{};
     SharedPtr<LogicalNode> logical_plan_{};
+    Vector<SharedPtr<LogicalNode>> logical_plans_{};
 };
 
 } // namespace infinity

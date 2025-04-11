@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -34,18 +35,24 @@ import default_values;
 import data_block;
 import base_expression;
 import column_vector;
+import logical_type;
+import internal_types;
+import data_type;
 
-class GreaterEqualsFunctionsTest : public BaseTest {};
+using namespace infinity;
+class GreaterEqualsFunctionsTest : public BaseTestParamStr {};
 
-TEST_F(GreaterEqualsFunctionsTest, greater_equals_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, GreaterEqualsFunctionsTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(GreaterEqualsFunctionsTest, greater_equals_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterGreaterEqualsFunction(catalog_ptr);
 
     String op = ">=";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kScalar);
     SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -420,79 +427,79 @@ TEST_F(GreaterEqualsFunctionsTest, greater_equals_func) {
         }
     }
 
-//    {
-//        Vector<SharedPtr<BaseExpression>> inputs;
-//        SharedPtr<DataType> data_type1 = MakeShared<DataType>(LogicalType::kVarchar);
-//        SharedPtr<DataType> data_type2 = MakeShared<DataType>(LogicalType::kVarchar);
-//        SharedPtr<DataType> result_type = MakeShared<DataType>(LogicalType::kBoolean);
-//
-//        SharedPtr<ColumnExpression> col1_expr_ptr = MakeShared<ColumnExpression>(*data_type1, "t1", 1, "c1", 0, 0);
-//        SharedPtr<ColumnExpression> col2_expr_ptr = MakeShared<ColumnExpression>(*data_type2, "t1", 1, "c2", 1, 0);
-//
-//        inputs.emplace_back(col1_expr_ptr);
-//        inputs.emplace_back(col2_expr_ptr);
-//
-//        ScalarFunction func = scalar_function_set->GetMostMatchFunction(inputs);
-//        EXPECT_STREQ(">=(Varchar, Varchar)->Boolean", func.ToString().c_str());
-//
-//        Vector<SharedPtr<DataType>> column_types;
-//        column_types.emplace_back(data_type1);
-//        column_types.emplace_back(data_type2);
-//
-//        SizeT row_count = DEFAULT_VECTOR_SIZE;
-//
-//        DataBlock data_block;
-//        data_block.Init(column_types);
-//
-//        for (SizeT i = 0; i < row_count; ++i) {
-//            if (i % 2 == 0) {
-//                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + ToStr(i)));
-//                data_block.AppendValue(1, Value::MakeVarchar("Helloworld" + ToStr(i)));
-//            } else {
-//                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + ToStr(i)));
-//                data_block.AppendValue(1, Value::MakeVarchar("helloworld" + ToStr(i)));
-//            }
-//        }
-//        data_block.Finalize();
-//
-//        for (SizeT i = 0; i < row_count; ++i) {
-//            Value v1 = data_block.GetValue(0, i);
-//            Value v2 = data_block.GetValue(1, i);
-//            EXPECT_EQ(v1.type_.type(), LogicalType::kVarchar);
-//            EXPECT_EQ(v2.type_.type(), LogicalType::kVarchar);
-//            if (i % 2 == 0) {
-//                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-//                EXPECT_EQ(v2.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-//            } else {
-//                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-//                EXPECT_EQ(v2.value_.varchar.ToString(), "helloworld" + ToStr(i));
-//            }
-//        }
-//
-//        SharedPtr<ColumnVector> result = MakeShared<ColumnVector>(result_type);
-//        result->Initialize();
-//        func.function_(data_block, result);
-//
-//        for (SizeT i = 0; i < row_count; ++i) {
-//            Value v = result->GetValue(i);
-//            EXPECT_EQ(v.type_.type(), LogicalType::kBoolean);
-//            if (i % 2 == 0) {
-//                String s1 = "Helloworld" + ToStr(i);
-//                String s2 = "Helloworld" + ToStr(i);
-//                if (s1 >= s2) {
-//                    EXPECT_EQ(v.value_.boolean, true);
-//                } else {
-//                    EXPECT_EQ(v.value_.boolean, false);
-//                }
-//            } else {
-//                String s1 = "Helloworld" + ToStr(i);
-//                String s2 = "helloworld" + ToStr(i);
-//                if (s1 >= s2) {
-//                    EXPECT_EQ(v.value_.boolean, true);
-//                } else {
-//                    EXPECT_EQ(v.value_.boolean, false);
-//                }
-//            }
-//        }
-//    }
+    //    {
+    //        Vector<SharedPtr<BaseExpression>> inputs;
+    //        SharedPtr<DataType> data_type1 = MakeShared<DataType>(LogicalType::kVarchar);
+    //        SharedPtr<DataType> data_type2 = MakeShared<DataType>(LogicalType::kVarchar);
+    //        SharedPtr<DataType> result_type = MakeShared<DataType>(LogicalType::kBoolean);
+    //
+    //        SharedPtr<ColumnExpression> col1_expr_ptr = MakeShared<ColumnExpression>(*data_type1, "t1", 1, "c1", 0, 0);
+    //        SharedPtr<ColumnExpression> col2_expr_ptr = MakeShared<ColumnExpression>(*data_type2, "t1", 1, "c2", 1, 0);
+    //
+    //        inputs.emplace_back(col1_expr_ptr);
+    //        inputs.emplace_back(col2_expr_ptr);
+    //
+    //        ScalarFunction func = scalar_function_set->GetMostMatchFunction(inputs);
+    //        EXPECT_STREQ(">=(Varchar, Varchar)->Boolean", func.ToString().c_str());
+    //
+    //        Vector<SharedPtr<DataType>> column_types;
+    //        column_types.emplace_back(data_type1);
+    //        column_types.emplace_back(data_type2);
+    //
+    //        SizeT row_count = DEFAULT_VECTOR_SIZE;
+    //
+    //        DataBlock data_block;
+    //        data_block.Init(column_types);
+    //
+    //        for (SizeT i = 0; i < row_count; ++i) {
+    //            if (i % 2 == 0) {
+    //                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+    //                data_block.AppendValue(1, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+    //            } else {
+    //                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+    //                data_block.AppendValue(1, Value::MakeVarchar("helloworld" + std::to_string(i)));
+    //            }
+    //        }
+    //        data_block.Finalize();
+    //
+    //        for (SizeT i = 0; i < row_count; ++i) {
+    //            Value v1 = data_block.GetValue(0, i);
+    //            Value v2 = data_block.GetValue(1, i);
+    //            EXPECT_EQ(v1.type_.type(), LogicalType::kVarchar);
+    //            EXPECT_EQ(v2.type_.type(), LogicalType::kVarchar);
+    //            if (i % 2 == 0) {
+    //                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+    //                EXPECT_EQ(v2.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+    //            } else {
+    //                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+    //                EXPECT_EQ(v2.value_.varchar.ToString(), "helloworld" + std::to_string(i));
+    //            }
+    //        }
+    //
+    //        SharedPtr<ColumnVector> result = MakeShared<ColumnVector>(result_type);
+    //        result->Initialize();
+    //        func.function_(data_block, result);
+    //
+    //        for (SizeT i = 0; i < row_count; ++i) {
+    //            Value v = result->GetValue(i);
+    //            EXPECT_EQ(v.type_.type(), LogicalType::kBoolean);
+    //            if (i % 2 == 0) {
+    //                String s1 = "Helloworld" + std::to_string(i);
+    //                String s2 = "Helloworld" + std::to_string(i);
+    //                if (s1 >= s2) {
+    //                    EXPECT_EQ(v.value_.boolean, true);
+    //                } else {
+    //                    EXPECT_EQ(v.value_.boolean, false);
+    //                }
+    //            } else {
+    //                String s1 = "Helloworld" + std::to_string(i);
+    //                String s2 = "helloworld" + std::to_string(i);
+    //                if (s1 >= s2) {
+    //                    EXPECT_EQ(v.value_.boolean, true);
+    //                } else {
+    //                    EXPECT_EQ(v.value_.boolean, false);
+    //                }
+    //            }
+    //        }
+    //    }
 }

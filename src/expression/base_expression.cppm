@@ -14,11 +14,14 @@
 
 module;
 
+export module base_expression;
+
 import stl;
 import expression_type;
-import parser;
-
-export module base_expression;
+import data_type;
+import internal_types;
+import infinity_exception;
+import third_party;
 
 namespace infinity {
 
@@ -35,17 +38,17 @@ export struct SourcePosition {
 
     explicit SourcePosition(u64 bind_context_id, ExprSourceType source_type) : bind_context_id_(bind_context_id), source_type_(source_type) {}
 
-    u64 bind_context_id_{u64_max};
+    u64 bind_context_id_{std::numeric_limits<u64>::max()};
     ExprSourceType source_type_{ExprSourceType::kInvalid};
     String binding_name_{};
 };
 
 export class BaseExpression : public EnableSharedFromThis<BaseExpression> {
 public:
-    explicit BaseExpression(ExpressionType type, Vector<SharedPtr<BaseExpression>> arguments) : type_(type), arguments_(Move(arguments)){};
+    explicit BaseExpression(ExpressionType type, Vector<SharedPtr<BaseExpression>> arguments) : type_(type), arguments_(std::move(arguments)) {};
 
     explicit BaseExpression(ExpressionType type, Vector<SharedPtr<BaseExpression>> arguments, String alias)
-        : alias_(Move(alias)), type_(type), arguments_(Move(arguments)){};
+        : alias_(std::move(alias)), type_(type), arguments_(std::move(arguments)) {};
 
     virtual ~BaseExpression() = default;
 
@@ -66,9 +69,19 @@ public:
     SourcePosition source_position_{};
     String alias_{};
 
-protected:
     [[nodiscard]] virtual String ToString() const = 0;
 
+    virtual u64 Hash() const {
+        UnrecoverableError(fmt::format("Not implemented {}'s Hash", int(type_)));
+        return 0;
+    }
+
+    virtual bool Eq(const BaseExpression &other) const {
+        UnrecoverableError(fmt::format("Not implemented {}'s Eq", int(type_)));
+        return false;
+    }
+
+protected:
     ExpressionType type_{};
     Vector<SharedPtr<BaseExpression>> arguments_{};
 };

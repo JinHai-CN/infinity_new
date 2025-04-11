@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
-
-#include <cmath>
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -36,18 +35,24 @@ import default_values;
 import data_block;
 import base_expression;
 import column_vector;
+import logical_type;
+import internal_types;
+import data_type;
 
-class AbsFunctionsTest : public BaseTest {};
+using namespace infinity;
+class AbsFunctionsTest : public BaseTestParamStr {};
 
-TEST_F(AbsFunctionsTest, abs_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, AbsFunctionsTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(AbsFunctionsTest, abs_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterAbsFunction(catalog_ptr);
 
     String op = "abs";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kScalar);
     SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -267,7 +272,7 @@ TEST_F(AbsFunctionsTest, abs_func) {
             f32 input = i - 16384;
             input -= 0.5;
             EXPECT_EQ(result->nulls_ptr_->IsTrue(i), true);
-            EXPECT_FLOAT_EQ(v.value_.float32, fabs(input));
+            EXPECT_FLOAT_EQ(v.value_.float32, std::fabs(input));
         }
     }
 
@@ -315,7 +320,7 @@ TEST_F(AbsFunctionsTest, abs_func) {
             f64 input = i - 16384;
             input -= 0.5;
             EXPECT_EQ(result->nulls_ptr_->IsTrue(i), true);
-            EXPECT_FLOAT_EQ(v.value_.float64, fabs(input));
+            EXPECT_FLOAT_EQ(v.value_.float64, std::fabs(input));
         }
     }
 

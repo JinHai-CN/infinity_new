@@ -20,7 +20,7 @@ import txn;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+
 import physical_operator_type;
 import operator_state;
 
@@ -32,13 +32,13 @@ module physical_cross_product;
 
 namespace infinity {
 
-void PhysicalCrossProduct::Init() {}
+void PhysicalCrossProduct::Init(QueryContext* query_context) {}
 
 bool PhysicalCrossProduct::Execute(QueryContext *, OperatorState *) {
 #if 0
 
-    Assert<ExecutorException>(left_->output().get() != nullptr, "No left input.");
-    Assert<ExecutorException>(right_->output().get() != nullptr, "No right input.");
+    UnrecoverableError("No left input.");
+    UnrecoverableError("No right input.");
     left_table_ = left_->output();
     right_table_ = right_->output();
 
@@ -67,7 +67,7 @@ bool PhysicalCrossProduct::Execute(QueryContext *, OperatorState *) {
         }
     }
 
-    SharedPtr<TableDef> cross_product_table_def = TableDef::Make(MakeShared<String>("default"), MakeShared<String>("cross_product"), columns_def);
+    SharedPtr<TableDef> cross_product_table_def = TableDef::Make(MakeShared<String>("default_db"), MakeShared<String>("cross_product"), columns_def);
     SharedPtr<DataTable> cross_product_table = DataTable::Make(cross_product_table_def, TableType::kCrossProduct);
 
     // Loop left table and scan right table

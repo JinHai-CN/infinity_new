@@ -14,17 +14,21 @@
 
 module;
 
+module where_binder;
+
 import stl;
 import base_expression;
-import parser;
+
 import function;
 import bind_context;
 
 import infinity_exception;
 import third_party;
 import bind_alias_proxy;
-
-module where_binder;
+import parsed_expr;
+import column_expr;
+import status;
+import logger;
 
 namespace infinity {
 
@@ -52,16 +56,17 @@ SharedPtr<BaseExpression> WhereBinder::BuildColExpr(const ColumnExpr &expr, Bind
     }
 
     if (result.get() == nullptr) {
-        Error<PlannerException>(Format("Can't bind the expr: {}", expr.GetName()));
+        Status status = Status::ColumnNotExist(expr.GetName());
+        RecoverableError(status);
     }
     return result;
 }
 
 void WhereBinder::CheckFuncType(FunctionType func_type) const {
     if (func_type != FunctionType::kScalar) {
-        Error<PlannerException>("Only scalar function are allowed in where clause");
+        String error_message = "Only scalar function are allowed in where clause";
+        UnrecoverableError(error_message);
     }
-
 }
 
 } // namespace infinity

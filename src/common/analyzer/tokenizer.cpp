@@ -35,7 +35,7 @@ CharTypeTable::CharTypeTable(bool use_def_delim) {
         return;
     // set the lower 4 bit to record default char type
     for (u8 i = 0; i < BYTE_MAX; i++) {
-        if (std::isalnum(i))
+        if (std::isalnum(i) || i > 127)
             continue;
         else if (std::isspace(i))
             char_type_table_[i] = SPACE_CHR;
@@ -89,6 +89,7 @@ bool Tokenizer::NextToken() {
     if (output_buffer_cursor_ >= output_buffer_size_) {
         GrowOutputBuffer();
     }
+    token_start_cursor_ = input_cursor_;
     output_buffer_[output_buffer_cursor_++] = input_->at(input_cursor_);
     if (table_.GetType(input_->at(input_cursor_)) == DELIMITER_CHR) {
         ++input_cursor_;
@@ -116,10 +117,8 @@ bool Tokenizer::NextToken() {
 }
 
 bool Tokenizer::GrowOutputBuffer() {
-    char *new_output_buffer = new char[output_buffer_size_ * 2];
-    memcpy(new_output_buffer, output_buffer_, output_buffer_size_ * sizeof(char));
-    output_buffer_ = new_output_buffer;
     output_buffer_size_ *= 2;
+    output_buffer_ = MakeUnique<char[]>(output_buffer_size_);
     return true;
 }
 

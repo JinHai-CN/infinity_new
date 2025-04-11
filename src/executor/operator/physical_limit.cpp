@@ -14,10 +14,9 @@
 
 module;
 
-#include <memory>
+module physical_limit;
 
 import stl;
-import txn;
 import base_expression;
 import default_values;
 import load_meta;
@@ -25,18 +24,19 @@ import query_context;
 import table_def;
 import data_table;
 import default_values;
-import parser;
+
 import physical_operator_type;
 import operator_state;
 import data_block;
-
+import status;
 import infinity_exception;
 import expression_type;
 import value_expression;
-
-module physical_limit;
+import logger;
 
 namespace infinity {
+
+void LimitCounter::AddHitsCount(u64 row_count) { total_hits_count_ += row_count; }
 
 SizeT AtomicCounter::Offset(SizeT row_count) {
     auto success = false;
@@ -86,7 +86,8 @@ SizeT AtomicCounter::Limit(SizeT row_count) {
 
 bool AtomicCounter::IsLimitOver() {
     if (limit_ < 0) {
-        Error<ExecutorException>("limit is not allowed to be smaller than 0");
+        Status status = Status::InvalidParameterValue("Limit", std::to_string(limit_), "larger than 0");
+        RecoverableError(status);
     }
     return limit_ == 0;
 }
@@ -100,7 +101,7 @@ SizeT UnSyncCounter::Offset(SizeT row_count) {
     i64 last_offset = offset_ - row_count;
 
     if (last_offset > 0) {
-        result = row_count - 1;
+        result = row_count;
         offset_ = last_offset;
     } else {
         result = offset_;
@@ -131,7 +132,8 @@ SizeT UnSyncCounter::Limit(SizeT row_count) {
 
 bool UnSyncCounter::IsLimitOver() {
     if (limit_ < 0) {
-        Error<ExecutorException>("limit is not allowed to be smaller than 0");
+        Status status = Status::InvalidParameterValue("Limit", std::to_string(limit_), "larger than 0");
+        RecoverableError(status);
     }
     return limit_ == 0;
 }
@@ -140,20 +142,21 @@ PhysicalLimit::PhysicalLimit(u64 id,
                              UniquePtr<PhysicalOperator> left,
                              SharedPtr<BaseExpression> limit_expr,
                              SharedPtr<BaseExpression> offset_expr,
-                             SharedPtr<Vector<LoadMeta>> load_metas)
-    : PhysicalOperator(PhysicalOperatorType::kLimit, Move(left), nullptr, id, load_metas), limit_expr_(Move(limit_expr)),
-      offset_expr_(Move(offset_expr)) {
+                             SharedPtr<Vector<LoadMeta>> load_metas,
+                             bool total_hits_count_flag)
+    : PhysicalOperator(PhysicalOperatorType::kLimit, std::move(left), nullptr, id, load_metas), limit_expr_(std::move(limit_expr)),
+      offset_expr_(std::move(offset_expr)), total_hits_count_flag_(total_hits_count_flag) {
     i64 offset = 0;
     i64 limit = (static_pointer_cast<ValueExpression>(limit_expr_))->GetValue().value_.big_int;
 
-    if (offset_expr_ != nullptr) {
+    if (offset_expr_.get() != nullptr) {
         offset = (static_pointer_cast<ValueExpression>(offset_expr_))->GetValue().value_.big_int;
     }
 
-    counter_ = MakeUnique<UnSyncCounter>(offset, limit);
+    counter_ = MakeUnique<AtomicCounter>(offset, limit);
 }
 
-void PhysicalLimit::Init() {}
+void PhysicalLimit::Init(QueryContext* query_context) {}
 
 //    offset     limit + offset
 //    left       right
@@ -161,10 +164,11 @@ void PhysicalLimit::Init() {}
 bool PhysicalLimit::Execute(QueryContext *query_context,
                             const Vector<UniquePtr<DataBlock>> &input_blocks,
                             Vector<UniquePtr<DataBlock>> &output_blocks,
-                            LimitCounter *counter) {
+                            LimitCounter *counter,
+                            bool total_hits_count_flag) {
     SizeT input_row_count = 0;
 
-    for (SizeT block_id = 0; block_id < input_blocks.size(); block_id++) {
+    for (SizeT block_id = 0; block_id < input_blocks.size(); ++block_id) {
         input_row_count += input_blocks[block_id]->row_count();
     }
 
@@ -174,15 +178,10 @@ bool PhysicalLimit::Execute(QueryContext *query_context,
     }
 
     SizeT limit = counter->Limit(input_row_count - offset);
-    SizeT block_start_idx = 0;
+    SizeT block_start_idx = input_blocks.size();
 
-    for (SizeT block_id = 0; block_id < input_blocks.size(); block_id++) {
-        if (input_blocks[block_id]->row_count() == 0) {
-            continue;
-        }
-        SizeT row_count = input_blocks[block_id]->row_count();
-
-        if (offset > row_count) {
+    for (SizeT block_id = 0; block_id < input_blocks.size(); ++block_id) {
+        if (const SizeT row_count = input_blocks[block_id]->row_count(); offset >= row_count) {
             offset -= row_count;
         } else {
             block_start_idx = block_id;
@@ -190,39 +189,47 @@ bool PhysicalLimit::Execute(QueryContext *query_context,
         }
     }
 
-    for (SizeT block_id = block_start_idx; block_id < input_blocks.size(); block_id++) {
+    const auto output_types = input_blocks.front()->types();
+    for (SizeT block_id = block_start_idx; block_id < input_blocks.size(); ++block_id) {
         auto &input_block = input_blocks[block_id];
         auto row_count = input_block->row_count();
         if (row_count == 0) {
             continue;
         }
+        const auto append_count = std::min(row_count - offset, limit);
         auto block = DataBlock::MakeUniquePtr();
-
-        block->Init(input_block->types());
-        if (limit >= row_count) {
-            block->AppendWith(input_block.get(), offset, row_count);
-            limit -= row_count;
-        } else {
-            block->AppendWith(input_block.get(), offset, limit);
-            limit = 0;
-        }
+        block->Init(output_types);
+        block->AppendWith(input_block.get(), offset, append_count);
         block->Finalize();
-        output_blocks.push_back(Move(block));
+        output_blocks.push_back(std::move(block));
         offset = 0;
-
+        limit -= append_count;
         if (limit == 0) {
             break;
         }
+    }
+
+    if (total_hits_count_flag) {
+        counter->AddHitsCount(input_row_count);
     }
 
     return true;
 }
 
 bool PhysicalLimit::Execute(QueryContext *query_context, OperatorState *operator_state) {
-    auto result = Execute(query_context, operator_state->prev_op_state_->data_block_array_, operator_state->data_block_array_, counter_.get());
+    auto result = Execute(query_context,
+                          operator_state->prev_op_state_->data_block_array_,
+                          operator_state->data_block_array_,
+                          counter_.get(),
+                          total_hits_count_flag_);
 
     operator_state->prev_op_state_->data_block_array_.clear();
     if (counter_->IsLimitOver() || operator_state->prev_op_state_->Complete()) {
+        if (total_hits_count_flag_) {
+            LimitOperatorState *limit_operator_state = (LimitOperatorState *)operator_state;
+            limit_operator_state->total_hits_count_flag_ = true;
+            limit_operator_state->total_hits_count_ = counter_->TotalHitsCount();
+        }
         operator_state->SetComplete();
     }
     return result;

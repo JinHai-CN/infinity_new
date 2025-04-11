@@ -20,28 +20,34 @@ import config;
 import session;
 import resource_manager;
 import session_manager;
+import persistence_manager;
 import profiler;
 import storage;
 import txn;
 import data_table;
-import parser;
+import sql_parser;
 import optimizer;
 import status;
 import query_result;
+import base_statement;
+import admin_statement;
 
 export module query_context;
 
 namespace infinity {
 
+class NewTxn;
+
 class LogicalPlanner;
 class PhysicalPlanner;
 class FragmentBuilder;
 class TaskScheduler;
+struct BGQueryState;
 
 export class QueryContext {
 
 public:
-    explicit QueryContext(BaseSession* session);
+    explicit QueryContext(BaseSession *session);
 
     ~QueryContext();
 
@@ -49,7 +55,8 @@ public:
               TaskScheduler *scheduler_ptr,
               Storage *storage_ptr,
               ResourceManager *resource_manager_ptr,
-              SessionManager* session_manager);
+              SessionManager *session_manager,
+              PersistenceManager *persistence_manager);
 
     inline void UnInit() {
         initialized_ = false;
@@ -58,19 +65,22 @@ public:
         scheduler_ = nullptr;
         storage_ = nullptr;
         resource_manager_ = nullptr;
+        persistence_manager_ = nullptr;
     }
 
     QueryResult Query(const String &query);
 
     QueryResult QueryStatement(const BaseStatement *statement);
 
+    bool ExecuteBGStatement(BaseStatement *statement, BGQueryState &state);
+
+    bool JoinBGStatement(BGQueryState &state, TxnTimeStamp &commit_ts, bool rollback = false);
+
     inline void set_current_schema(const String &current_schema) { session_ptr_->set_current_schema(current_schema); }
 
     [[nodiscard]] inline const String &schema_name() const { return session_ptr_->current_database(); }
 
     [[nodiscard]] inline u64 cpu_number_limit() const { return cpu_number_limit_; }
-
-    [[nodiscard]] inline bool is_enable_profiling() const { return session_ptr_->options()->enable_profiling_; }
 
     [[nodiscard]] inline u64 memory_size_limit() const { return memory_size_limit_; }
 
@@ -80,19 +90,30 @@ public:
 
     inline void set_max_node_id(u64 node_id) { current_max_node_id_ = node_id; }
 
+    inline void set_explain_analyze() { explain_analyze_ = true; }
+    [[nodiscard]] inline bool explain_analyze() const { return explain_analyze_; }
+
     inline u64 GetNextNodeID() { return ++current_max_node_id_; }
 
-    void CreateTxn();
+    void BeginTxn(const BaseStatement *statement);
 
-    void BeginTxn();
-
-    void CommitTxn();
+    TxnTimeStamp CommitTxn();
 
     void RollbackTxn();
 
-
-
     [[nodiscard]] Txn *GetTxn() const { return session_ptr_->GetTxn(); }
+
+    bool SetTxn(Txn *txn) const {
+        if (session_ptr_->GetTxn() == nullptr) {
+            session_ptr_->SetTxn(txn);
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] NewTxn *GetNewTxn() const;
+
+    bool SetNewTxn(NewTxn *txn) const;
 
     [[nodiscard]] inline Storage *storage() const { return storage_; }
 
@@ -104,49 +125,33 @@ public:
 
     [[nodiscard]] inline SessionManager *session_manager() { return session_manager_; }
 
+    [[nodiscard]] inline PersistenceManager *persistence_manager() { return persistence_manager_; }
+
     [[nodiscard]] inline SQLParser *parser() const { return parser_.get(); }
     [[nodiscard]] inline LogicalPlanner *logical_planner() const { return logical_planner_.get(); }
     [[nodiscard]] inline Optimizer *optimizer() const { return optimizer_.get(); }
     [[nodiscard]] inline PhysicalPlanner *physical_planner() const { return physical_planner_.get(); }
     [[nodiscard]] inline FragmentBuilder *fragment_builder() const { return fragment_builder_.get(); }
+    [[nodiscard]] inline QueryProfiler *query_profiler() const { return query_profiler_.get(); }
 
-    [[nodiscard]] BaseSession* current_session() const { return session_ptr_; }
+    [[nodiscard]] BaseSession *current_session() const { return session_ptr_; }
 
     void FlushProfiler(TaskProfiler &&profiler) {
-        if(query_profiler_) {
-            query_profiler_->Flush(Move(profiler));
+        if (query_profiler_) {
+            query_profiler_->Flush(std::move(profiler));
         }
     }
+
+    void CreateQueryProfiler();
 
 private:
-    inline void CreateQueryProfiler() {
-        if (is_enable_profiling()) {
-            query_profiler_ = MakeShared<QueryProfiler>(true);
-        }
-    }
+    QueryResult HandleAdminStatement(const AdminStatement *admin_statement);
 
-    inline void RecordQueryProfiler(const StatementType &type) {
-        if (type != StatementType::kCommand && type != StatementType::kExplain && type != StatementType::kShow) {
-            GetTxn()->GetCatalog()->AppendProfilerRecord(query_profiler_);
-        }
-    }
-
-    inline void StartProfile(QueryPhase phase) {
-        if(query_profiler_) {
-            query_profiler_->StartPhase(phase);
-        }
-    }
-    inline void StopProfile(QueryPhase phase) {
-        if(query_profiler_) {
-            query_profiler_->StopPhase(phase);
-        }
-    }
-
-    inline void StopProfile() {
-        if(query_profiler_) {
-            query_profiler_->Stop();
-        }
-    }
+private:
+    void RecordQueryProfiler(const StatementType &type);
+    void StartProfile(QueryPhase phase);
+    void StopProfile(QueryPhase phase);
+    void StopProfile();
 
 private:
     // Parser
@@ -157,17 +162,15 @@ private:
     UniquePtr<FragmentBuilder> fragment_builder_{};
 
     SharedPtr<QueryProfiler> query_profiler_{};
+    bool explain_analyze_{};
 
     Config *global_config_{};
     TaskScheduler *scheduler_{};
     Storage *storage_{};
     BaseSession *session_ptr_{};
     ResourceManager *resource_manager_{};
-    SessionManager* session_manager_{};
-
-    // Get following information from session.
-    // Current schema
-    String current_schema_;
+    SessionManager *session_manager_{};
+    PersistenceManager *persistence_manager_{};
 
     u64 catalog_version_{};
 
@@ -184,7 +187,6 @@ private:
     u64 memory_size_limit_{};
 
     bool initialized_{false};
-
 };
 
 } // namespace infinity

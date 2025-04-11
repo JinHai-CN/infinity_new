@@ -14,16 +14,17 @@
 
 module;
 
-import parser;
-import base_expression;
+module cast_expression;
 
+import base_expression;
+import logical_type;
 import infinity_exception;
 import bound_cast_func;
 import stl;
 import third_party;
 import cast_function;
-
-module cast_expression;
+import status;
+import logger;
 
 namespace infinity {
 
@@ -36,7 +37,8 @@ SharedPtr<BaseExpression> CastExpression::AddCastToType(const SharedPtr<BaseExpr
         BoundCastFunc cast = CastFunction::GetBoundFunc(source_expr_ptr->Type(), target_type);
         return MakeShared<CastExpression>(cast, source_expr_ptr, target_type);
     } else {
-        Error<PlannerException>(Format("Can't cast from: {} to {}", source_expr_ptr->Type().ToString(), target_type.ToString()));
+        Status status = Status::NotSupportedTypeConversion(source_expr_ptr->Type().ToString(), target_type.ToString());
+        RecoverableError(status);
     }
     return nullptr;
 }
@@ -44,8 +46,10 @@ SharedPtr<BaseExpression> CastExpression::AddCastToType(const SharedPtr<BaseExpr
 bool CastExpression::CanCast(const DataType &source, const DataType &target) {
     switch (target.type()) {
         case LogicalType::kNull:
-        case LogicalType::kInvalid:
-            Error<PlannerException>("Invalid data type");
+        case LogicalType::kInvalid: {
+            String error_message = "Invalid data type";
+            UnrecoverableError(error_message);
+        }
         default:;
     }
 
@@ -55,23 +59,29 @@ bool CastExpression::CanCast(const DataType &source, const DataType &target) {
         case LogicalType::kSmallInt:
         case LogicalType::kInteger:
         case LogicalType::kBigInt:
+        case LogicalType::kFloat16:
+        case LogicalType::kBFloat16:
         case LogicalType::kFloat:
         case LogicalType::kDouble:
-        case LogicalType::kDecimal:
+        case LogicalType::kDecimal: {
             switch (target.type()) {
                 case LogicalType::kBoolean:
                 case LogicalType::kTinyInt:
                 case LogicalType::kSmallInt:
                 case LogicalType::kInteger:
                 case LogicalType::kBigInt:
+                case LogicalType::kFloat16:
+                case LogicalType::kBFloat16:
                 case LogicalType::kFloat:
                 case LogicalType::kDouble:
                 case LogicalType::kDecimal:
+                case LogicalType::kVarchar:
                     return true;
                 default:
                     return false;
             }
-        case LogicalType::kDate:
+        }
+        case LogicalType::kDate: {
             switch (target.type()) {
                 case LogicalType::kDate:
                 case LogicalType::kDateTime:
@@ -80,7 +90,8 @@ bool CastExpression::CanCast(const DataType &source, const DataType &target) {
                 default:
                     return false;
             }
-        case LogicalType::kTime:
+        }
+        case LogicalType::kTime: {
             switch (target.type()) {
                 case LogicalType::kTime:
                 case LogicalType::kVarchar:
@@ -88,7 +99,8 @@ bool CastExpression::CanCast(const DataType &source, const DataType &target) {
                 default:
                     return false;
             }
-        case LogicalType::kDateTime:
+        }
+        case LogicalType::kDateTime: {
             switch (target.type()) {
                 case LogicalType::kDate:
                 case LogicalType::kDateTime:
@@ -97,7 +109,8 @@ bool CastExpression::CanCast(const DataType &source, const DataType &target) {
                 default:
                     return false;
             }
-        case LogicalType::kInterval:
+        }
+        case LogicalType::kInterval: {
             switch (target.type()) {
                 case LogicalType::kInterval:
                 case LogicalType::kVarchar:
@@ -105,32 +118,78 @@ bool CastExpression::CanCast(const DataType &source, const DataType &target) {
                 default:
                     return false;
             }
-        case LogicalType::kVarchar:
+        }
+        case LogicalType::kVarchar: {
             switch (target.type()) {
                 case LogicalType::kBoolean:
                 case LogicalType::kTinyInt:
                 case LogicalType::kSmallInt:
                 case LogicalType::kInteger:
                 case LogicalType::kBigInt:
+                case LogicalType::kFloat16:
+                case LogicalType::kBFloat16:
                 case LogicalType::kFloat:
                 case LogicalType::kDouble:
                 case LogicalType::kDecimal:
                 case LogicalType::kDate:
                 case LogicalType::kTime:
                 case LogicalType::kDateTime:
+                case LogicalType::kTimestamp:
                 case LogicalType::kInterval:
                 case LogicalType::kVarchar:
                     return true;
                 default:
                     return false;
             }
+        }
+        case LogicalType::kEmbedding: {
+            switch (target.type()) {
+                case LogicalType::kVarchar:
+                case LogicalType::kEmbedding:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        case LogicalType::kSparse: {
+            switch (target.type()) {
+                case LogicalType::kSparse:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        case LogicalType::kArray: {
+            switch (target.type()) {
+                case LogicalType::kArray:
+                    return true;
+                default:
+                    return false;
+            }
+        }
         default: {
-            Error<PlannerException>("Invalid data type");
+            String error_message = fmt::format("Invalid cast from {} to {}", source.ToString(), target.ToString());
+            UnrecoverableError(error_message);
         }
     }
     return false;
 }
 
-String CastExpression::ToString() const { return Format("Cast({} AS {})", arguments_[0]->Name(), target_type_.ToString()); }
+String CastExpression::ToString() const { return fmt::format("Cast({} AS {})", arguments_[0]->Name(), target_type_.ToString()); }
+
+u64 CastExpression::Hash() const {
+    u64 h = 0;
+    h ^= std::hash<SizeT>()(reinterpret_cast<SizeT>(func_.function));
+    h ^= arguments_[0]->Hash();
+    return h;
+}
+
+bool CastExpression::Eq(const BaseExpression &other_base) const {
+    if (other_base.type() != ExpressionType::kCast) {
+        return false;
+    }
+    const auto &other = static_cast<const CastExpression &>(other_base);
+    return func_.function == other.func_.function && arguments_[0]->Eq(*other.arguments_[0]);
+}
 
 } // namespace infinity

@@ -14,70 +14,159 @@
 
 module;
 
-export module catalog:db_entry;
-
-import :table_meta;
-import :base_entry;
+export module db_entry;
 
 import stl;
 import table_entry_type;
-import parser;
+import table_meta;
+import base_entry;
+import table_entry;
 import third_party;
-import table_detail;
+import meta_info;
 import buffer_manager;
 import status;
+import extra_ddl_info;
+import column_def;
+import meta_map;
+import random;
+import cleanup_scanner;
+import snapshot_info;
+import txn;
 
 namespace infinity {
 
-class DBEntry : public BaseEntry {
-    friend struct NewCatalog;
+class TxnManager;
+class DBMeta;
+
+export struct DBEntry final : public BaseEntry {
+    friend struct Catalog;
 
 public:
-    inline explicit DBEntry(const SharedPtr<String> &data_dir, SharedPtr<String> db_name, u64 txn_id, TxnTimeStamp begin_ts)
-        : BaseEntry(EntryType::kDatabase), db_entry_dir_(MakeShared<String>(Format("{}/{}/txn_{}", *data_dir, *db_name, txn_id))),
-          db_name_(Move(db_name)) {
-        begin_ts_ = begin_ts;
-        txn_id_ = txn_id;
-    }
+    static Vector<std::string_view> DecodeIndex(std::string_view encode);
+
+    static String EncodeIndex(const String &db_name);
 
 public:
+    explicit DBEntry(DBMeta *db_meta,
+                     bool is_delete,
+                     const SharedPtr<String> &db_entry_dir,
+                     const SharedPtr<String> &db_name,
+                     const SharedPtr<String> &comment,
+                     TransactionID txn_id,
+                     TxnTimeStamp begin_ts);
 
+    static SharedPtr<DBEntry> NewDBEntry(DBMeta *db_meta,
+                                         bool is_delete,
+                                         const SharedPtr<String> &db_name,
+                                         const SharedPtr<String> &comment,
+                                         TransactionID txn_id,
+                                         TxnTimeStamp begin_ts);
+
+    static SharedPtr<DBEntry> ReplayDBEntry(DBMeta *db_meta,
+                                            bool is_delete,
+                                            const SharedPtr<String> &db_entry_dir,
+                                            const SharedPtr<String> &db_name,
+                                            const SharedPtr<String> &comment,
+                                            TransactionID txn_id,
+                                            TxnTimeStamp begin_ts,
+                                            TxnTimeStamp commit_ts) noexcept;
+
+public:
     SharedPtr<String> ToString();
 
-    Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
+    nlohmann::json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<DBEntry> Deserialize(const Json &db_entry_json, BufferManager *buffer_mgr);
+    static UniquePtr<DBEntry> Deserialize(const nlohmann::json &db_entry_json, DBMeta *db_meta, BufferManager *buffer_mgr);
 
-    virtual void MergeFrom(BaseEntry &other);
+    [[nodiscard]] const SharedPtr<String> &db_name_ptr() const { return db_name_; }
 
-    [[nodiscard]] const String& db_name() const { return *db_name_; }
+    [[nodiscard]] const SharedPtr<String> &db_entry_dir() const { return db_entry_dir_; }
 
-    [[nodiscard]] const SharedPtr<String>& db_name_ptr() const { return db_name_; }
+    [[nodiscard]] const SharedPtr<String> &db_comment_ptr() const { return db_comment_; }
 
-private:
+    SharedPtr<String> AbsoluteDir() const;
+
+    String GetPathNameTail() const;
+
     Tuple<TableEntry *, Status> CreateTable(TableEntryType table_entry_type,
-                                            const SharedPtr<String> &table_collection_name,
+                                            const SharedPtr<String> &table_name,
+                                            const SharedPtr<String> &table_comment,
                                             const Vector<SharedPtr<ColumnDef>> &columns,
-                                            u64 txn_id,
+                                            TransactionID txn_id,
                                             TxnTimeStamp begin_ts,
-                                            TxnManager *txn_mgr);
+                                            TxnManager *txn_mgr,
+                                            ConflictType conflict_type);
 
-    Tuple<TableEntry *, Status>
-    DropTable(const String &table_collection_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+    Tuple<SharedPtr<TableEntry>, Status>
+    DropTable(const String &table_collection_name, ConflictType conflict_type, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
 
-    Tuple<TableEntry *, Status> GetTableCollection(const String &table_name, u64 txn_id, TxnTimeStamp begin_ts);
+    Tuple<TableEntry *, Status> GetTableCollection(const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts);
 
-    void RemoveTableEntry(const String &table_collection_name, u64 txn_id, TxnManager *txn_mgr);
+    Tuple<SharedPtr<TableInfo>, Status> GetTableInfo(const String &table_name, Txn *txn);
 
-    Vector<TableEntry *> TableCollections(u64 txn_id, TxnTimeStamp begin_ts);
+    void RemoveTableEntry(const String &table_collection_name, TransactionID txn_id);
 
-    Status GetTablesDetail(u64 txn_id, TxnTimeStamp begin_ts, Vector<TableDetail> &output_table_array);
+    Status AddTable(SharedPtr<TableEntry> table_entry, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, bool add_if_found = false);
+
+    // replay
+    void CreateTableReplay(
+        const SharedPtr<String> &table_name,
+        const SharedPtr<String> &table_comment,
+        std::function<SharedPtr<TableEntry>(TableMeta *, SharedPtr<String>, SharedPtr<String>, TransactionID, TxnTimeStamp)> &&init_entry,
+        TransactionID txn_id,
+        TxnTimeStamp begin_ts);
+
+    void UpdateTableReplay(
+        const SharedPtr<String> &table_name,
+        const SharedPtr<String> &table_comment,
+        std::function<SharedPtr<TableEntry>(TableMeta *, SharedPtr<String>, SharedPtr<String>, TransactionID, TxnTimeStamp)> &&init_entry,
+        TransactionID txn_id,
+        TxnTimeStamp begin_ts);
+
+    void
+    DropTableReplay(const String &table_name,
+                    std::function<SharedPtr<TableEntry>(TableMeta *, SharedPtr<String>, SharedPtr<String>, TransactionID, TxnTimeStamp)> &&init_entry,
+                    TransactionID txn_id,
+                    TxnTimeStamp begin_ts);
+
+    TableEntry *GetTableReplay(const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    Status ApplyTableSnapshot(const SharedPtr<TableSnapshotInfo> &table_snapshot_info, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    Vector<TableEntry *> TableCollections(TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    Status GetTablesDetail(Txn *txn, Vector<TableDetail> &output_table_array);
+
+    Tuple<Vector<String>, Vector<TableMeta *>, std::shared_lock<std::shared_mutex>> GetAllTableMetas() const;
 
 private:
-    RWMutex rw_locker_{};
-    SharedPtr<String> db_entry_dir_{};
-    SharedPtr<String> db_name_{};
-    HashMap<String, UniquePtr<TableMeta>> tables_{}; // NOTE : can use SharedPtr<String> as key.
-};
+    static SharedPtr<String> DetermineDBDir(const String &db_name);
 
+    friend void RecreateSegmentSealingTasksInStorageInit(Catalog *catalog, TxnManager *txn_mgr, TxnTimeStamp system_start_ts);
+
+public:
+    DBMeta *const db_meta_;
+
+private:
+    const SharedPtr<String> db_entry_dir_{};
+    const SharedPtr<String> db_name_{};
+    const SharedPtr<String> db_comment_{};
+
+    MetaMap<TableMeta> table_meta_map_{};
+
+private: // TODO: remote it
+    std::shared_mutex &GetTableMetaLock() { return table_meta_map_.GetMetaLock(); }
+
+    //    HashMap<String, UniquePtr<TableMeta>> &table_meta_map() { return table_meta_map_.meta_map_; }
+
+public:
+    void PickCleanup(CleanupScanner *scanner) override;
+
+    Vector<String> GetFilePath(Txn* txn) const final;
+
+    void Cleanup(CleanupInfoTracer *info_tracer = nullptr, bool dropped = true) override;
+
+    void MemIndexCommit();
+    void MemIndexRecover(BufferManager *buffer_manager, TxnTimeStamp ts);
+};
 } // namespace infinity

@@ -18,21 +18,34 @@
 #include "parser_assert.h"
 #include "time_type.h"
 #include <string>
+#include <chrono>
 
 namespace infinity {
 
 struct DateTimeType {
     DateTimeType() = default;
 
-    // NOTICE: time_value is in seconds
-    explicit DateTimeType(int32_t date_value, int32_t time_value) : date(date_value), time(time_value){};
+    // time_value: seconds since 00:00:00
+    // date_value: days since 1970-01-01
+    explicit constexpr DateTimeType(int32_t date_value, int32_t time_value) : date(date_value), time(time_value) {};
+
+    // epoch_time: seconds since 1970-01-01 00:00:00
+    explicit constexpr DateTimeType(int64_t epoch_time) {
+        constexpr int64_t TotalSecondsInDay = 24 * 60 * 60;
+        int64_t seconds = epoch_time % TotalSecondsInDay;
+        if (seconds < 0) {
+            seconds += TotalSecondsInDay;
+        }
+        date = DateType(static_cast<int32_t>((epoch_time - seconds) / TotalSecondsInDay));
+        time = TimeType(static_cast<int32_t>(seconds));
+    }
 
     inline void Reset() {
         date = {};
         time = {};
     }
 
-    inline void FromString(const std::string &datetime_str) { FromString(datetime_str.c_str(), datetime_str.length()); }
+    inline void FromString(const std::string_view &datetime_str) { FromString(datetime_str.data(), datetime_str.size()); }
 
     // NOTICE: datetime is in format "YYYY-MM-DD HH:MM:SS"
     void FromString(const char *datetime_ptr, size_t length);
@@ -63,7 +76,9 @@ struct DateTimeType {
 
     static int64_t GetDateTimePart(DateTimeType input, TimeUnit unit);
 
-    static int64_t GetEpochTime(const DateTimeType &dt);
+    int64_t GetEpochTime() const;
+
+    static bool OuterDateTime2YMD(int32_t days, std::chrono::year_month_day &ymd);
 
 private:
     static bool YMDHMS2DateTime(int32_t year, int32_t month, int32_t day, int32_t hour, int32_t minute, int32_t second, DateTimeType &datetime);
@@ -74,7 +89,6 @@ private:
     static bool IsDateTimeValid(int32_t year, int32_t month, int32_t day, int32_t hour, int32_t minute, int32_t second);
 
 public:
-    // used in iresearch, need to be public
     DateType date{};
     TimeType time{};
 };

@@ -14,28 +14,30 @@
 
 module;
 
+export module logical_import;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
 
-export module logical_import;
+import internal_types;
+import statement_common;
+import data_type;
+import meta_info;
 
 namespace infinity {
-
-struct TableEntry;
 
 export class LogicalImport : public LogicalNode {
 public:
     explicit inline LogicalImport(u64 node_id,
-                                  TableEntry *table_entry,
+                                  const SharedPtr<TableInfo> &table_info,
                                   String file_path,
                                   bool header,
                                   char delimiter,
                                   CopyFileType type)
-        : LogicalNode(node_id, LogicalNodeType::kImport), table_entry_(table_entry), file_type_(type),
-          file_path_(Move(file_path)), header_(header), delimiter_(delimiter) {}
+        : LogicalNode(node_id, LogicalNodeType::kImport), table_info_(table_info), file_type_(type), file_path_(std::move(file_path)),
+          header_(header), delimiter_(delimiter) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 
@@ -47,9 +49,7 @@ public:
 
     inline String name() final { return "LogicalImport"; }
 
-    inline const TableEntry *table_entry() const { return table_entry_; }
-
-    inline TableEntry *table_entry() { return table_entry_; }
+    [[nodiscard]] inline const SharedPtr<TableInfo> table_info() const { return table_info_; }
 
     [[nodiscard]] inline CopyFileType FileType() const { return file_type_; }
 
@@ -60,8 +60,8 @@ public:
     [[nodiscard]] char delimiter() const { return delimiter_; }
 
 private:
-    TableEntry *table_entry_{};
-    CopyFileType file_type_{CopyFileType::kCSV};
+    SharedPtr<TableInfo> table_info_{};
+    CopyFileType file_type_{CopyFileType::kInvalid};
     String file_path_{};
     bool header_{false};
     char delimiter_{','};

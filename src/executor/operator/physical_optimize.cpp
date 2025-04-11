@@ -16,63 +16,101 @@ module;
 
 #include <tuple>
 
+module physical_optimize;
+
 import stl;
 import txn;
 import query_context;
-import parser;
+
 import operator_state;
 import infinity_exception;
 import table_def;
 import third_party;
 import status;
 import logger;
-import iresearch_datastore;
 import base_table_ref;
-import catalog;
+import table_index_meta;
+import table_entry;
 
-module physical_optimize;
+import wal_manager;
+import infinity_context;
+import new_txn;
 
 namespace infinity {
 
-void PhysicalOptimize::Init() {}
+void PhysicalOptimize::Init(QueryContext *query_context) {}
 
 bool PhysicalOptimize::Execute(QueryContext *query_context, OperatorState *operator_state) {
-    switch (optimize_type_) {
-        case OptimizeType::kIRS: {
-            OptimizeIndex(query_context, operator_state);
-            break;
-        }
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
     }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
+    if (index_name_.empty()) {
+        OptimizeIndex(query_context, operator_state);
+    } else {
+        OptIndex(query_context, operator_state);
+    }
+
     operator_state->SetComplete();
     return true;
 }
 
 void PhysicalOptimize::OptimizeIndex(QueryContext *query_context, OperatorState *operator_state) {
     // Get tables from catalog
-    auto txn = query_context->GetTxn();
-    u64 txn_id = txn->TxnID();
-    LOG_INFO(Format("OptimizeIndex {} {}", db_name_, object_name_));
-    TxnTimeStamp begin_ts = query_context->GetTxn()->BeginTS();
-    auto [table_entry, table_status] = txn->GetTableByName(db_name_, object_name_);
-    if (!table_status.ok()) {
-        operator_state->error_message_ = Move(table_status.msg_);
-        Error<ExecutorException>(Format("{} isn't found", object_name_));
+    LOG_INFO(fmt::format("OptimizeIndex {}.{} begin", db_name_, table_name_));
+
+    bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+    if (use_new_catalog) {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        Status status = new_txn->OptimizeTableIndexes(db_name_, table_name_);
+        if (!status.ok()) {
+            operator_state->status_ = status;
+            RecoverableError(status);
+            return;
+        }
         return;
     }
 
-    SharedPtr<IrsIndexEntry> irs_index_entry;
-    for (auto &[index_name, table_index_meta] : table_entry->index_meta_map()) {
-        auto [table_index_entry, index_status] = table_index_meta->GetEntry(txn_id, begin_ts);
-        if (!index_status.ok()) {
-            Error<StorageException>("Cannot find index entry.");
+    auto txn = query_context->GetTxn();
+    Status status = txn->OptimizeTableIndexes(db_name_, table_name_);
+    if (!status.ok()) {
+        operator_state->status_ = status;
+        RecoverableError(status);
+        return;
+    }
+    LOG_INFO(fmt::format("OptimizeIndex {}.{} end", db_name_, table_name_));
+}
+
+void PhysicalOptimize::OptIndex(QueryContext *query_context, OperatorState *operator_state) {
+    LOG_INFO(fmt::format("OptimizeIndex {}.{}::{} begin", db_name_, table_name_, index_name_));
+
+    bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+    if (use_new_catalog) {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        Status status = new_txn->OptimizeIndexByParams(db_name_, table_name_, index_name_, std::move(opt_params_));
+        if (!status.ok()) {
+            operator_state->status_ = status;
+            RecoverableError(status);
+            return;
         }
-        irs_index_entry = table_index_entry->irs_index_entry();
+        return;
     }
-    if (irs_index_entry) {
-        LOG_INFO(Format("ScheduleOptimize"));
-        irs_index_entry->irs_index_->ScheduleOptimize();
+
+    auto txn = query_context->GetTxn();
+    Status status = txn->OptimizeIndexByName(db_name_, table_name_, index_name_, std::move(opt_params_));
+    if (!status.ok()) {
+        operator_state->status_ = status;
+        RecoverableError(status);
+        return;
     }
-    LOG_TRACE("Optimize index");
+    LOG_INFO(fmt::format("OptimizeIndex {}.{}::{} end", db_name_, table_name_, index_name_));
 }
 
 } // namespace infinity

@@ -10,15 +10,11 @@
  * QUERY('_exists_:"author" AND page_count:>200 AND (name:/star./ OR name:duna~)')
  * QUERY('dune god', 'default_operator=and;default_field=name');
  */
-#include "expr.h"
+#include "parsed_expr.h"
 
 #include <memory>
 #include <string>
 #include <utility>
-
-namespace irs {
-class filter;
-} // namespace irs
 
 namespace infinity {
 
@@ -33,9 +29,11 @@ public:
     [[nodiscard]] std::string ToString() const override;
 
 public:
+    std::string index_names_;
     std::string fields_;
     std::string matching_text_;
     std::string options_text_;
+    std::unique_ptr<ParsedExpr> filter_expr_;
 };
 
 } // namespace infinity

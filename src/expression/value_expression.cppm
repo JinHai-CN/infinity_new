@@ -16,11 +16,13 @@ module;
 
 import base_expression;
 import bound_select_statement;
-import parser;
+
 import column_vector;
 import expression_type;
 import value;
 import stl;
+import internal_types;
+import data_type;
 
 export module value_expression;
 
@@ -28,7 +30,7 @@ namespace infinity {
 
 export class ValueExpression : public BaseExpression {
 public:
-    explicit ValueExpression(Value value) : BaseExpression(ExpressionType::kValue, {}), value_(Move(value)) {}
+    explicit ValueExpression(Value value) : BaseExpression(ExpressionType::kValue, {}), value_(std::move(value)) {}
 
     String ToString() const override;
 
@@ -37,6 +39,10 @@ public:
     inline void AppendToChunk(SharedPtr<ColumnVector> &column_vector) { column_vector->AppendValue(value_); }
 
     const Value &GetValue() const { return value_; }
+
+    u64 Hash() const override;
+
+    bool Eq(const BaseExpression &other) const override;
 
 private:
     Value value_;

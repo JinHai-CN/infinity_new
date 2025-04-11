@@ -14,25 +14,27 @@
 
 module;
 
-#include <cmath>
+module add;
 
 import stl;
 import catalog;
-
+import status;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
+import logger;
 import third_party;
-
-module add;
+import logical_type;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
 struct AddFunction {
     template <typename TA, typename TB, typename TC>
     static inline bool Run(TA, TB, TC &) {
-        Error<NotImplementException>("Not implemented");
+        Status status = Status::NotSupport("Not implemented");
+        RecoverableError(status);
     }
 };
 
@@ -75,8 +77,29 @@ inline bool AddFunction::Run(BigIntT left, BigIntT right, BigIntT &result) {
 // HugeIntT + HugeIntT = HugeIntT, and check overflow
 template <>
 inline bool AddFunction::Run(HugeIntT, HugeIntT, HugeIntT &) {
-    Error<NotImplementException>("Not implemented: HugeIntT + HugeIntT = HugeIntT");
+    Status status = Status::NotSupport("Not implemented");
+    RecoverableError(status);
     return false;
+}
+
+// Float16T + Float16T = Float16T, and check overflow
+template <>
+inline bool AddFunction::Run(Float16T left, Float16T right, Float16T &result) {
+    result = left + right;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
+}
+
+// BFloat16T + BFloat16T = BFloat16T, and check overflow
+template <>
+inline bool AddFunction::Run(BFloat16T left, BFloat16T right, BFloat16T &result) {
+    result = left + right;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
 }
 
 // FloatT + FloatT = FloatT, and check overflow
@@ -102,7 +125,8 @@ inline bool AddFunction::Run(DoubleT left, DoubleT right, DoubleT &result) {
 // Decimal + Decimal = Decimal
 template <>
 inline bool AddFunction::Run(DecimalT, DecimalT, DecimalT &) {
-    Error<NotImplementException>("Not implemented: Decimal + Decimal");
+    Status status = Status::NotSupport("Not implemented");
+    RecoverableError(status);
     return false;
 }
 
@@ -157,7 +181,8 @@ inline bool AddFunction::Run(IntervalT left, TimestampT right, TimestampT &resul
 // Mixed Type + i64
 template <>
 inline bool AddFunction::Run(MixedT, BigIntT, MixedT &) {
-    Error<NotImplementException>("Not implemented: MixedT + BigIntT");
+    Status status = Status::NotSupport("Not implemented");
+    RecoverableError(status);
     return false;
 }
 
@@ -170,7 +195,8 @@ inline bool AddFunction::Run(BigIntT left, MixedT right, MixedT &result) {
 // Mixed Type + f64
 template <>
 inline bool AddFunction::Run(MixedT, DoubleT, MixedT &) {
-    Error<NotImplementException>("Not implemented: MixedT + DoubleT");
+    Status status = Status::NotSupport("Not implemented");
+    RecoverableError(status);
     return false;
 }
 
@@ -183,11 +209,12 @@ inline bool AddFunction::Run(DoubleT left, MixedT right, MixedT &result) {
 // Mixed Type + Mixed Type
 template <>
 inline bool AddFunction::Run(MixedT, MixedT, MixedT &) {
-    Error<NotImplementException>("Not implemented: MixedT + MixedT");
+    Status status = Status::NotSupport("Not implemented");
+    RecoverableError(status);
     return false;
 }
 
-void RegisterAddFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterAddFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "+";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -222,6 +249,18 @@ void RegisterAddFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                        {DataType(LogicalType::kHugeInt)},
                                        &ScalarFunction::BinaryFunctionWithFailure<HugeIntT, HugeIntT, HugeIntT, AddFunction>);
     function_set_ptr->AddFunction(add_function_int128);
+
+    ScalarFunction add_function_float16(func_name,
+                                        {DataType(LogicalType::kFloat16), DataType(LogicalType::kFloat16)},
+                                        {DataType(LogicalType::kFloat16)},
+                                        &ScalarFunction::BinaryFunctionWithFailure<Float16T, Float16T, Float16T, AddFunction>);
+    function_set_ptr->AddFunction(add_function_float16);
+
+    ScalarFunction add_function_bfloat16(func_name,
+                                         {DataType(LogicalType::kBFloat16), DataType(LogicalType::kBFloat16)},
+                                         {DataType(LogicalType::kBFloat16)},
+                                         &ScalarFunction::BinaryFunctionWithFailure<BFloat16T, BFloat16T, BFloat16T, AddFunction>);
+    function_set_ptr->AddFunction(add_function_bfloat16);
 
     ScalarFunction add_function_float(func_name,
                                       {DataType(LogicalType::kFloat), DataType(LogicalType::kFloat)},
@@ -319,7 +358,7 @@ void RegisterAddFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                             &ScalarFunction::BinaryFunctionWithFailure<MixedT, MixedT, MixedT, AddFunction>);
     function_set_ptr->AddFunction(add_function_mixed_mixed);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

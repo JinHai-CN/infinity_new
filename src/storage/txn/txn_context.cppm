@@ -1,4 +1,4 @@
-// Copyright(C) 2023 InfiniFlow, Inc. All rights reserved.
+// Copyright(C) 2024 InfiniFlow, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,84 +14,32 @@
 
 module;
 
+export module txn_context;
+
 import stl;
 import txn_state;
 
-import infinity_exception;
-
-export module txn_context;
-
 namespace infinity {
 
-class Txn;
+export struct TxnContext {
+    // This struct is used to store the operation history of a transaction. This history can be used for debugging purposes.
+    static UniquePtr<TxnContext> Make() { return MakeUnique<TxnContext>(); }
 
-export class TxnContext {
-public:
-    friend class Txn;
+    void AddOperation(const SharedPtr<String> &operation_text) { operations_.push_back(operation_text); }
+    Vector<SharedPtr<String>> GetOperations() const { return operations_; }
+    String ToString();
 
-    inline void BeginCommit(TxnTimeStamp begin_ts) {
-        UniqueLock<RWMutex> w_locker(rw_locker_);
-        if (state_ != TxnState::kNotStarted) {
-            Error<StorageException>("Transaction isn't in NOT_STARTED status.");
-        }
-        begin_ts_ = begin_ts;
-        state_ = TxnState::kStarted;
-    }
-
-    inline TxnTimeStamp GetBeginTS() {
-        SharedLock<RWMutex> r_locker(rw_locker_);
-        return begin_ts_;
-    }
-
-    inline TxnTimeStamp GetCommitTS() {
-        SharedLock<RWMutex> r_locker(rw_locker_);
-        return commit_ts_;
-    }
-
-    inline TxnState GetTxnState() {
-        SharedLock<RWMutex> r_locker(rw_locker_);
-        return state_;
-    }
-
-    inline void SetTxnRollbacking(TxnTimeStamp rollback_ts) {
-        UniqueLock<RWMutex> w_locker(rw_locker_);
-        if (state_ != TxnState::kStarted) {
-            Error<StorageException>("Transaction isn't in STARTED status.");
-        }
-        state_ = TxnState::kRollbacking;
-        commit_ts_ = rollback_ts;
-    }
-
-    inline void SetTxnRollbacked() {
-        UniqueLock<RWMutex> w_locker(rw_locker_);
-        if (state_ != TxnState::kRollbacking && state_!= TxnState::kCommitting) {
-            Error<StorageException>("Transaction isn't in ROLLBACKING status.");
-        }
-        state_ = TxnState::kRollbacked;
-    }
-
-    inline void SetTxnCommitted() {
-        UniqueLock<RWMutex> w_locker(rw_locker_);
-        if (state_ != TxnState::kCommitting) {
-            Error<StorageException>("Transaction isn't in COMMITTING status.");
-        }
-        state_ = TxnState::kCommitted;
-    }
-
-    inline void SetTxnCommitting(TxnTimeStamp commit_ts) {
-        UniqueLock<RWMutex> w_locker(rw_locker_);
-        if (state_ != TxnState::kStarted) {
-            Error<StorageException>("Transaction isn't in STARTED status.");
-        }
-        state_ = TxnState::kCommitting;
-        commit_ts_ = commit_ts;
-    }
-
-private:
-    RWMutex rw_locker_{};
+    TransactionID txn_id_{};
     TxnTimeStamp begin_ts_{};
     TxnTimeStamp commit_ts_{};
-    TxnState state_{TxnState::kNotStarted};
+    TxnState state_{TxnState::kStarted};
+    TransactionType txn_type_{TransactionType::kRead};
+
+    bool is_write_transaction_{false};
+    bool replay_{false};
+
+    SharedPtr<String> text_{};
+    Vector<SharedPtr<String>> operations_;
 };
 
 } // namespace infinity

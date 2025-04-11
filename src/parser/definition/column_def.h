@@ -14,14 +14,21 @@
 
 #pragma once
 
-#include "definition/column_def.h"
-#include "type/data_type.h"
+// #include "type/data_type.h"
+#include "expr/constant_expr.h"
+#include "expr/parsed_expr.h"
 #include "type/logical_type.h"
+#include "type/type_info.h"
 
+#include <memory>
+#include <set>
 #include <string>
-#include <unordered_set>
+#include <vector>
 
 namespace infinity {
+
+class DataType;
+struct InitParameter;
 
 enum class TableElementType {
     kConstraint,
@@ -33,9 +40,11 @@ enum class ConstraintType : char {
     kNotNull,
     kPrimaryKey,
     kUnique,
+    kInvalid,
 };
 
 std::string ConstrainTypeToString(ConstraintType type);
+ConstraintType StringToConstraintType(const std::string &type);
 
 class TableElement {
 public:
@@ -50,6 +59,11 @@ struct ColumnType {
     int64_t precision;
     int64_t scale;
     EmbeddingDataType embedding_type_;
+    std::vector<std::unique_ptr<ColumnType>> element_types_;
+    ColumnType(LogicalType logical_type, int64_t width, int64_t precision, int64_t scale, EmbeddingDataType embedding_type)
+        : logical_type_(logical_type), width(width), precision(precision), scale(scale), embedding_type_(embedding_type) {}
+    static std::pair<std::shared_ptr<DataType>, std::string>
+    GetDataTypeFromColumnType(const ColumnType &column_type, const std::vector<std::unique_ptr<InitParameter>> &index_param_list);
 };
 
 class TableConstraint : public TableElement {
@@ -69,27 +83,61 @@ public:
 
 class ColumnDef : public TableElement {
 public:
-    ColumnDef(int64_t id, std::shared_ptr<DataType> column_type, std::string column_name, std::unordered_set<ConstraintType> constraints)
-        : TableElement(TableElementType::kColumn), id_(id), column_type_(std::move(column_type)), name_(std::move(column_name)),
-          constraints_(std::move(constraints)) {}
+    ColumnDef(int64_t id,
+              std::shared_ptr<DataType> column_type,
+              std::string column_name,
+              std::set<ConstraintType> constraints,
+              std::string comment,
+              std::shared_ptr<ParsedExpr> default_expr = nullptr);
 
-    ColumnDef(LogicalType logical_type, const std::shared_ptr<TypeInfo> &type_info_ptr)
-        : TableElement(TableElementType::kColumn), column_type_(std::make_shared<DataType>(logical_type, std::move(type_info_ptr))) {}
+    ColumnDef(int64_t id,
+              std::shared_ptr<DataType> column_type,
+              std::string column_name,
+              std::set<ConstraintType> constraints,
+              std::shared_ptr<ParsedExpr> default_expr = nullptr);
+
+    ColumnDef(std::shared_ptr<DataType> column_type, std::string comment, std::shared_ptr<ParsedExpr> default_expr = nullptr);
+
+    explicit ColumnDef(std::shared_ptr<DataType> column_type, std::shared_ptr<ParsedExpr> default_expr = nullptr);
 
     inline ~ColumnDef() override = default;
+
+    bool operator==(const ColumnDef &other) const;
+
+    int32_t GetSizeInBytes() const;
+
+    void WriteAdv(char *&ptr) const;
+
+    static std::shared_ptr<ColumnDef> ReadAdv(const char *&ptr, int32_t maxbytes);
 
     std::string ToString() const;
 
     inline const std::string &name() const { return name_; }
 
+    inline const std::string &comment() const { return comment_; }
+
     [[nodiscard]] inline int64_t id() const { return id_; }
 
     inline const std::shared_ptr<DataType> &type() const { return column_type_; }
+
+    inline bool has_default_value() const {
+        auto const_expr = std::dynamic_pointer_cast<ConstantExpr>(default_expr_);
+        return const_expr != nullptr && const_expr->literal_type_ != LiteralType::kNull;
+    }
+
+    const std::shared_ptr<ConstantExpr> default_value() const { return std::dynamic_pointer_cast<ConstantExpr>(default_expr_); }
+
+    nlohmann::json ToJson() const;
+    static std::shared_ptr<ColumnDef> FromJson(const nlohmann::json &json);
 
 public:
     int64_t id_{-1};
     const std::shared_ptr<DataType> column_type_{};
     std::string name_{};
-    std::unordered_set<ConstraintType> constraints_{};
+    std::set<ConstraintType> constraints_{};
+    std::string comment_{};
+    std::shared_ptr<ParsedExpr> default_expr_{nullptr};
+    bool build_bloom_filter_{};
 };
+
 } // namespace infinity

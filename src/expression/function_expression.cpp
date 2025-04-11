@@ -17,7 +17,7 @@ module;
 #include <sstream>
 import stl;
 import expression_type;
-import parser;
+
 import scalar_function;
 
 module function_expression;
@@ -25,7 +25,11 @@ module function_expression;
 namespace infinity {
 
 FunctionExpression::FunctionExpression(ScalarFunction function, Vector<SharedPtr<BaseExpression>> arguments)
-    : BaseExpression(ExpressionType::kFunction, Move(arguments)), func_(Move(function)) {}
+    : BaseExpression(ExpressionType::kFunction, std::move(arguments)), func_(std::move(function)) {
+    if(arguments_.size() == 0) {
+        nullary_ = true;
+    }
+}
 
 String FunctionExpression::ToString() const {
     if (!alias_.empty()) {
@@ -56,6 +60,35 @@ String FunctionExpression::ToString() const {
         ss << arguments_.back()->Name() << ")";
     }
     return ss.str();
+}
+
+u64 FunctionExpression::Hash() const {
+    u64 h = 0;
+
+    h ^= func_.Hash();
+    for (const auto &arg : arguments_) {
+        h ^= arg->Hash();
+    }
+    return h;
+}
+
+bool FunctionExpression::Eq(const BaseExpression &other_base) const {
+    if (other_base.type() != ExpressionType::kFunction) {
+        return false;
+    }
+    const auto &other = static_cast<const FunctionExpression &>(other_base);
+    if (!func_.Eq(other.func_)) {
+        return false;
+    }
+    if (arguments_.size() != other.arguments_.size()) {
+        return false;
+    }
+    for (SizeT i = 0; i < arguments_.size(); ++i) {
+        if (!arguments_[i]->Eq(*other.arguments_[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace infinity

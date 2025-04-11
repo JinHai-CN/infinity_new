@@ -19,7 +19,7 @@ import stl;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+
 import operator_state;
 import expression_evaluator;
 import expression_state;
@@ -27,12 +27,14 @@ import data_block;
 import column_vector;
 
 import infinity_exception;
+import analyzer_pool;
+import value;
 
 module physical_project;
 
 namespace infinity {
 
-void PhysicalProject::Init() {
+void PhysicalProject::Init(QueryContext* query_context) {
     //    executor.Init(expressions_);
     //
     //    Vector<SharedPtr<ColumnDef>> columns;
@@ -47,19 +49,14 @@ void PhysicalProject::Init() {
 }
 
 bool PhysicalProject::Execute(QueryContext *, OperatorState *operator_state) {
-    OperatorState* prev_op_state = operator_state->prev_op_state_;
     auto *project_operator_state = static_cast<ProjectionOperatorState *>(operator_state);
-
-    SizeT input_block_count = prev_op_state->data_block_array_.size();
-    for(SizeT block_idx = 0; block_idx < input_block_count; ++ block_idx) {
-        DataBlock* input_data_block = prev_op_state->data_block_array_[block_idx].get();
-
+    if (project_operator_state->empty_source_) {
         project_operator_state->data_block_array_.emplace_back(DataBlock::MakeUniquePtr());
-        DataBlock* output_data_block = project_operator_state->data_block_array_.back().get();
+        DataBlock *output_data_block = project_operator_state->data_block_array_.back().get();
         output_data_block->Init(*GetOutputTypes());
 
         ExpressionEvaluator evaluator;
-        evaluator.Init(input_data_block);
+        evaluator.Init(nullptr);
 
         SizeT expression_count = expressions_.size();
 
@@ -78,19 +75,86 @@ bool PhysicalProject::Execute(QueryContext *, OperatorState *operator_state) {
             evaluator.Execute(expressions_[expr_idx], expr_states[expr_idx], output_data_block->column_vectors[expr_idx]);
         }
         output_data_block->Finalize();
-    }
-
-
-//    if (prev_op_state->Complete() && !prev_op_state->data_block_->Finalized()) {
-//        project_operator_state->data_block_->Finalize();
-//        project_operator_state->SetComplete();
-//        return ;
-//    }
-
-    prev_op_state->data_block_array_.clear();
-    if (prev_op_state->Complete()) {
         project_operator_state->SetComplete();
+    } else {
+        OperatorState *prev_op_state = operator_state->prev_op_state_;
+
+        SizeT input_block_count = prev_op_state->data_block_array_.size();
+        for (SizeT block_idx = 0; block_idx < input_block_count; ++block_idx) {
+            DataBlock *input_data_block = prev_op_state->data_block_array_[block_idx].get();
+
+            project_operator_state->data_block_array_.emplace_back(DataBlock::MakeUniquePtr());
+            DataBlock *output_data_block = project_operator_state->data_block_array_.back().get();
+            output_data_block->Init(*GetOutputTypes());
+
+            ExpressionEvaluator evaluator;
+            evaluator.Init(input_data_block);
+
+            SizeT expression_count = expressions_.size();
+
+            // Prepare the expression states
+            Vector<SharedPtr<ExpressionState>> expr_states;
+            expr_states.reserve(expression_count);
+
+            for (const auto &expr : expressions_) {
+                // expression state
+                expr_states.emplace_back(ExpressionState::CreateState(expr));
+            }
+
+            for (SizeT expr_idx = 0; expr_idx < expression_count; ++expr_idx) {
+                evaluator.Execute(expressions_[expr_idx], expr_states[expr_idx], output_data_block->column_vectors[expr_idx]);
+
+                auto it = highlight_columns_.find(expr_idx);
+                if (it != highlight_columns_.end()) {
+                    SizeT num_rows = output_data_block->column_vectors[expr_idx]->Size();
+                    SharedPtr<ColumnVector> highlight_column = ColumnVector::Make(output_data_block->column_vectors[expr_idx]->data_type());
+                    highlight_column->Initialize(ColumnVectorType::kFlat, num_rows);
+
+                    SharedPtr<HighlightInfo> highlight_info = it->second;
+                    Vector<String> &query_terms = highlight_info->query_terms_;
+                    String &analyzer_name = highlight_info->analyzer_;
+                    if (analyzer_name.find("standard") != std::string::npos) {
+                        auto [analyzer, status] = AnalyzerPool::instance().GetAnalyzer(analyzer_name);
+                        if (!status.ok()) {
+                            RecoverableError(status);
+                        }
+                        analyzer->SetCharOffset(true);
+                        for (SizeT i = 0; i < num_rows; ++i) {
+                            String raw_content = output_data_block->column_vectors[expr_idx]->GetValue(i).GetVarchar();
+                            String output;
+                            Highlighter::instance().GetHighlightWithStemmer(query_terms, raw_content, output, analyzer.get());
+                            highlight_column->AppendValue(Value::MakeVarchar(output));
+                        }
+                    } else {
+                        for (SizeT i = 0; i < num_rows; ++i) {
+                            String raw_content = output_data_block->column_vectors[expr_idx]->GetValue(i).GetVarchar();
+                            String output;
+                            Highlighter::instance().GetHighlightWithoutStemmer(query_terms, raw_content, output);
+                            highlight_column->AppendValue(Value::MakeVarchar(output));
+                        }
+                    }
+                    output_data_block->column_vectors[expr_idx] = std::move(highlight_column);
+                }
+            }
+            output_data_block->Finalize();
+        }
+
+        //    if (prev_op_state->Complete() && !prev_op_state->data_block_->Finalized()) {
+        //        project_operator_state->data_block_->Finalize();
+        //        project_operator_state->SetComplete();
+        //        return ;
+        //    }
+
+        prev_op_state->data_block_array_.clear();
+        if (prev_op_state->Complete()) {
+            if (prev_op_state->total_hits_count_flag_) {
+                project_operator_state->total_hits_count_flag_ = true;
+                project_operator_state->total_hits_count_ = prev_op_state->total_hits_count_;
+            }
+            project_operator_state->SetComplete();
+        }
     }
+
     return true;
 }
 

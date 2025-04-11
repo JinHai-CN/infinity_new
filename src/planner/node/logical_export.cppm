@@ -14,21 +14,38 @@
 
 module;
 
+export module logical_export;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
-
-export module logical_export;
+import data_type;
+import internal_types;
+import statement_common;
+import meta_info;
 
 namespace infinity {
 
+struct BlockIndex;
+
 export class LogicalExport : public LogicalNode {
 public:
-    explicit LogicalExport(u64 node_id, String schema_name, String table_name, String file_path, bool header, char delimiter, CopyFileType type)
-        : LogicalNode(node_id, LogicalNodeType::kExport), schema_name_(Move(schema_name)), table_name_(Move(table_name)),
-          file_path_(Move(file_path)), header_(header), delimiter_(delimiter), file_type_(type) {}
+    explicit LogicalExport(u64 node_id,
+                           const SharedPtr<TableInfo> &table_info,
+                           String schema_name,
+                           String table_name,
+                           String file_path,
+                           bool header,
+                           char delimiter,
+                           CopyFileType type,
+                           SizeT offset,
+                           SizeT limit,
+                           SizeT row_limit,
+                           Vector<u64> column_idx_array,
+                           SharedPtr<BlockIndex> block_index);
+
+    ~LogicalExport() override;
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 
@@ -39,6 +56,10 @@ public:
     String ToString(i64 &space) const final;
 
     inline String name() final { return "LogicalExport"; }
+
+    const SharedPtr<TableInfo> &table_info() const { return table_info_; }
+
+    SharedPtr<TableInfo> table_info() { return table_info_; }
 
     [[nodiscard]] CopyFileType FileType() const { return file_type_; }
 
@@ -52,13 +73,30 @@ public:
 
     [[nodiscard]] char delimiter() const { return delimiter_; }
 
+    [[nodiscard]] SizeT offset() const { return offset_; }
+
+    [[nodiscard]] SizeT limit() const { return limit_; }
+
+    [[nodiscard]] SizeT row_limit() const { return row_limit_; }
+
+    [[nodiscard]] const Vector<u64> &column_idx_array() const { return column_idx_array_; }
+
+    [[nodiscard]] SharedPtr<BlockIndex> block_index() const { return block_index_; }
+
 private:
-    String schema_name_{"default"};
+    SharedPtr<TableInfo> table_info_{};
+
+    String schema_name_{"default_db"};
     String table_name_{};
     String file_path_{};
     bool header_{false};
     char delimiter_{','};
-    CopyFileType file_type_{CopyFileType::kCSV};
+    CopyFileType file_type_{CopyFileType::kInvalid};
+    SizeT offset_{};
+    SizeT limit_{};
+    SizeT row_limit_{};
+    Vector<u64> column_idx_array_;
+    SharedPtr<BlockIndex> block_index_{};
 };
 
 } // namespace infinity

@@ -19,13 +19,15 @@ module;
 import infinity_exception;
 import stl;
 import expression_type;
+import logger;
 
 module in_expression;
 
 namespace infinity {
 
-InExpression::InExpression(InType in_type, SharedPtr<BaseExpression> left_operand, const Vector<SharedPtr<BaseExpression>> &value_list)
-    : BaseExpression(ExpressionType::kIn, value_list), left_operand_ptr_(Move(left_operand)), in_type_(in_type) {}
+InExpression::InExpression(InType in_type, SharedPtr<BaseExpression> left_operand, Vector<SharedPtr<BaseExpression>> arguments)
+    : BaseExpression(ExpressionType::kIn, arguments), left_operand_ptr_(std::move(left_operand)), in_type_(in_type),
+      set_(left_operand_ptr_->Type().type()) {}
 
 String InExpression::ToString() const {
 
@@ -43,7 +45,9 @@ String InExpression::ToString() const {
             break;
         }
         default: {
-            Error<PlannerException>("Unknown In operator type.");
+            String error_message = "Unknown IN operator type.";
+            UnrecoverableError(error_message);
+            break;
         }
     }
 
@@ -56,6 +60,39 @@ String InExpression::ToString() const {
     op << ")" << std::endl;
 
     return op.str();
+}
+
+u64 InExpression::Hash() const {
+    auto h = left_operand_ptr_->Hash();
+    for (const auto &arg : arguments_) {
+        h ^= arg->Hash();
+    }
+    if (in_type_ != InType::kIn) {
+        h ^= 0x1;
+    }
+    return h;
+}
+
+bool InExpression::Eq(const BaseExpression &other_base) const {
+    if (other_base.type() != ExpressionType::kIn) {
+        return false;
+    }
+    const auto &other = static_cast<const InExpression &>(other_base);
+    if (in_type_ != other.in_type_) {
+        return false;
+    }
+    if (!left_operand_ptr_->Eq(*other.left_operand_ptr_)) {
+        return false;
+    }
+    if (arguments_.size() != other.arguments_.size()) {
+        return false;
+    }
+    for (SizeT i = 0; i < arguments_.size(); ++i) {
+        if (!arguments_[i]->Eq(*other.arguments_[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace infinity

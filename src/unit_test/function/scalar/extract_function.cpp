@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
-#include <iomanip>
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -35,19 +35,25 @@ import default_values;
 import data_block;
 import base_expression;
 import column_vector;
+import logical_type;
+import internal_types;
+import data_type;
 
-class ExtractFunctionTest : public BaseTest {};
+using namespace infinity;
+class ExtractFunctionTest : public BaseTestParamStr {};
 
-TEST_F(ExtractFunctionTest, extract_year_test) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, ExtractFunctionTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(ExtractFunctionTest, extract_year_test) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterExtractFunction(catalog_ptr);
 
     {
         String op = "extract_year";
-        SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+        SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
         EXPECT_EQ(function_set->type_, FunctionType::kScalar);
         SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -63,12 +69,12 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             DateT date_value;
             std::stringstream ss;
             ss << i + 1 << "-1-1";
@@ -77,7 +83,7 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         }
         data_block.Finalize();
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             Value v = data_block.GetValue(0, i);
             EXPECT_EQ(v.type_.type(), LogicalType::kDate);
             std::stringstream ss;
@@ -90,7 +96,7 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         result->Initialize();
         func.function_(data_block, result);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             Value v = result->GetValue(i);
             EXPECT_EQ(v.type_.type(), LogicalType::kBigInt);
             EXPECT_EQ(v.value_.big_int, i + 1);
@@ -99,7 +105,7 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
 
     {
         String op = "extract_month";
-        SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+        SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
         EXPECT_EQ(function_set->type_, FunctionType::kScalar);
         SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -115,12 +121,12 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             DateT date_value;
             std::stringstream ss;
             ss << i + 1 << "-" << i % 12 + 1 << "-1";
@@ -134,7 +140,7 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         result->Initialize();
         func.function_(data_block, result);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             Value v = result->GetValue(i);
             EXPECT_EQ(v.type_.type(), LogicalType::kBigInt);
             EXPECT_EQ(v.value_.big_int, i % 12 + 1);
@@ -143,7 +149,7 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
 
     {
         String op = "extract_day";
-        SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+        SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
         EXPECT_EQ(function_set->type_, FunctionType::kScalar);
         SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -159,12 +165,12 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         Vector<SharedPtr<DataType>> column_types;
         column_types.emplace_back(data_type);
 
-        SizeT row_count = DEFAULT_VECTOR_SIZE;
+        i64 row_count = DEFAULT_VECTOR_SIZE;
 
         DataBlock data_block;
         data_block.Init(column_types);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             DateT date_value;
             std::stringstream ss;
             ss << "1-1"
@@ -179,7 +185,7 @@ TEST_F(ExtractFunctionTest, extract_year_test) {
         result->Initialize();
         func.function_(data_block, result);
 
-        for (SizeT i = 0; i < row_count; ++i) {
+        for (i64 i = 0; i < row_count; ++i) {
             Value v = result->GetValue(i);
             EXPECT_EQ(v.type_.type(), LogicalType::kBigInt);
             EXPECT_EQ(v.value_.big_int, i % 28 + 1);

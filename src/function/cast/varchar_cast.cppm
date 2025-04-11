@@ -14,121 +14,144 @@
 
 module;
 
-import parser;
+export module varchar_cast;
+
 import stl;
 import bound_cast_func;
 import column_vector_cast;
-
+import logical_type;
 import infinity_exception;
 import third_party;
 import column_vector;
 import vector_buffer;
-
-export module varchar_cast;
+import internal_types;
+import data_type;
+import status;
+import logger;
 
 namespace infinity {
 
 export struct TryCastVarchar;
+export struct TryCastVarcharVector;
 export struct TryCastVarcharToChar;
 export struct TryCastVarcharToVarchar;
 
 export inline BoundCastFunc BindVarcharCast(const DataType &source, const DataType &target) {
     if (source.type() != LogicalType::kVarchar) {
-        Error<TypeException>(Format("Expect Varchar type, but it is {}", source.ToString()));
+        String error_message = fmt::format("Expect Varchar type, but it is {}", source.ToString());
+        UnrecoverableError(error_message);
     }
     switch (target.type()) {
-        case kBoolean: {
+        case LogicalType::kBoolean: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, BooleanT, TryCastVarchar>);
         }
-        case kTinyInt: {
+        case LogicalType::kTinyInt: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, TinyIntT, TryCastVarchar>);
         }
-        case kSmallInt: {
+        case LogicalType::kSmallInt: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, SmallIntT, TryCastVarchar>);
         }
-        case kInteger: {
+        case LogicalType::kInteger: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, IntegerT, TryCastVarchar>);
         }
-        case kBigInt: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, BigIntT, TryCastVarchar>);
+        case LogicalType::kBigInt: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, BigIntT, TryCastVarcharVector>);
         }
-        case kHugeInt: {
+        case LogicalType::kHugeInt: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, HugeIntT, TryCastVarchar>);
         }
-        case kFloat: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, FloatT, TryCastVarchar>);
+        case LogicalType::kFloat: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, FloatT, TryCastVarcharVector>);
         }
-        case kDouble: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, DoubleT, TryCastVarchar>);
+        case LogicalType::kDouble: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, DoubleT, TryCastVarcharVector>);
         }
-        case kDecimal: {
-            Error<NotImplementException>(Format("Not implement cast from varchar to decimal128 type.", source.ToString(), target.ToString()));
+        case LogicalType::kFloat16: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, Float16T, TryCastVarcharVector>);
         }
-        case kVarchar: {
-            Error<TypeException>("Attempt to cast from varchar to varchar");
+        case LogicalType::kBFloat16: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, BFloat16T, TryCastVarcharVector>);
         }
-        case kDate: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, DateT, TryCastVarchar>);
+        case LogicalType::kDecimal: {
+            String error_message = fmt::format("Not implement cast from varchar to decimal128 type.", source.ToString(), target.ToString());
+            UnrecoverableError(error_message);
         }
-        case kTime: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, TimeT, TryCastVarchar>);
+        case LogicalType::kVarchar: {
+            String error_message = "Attempt to cast from varchar to varchar";
+            UnrecoverableError(error_message);
         }
-        case kDateTime: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, DateTimeT, TryCastVarchar>);
+        case LogicalType::kDate: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, DateT, TryCastVarcharVector>);
         }
-        case kTimestamp: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, TimestampT, TryCastVarchar>);
+        case LogicalType::kTime: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, TimeT, TryCastVarcharVector>);
         }
-        case kInterval: {
-            return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, IntervalT, TryCastVarchar>);
+        case LogicalType::kDateTime: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, DateTimeT, TryCastVarcharVector>);
         }
-        case kArray: {
-            Error<TypeException>("Cast from varchar to array");
+        case LogicalType::kTimestamp: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, TimestampT, TryCastVarcharVector>);
         }
-        case kTuple: {
-            Error<TypeException>("Cast from varchar to tuple");
+        case LogicalType::kInterval: {
+            return BoundCastFunc(&ColumnVectorCast::TryCastVarlenColumnVector<VarcharT, IntervalT, TryCastVarcharVector>);
         }
-        case kPoint: {
-            Error<TypeException>("Cast from varchar to point");
+        case LogicalType::kArray: {
+            String error_message = "Cast from varchar to array";
+            UnrecoverableError(error_message);
         }
-        case kLine: {
-            Error<TypeException>("Cast from varchar to line");
+        case LogicalType::kTuple: {
+            String error_message = "Cast from varchar to tuple";
+            UnrecoverableError(error_message);
         }
-        case kLineSeg: {
-            Error<TypeException>("Cast from varchar to line segment");
+        case LogicalType::kPoint: {
+            String error_message = "Cast from varchar to point";
+            UnrecoverableError(error_message);
         }
-        case kBox: {
-            Error<TypeException>("Cast from varchar to box");
+        case LogicalType::kLine: {
+            String error_message = "Cast from varchar to line";
+            UnrecoverableError(error_message);
+        }
+        case LogicalType::kLineSeg: {
+            String error_message = "Cast from varchar to line segment";
+            UnrecoverableError(error_message);
+        }
+        case LogicalType::kBox: {
+            String error_message = "Cast from varchar to box";
+            UnrecoverableError(error_message);
         }
             //        case kPath: {
-            //            Error<TypeException>("Cast from varchar to path");
+            //            UnrecoverableError("Cast from varchar to path");
             //        }
             //        case kPolygon: {
-            //            Error<TypeException>("Cast from varchar to polygon");
+            //            UnrecoverableError("Cast from varchar to polygon");
             //        }
-        case kCircle: {
-            Error<TypeException>("Cast from varchar to circle");
+        case LogicalType::kCircle: {
+            String error_message = "Cast from varchar to circle";
+            UnrecoverableError(error_message);
         }
             //        case kBitmap: {
-            //            Error<TypeException>("Cast from varchar to bitmap");
+            //            UnrecoverableError("Cast from varchar to bitmap");
             //        }
-        case kUuid: {
-            Error<TypeException>("Cast from varchar to uuid");
+        case LogicalType::kUuid: {
+            String error_message = "Cast from varchar to uuid";
+            UnrecoverableError(error_message);
         }
             //        case kBlob: {
-            //            Error<TypeException>("Cast from varchar to blob");
+            //            UnrecoverableError("Cast from varchar to blob");
             //        }
-        case kEmbedding: {
-            Error<TypeException>("Cast from varchar to embedding");
+        case LogicalType::kEmbedding: {
+            RecoverableError(Status::NotSupport(fmt::format("Attempt to cast from {} to {}", source.ToString(), target.ToString())));
         }
-        case kRowID: {
+        case LogicalType::kRowID: {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVector<VarcharT, RowID, TryCastVarchar>);
         }
-        case kMixed: {
-            Error<TypeException>("Cast from varchar to mix");
+        case LogicalType::kMixed: {
+            String error_message = "Cast from varchar to mix";
+            UnrecoverableError(error_message);
         }
         default: {
-            Error<TypeException>("Can't convert varchar");
+            String error_message = "Can't convert varchar";
+            UnrecoverableError(error_message);
         }
     }
     return BoundCastFunc(nullptr);
@@ -137,8 +160,9 @@ export inline BoundCastFunc BindVarcharCast(const DataType &source, const DataTy
 struct TryCastVarchar {
     template <typename SourceType, typename TargetType>
     static inline bool Run(const SourceType &, TargetType &) {
-        Error<FunctionException>(
-            Format("No implementation to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>()));
+        String error_message =
+            fmt::format("No implementation to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>());
+        UnrecoverableError(error_message);
         return false;
     }
 };
@@ -173,158 +197,230 @@ inline bool TryCastVarchar::Run(const VarcharT &source, BooleanT &target) {
 // Cast VarcharT to TinyT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &source, TinyIntT &target) {
-    i64 value{0};
-    char *endptr{nullptr};
-    SizeT len{0};
     if (source.IsInlined()) {
-        value = StrToL(source.short_.data_, &endptr, 10);
-        len = (endptr - source.short_.data_);
+        auto [ptr, ec] = std::from_chars(source.short_.data_, source.short_.data_ + source.length_, target);
+        if (ec != std::errc()) {
+            return false;
+        }
     } else {
         // No tiny int isn't inline
         return false;
     }
-    if (len != source.length_) {
-        return false;
-    }
-    target = static_cast<TinyIntT>(value);
+
     return true;
 }
 
 // Cast VarcharT to SmallIntT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &source, SmallIntT &target) {
-    i64 value{0};
-    char *endptr{nullptr};
-    SizeT len{0};
     if (source.IsInlined()) {
-        value = StrToL(source.short_.data_, &endptr, 10);
+        auto [ptr, ec] = std::from_chars(source.short_.data_, source.short_.data_ + source.length_, target);
+        if (ec != std::errc()) {
+            return false;
+        }
     } else {
-        // No tiny int isn't inline
+        // No small int isn't inline
         return false;
     }
-    if (len != source.length_) {
-        return false;
-    }
-    target = static_cast<SmallIntT>(value);
+
     return true;
 }
 
 // Cast VarcharT to IntegerT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &source, IntegerT &target) {
-    i64 value{0};
-    char *endptr{nullptr};
-    SizeT len{0};
     if (source.IsInlined()) {
-        value = StrToL(source.short_.data_, &endptr, 10);
+        auto [ptr, ec] = std::from_chars(source.short_.data_, source.short_.data_ + source.length_, target);
+        if (ec != std::errc()) {
+            return false;
+        }
     } else {
+        // No integer isn't inline
         return false;
     }
-    if (len != source.length_) {
-        return false;
-    }
-    target = static_cast<IntegerT>(value);
-    return true;
-}
 
-// Cast VarcharT to BigIntT type
-template <>
-inline bool TryCastVarchar::Run(const VarcharT &source, i64 &target) {
-    if (!source.IsValue()) {
-        Error<FunctionException>("No implementation to cast from column vector Varchar to big int");
-    }
-    char *endptr{nullptr};
-    SizeT len{0};
-    if (source.IsInlined()) {
-        target = StrToL(source.short_.data_, &endptr, 10);
-    } else {
-        target = StrToL(source.value_.ptr_, &endptr, 10);
-    }
-    if (len != source.length_) {
-        return false;
-    }
-    return true;
-}
-
-// Cast VarcharT to HugeIntT type
-template <>
-inline bool TryCastVarchar::Run(const VarcharT &, HugeIntT &) {
-    Error<TypeException>("Cast varchar to hugeint");
-    return false;
-}
-
-// Cast VarcharT to FloatT type
-template <>
-inline bool TryCastVarchar::Run(const VarcharT &source, FloatT &target) {
-    if (!source.IsValue()) {
-        Error<FunctionException>("No implementation to cast from column vector Varchar to big int");
-    }
-    char *endptr{nullptr};
-    SizeT len{0};
-    if (source.IsInlined()) {
-        target = StrToF(source.short_.data_, &endptr);
-    } else {
-        target = StrToF(source.value_.ptr_, &endptr);
-    }
-    if (len != source.length_) {
-        return false;
-    }
-    return true;
-}
-
-// Cast VarcharT to DoubleT type
-template <>
-inline bool TryCastVarchar::Run(const VarcharT &source, DoubleT &target) {
-    char *endptr{nullptr};
-    SizeT len{0};
-    if (source.IsInlined()) {
-        target = StrToD(source.short_.data_, &endptr);
-    } else {
-        target = StrToD(source.value_.ptr_, &endptr);
-    }
-    if (len != source.length_) {
-        return false;
-    }
     return true;
 }
 
 // Cast VarcharT to DateT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &, DateT &) {
-    Error<TypeException>("Cast from varchar to date");
-//    if (source.IsInlined()) {
-//        target.FromString(source.prefix, source.length);
-//    } else {
-//        target.FromString(source.ptr, source.length);
-//    }
+    String error_message = "Cast from varchar to date";
+    UnrecoverableError(error_message);
+    //    if (source.IsInlined()) {
+    //        target.FromString(source.prefix, source.length);
+    //    } else {
+    //        target.FromString(source.ptr, source.length);
+    //    }
     return true;
 }
 
 // Cast VarcharT to TimeT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &, TimeT &) {
-    Error<TypeException>("Cast from varchar to time");
+    String error_message = "Cast from varchar to time";
+    UnrecoverableError(error_message);
     return true;
 }
 
 // Cast VarcharT to DateTimeT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &, DateTimeT &) {
-    Error<TypeException>("Cast from varchar to datetime");
+    String error_message = "Cast from varchar to datetime";
+    UnrecoverableError(error_message);
     return true;
 }
 
 // Cast VarcharT to TimestampT type
 template <>
-inline bool TryCastVarchar::Run(const VarcharT &, TimestampT &) {
-    Error<TypeException>("Cast from varchar to timestamp");
+inline bool TryCastVarchar::Run(const VarcharT &source, TimestampT &target) {
+    String error_message = "Cast from varchar to timestamp";
+    UnrecoverableError(error_message);
     return true;
 }
 
 // Cast VarcharT to IntervalT type
 template <>
 inline bool TryCastVarchar::Run(const VarcharT &, IntervalT &) {
-    Error<TypeException>("Cast from varchar to interval");
+    String error_message = "Cast from varchar to interval";
+    UnrecoverableError(error_message);
+    return true;
+}
+
+struct TryCastVarcharVector {
+    template <typename SourceType, typename TargetType>
+    static inline bool Run(const SourceType &, ColumnVector *source_vector, TargetType &) {
+        String error_message =
+            fmt::format("No implementation to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>());
+        UnrecoverableError(error_message);
+        return false;
+    }
+};
+
+// Cast VarcharT to DateT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, DateT &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    target.FromString(substr);
+    return true;
+}
+
+// Cast VarcharT to TimeT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, TimeT &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    target.FromString(substr);
+    return true;
+}
+
+// Cast VarcharT to DateTimeT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, DateTimeT &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    target.FromString(substr);
+    return true;
+}
+
+// Cast VarcharT to TimestampT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, TimestampT &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    target.FromString(substr);
+    return true;
+}
+
+// Cast VarcharT to BigIntT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, i64 &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    auto [ptr, ec] = std::from_chars(data.data(), data.data() + data.size(), target);
+    if (ec != std::errc()) {
+        return false;
+    }
+    return true;
+}
+
+// Cast VarcharT to FloatT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, FloatT &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    try {
+        target = std::stof(substr);
+    } catch (const std::exception &e) {
+        return false;
+    }
+    // Used in libstdc++
+    // auto [ptr, ec] = std::from_chars(data.data(), data.data() + data.size(), target);
+    // if (ec != std::errc()) {
+    //     return false;
+    // }
+    return true;
+}
+
+// Cast VarcharT to DoubleT type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, DoubleT &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    try {
+        target = std::stod(substr);
+    } catch (const std::exception &e) {
+        return false;
+    }
+    // Used in libstdc++
+    // auto [ptr, ec] = std::from_chars(data.data(), data.data() + data.size(), target);
+    // if (ec != std::errc()) {
+    //     return false;
+    // }
+    return true;
+}
+
+// Cast VarcharT to Float16T type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, Float16T &target) {
+    // Used in libc++
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    String substr(data.data(), data.size());
+    try {
+        target = std::stof(substr);
+    } catch (const std::exception &e) {
+        return false;
+    }
+    // Used in libstdc++
+    // auto [ptr, ec] = std::from_chars(data.data(), data.data() + data.size(), target);
+    // if (ec != std::errc()) {
+    //     return false;
+    // }
+    return true;
+}
+
+// Cast VarcharT to BFloat16T type
+template <>
+inline bool TryCastVarcharVector::Run(const VarcharT &source, ColumnVector *source_vector, BFloat16T &target) {
+    Span<const char> data = source_vector->GetVarcharInner(source);
+    // Used in libc++
+    String substr(data.data(), data.size());
+    try {
+        target = std::stof(substr);
+    } catch (const std::exception &e) {
+        return false;
+    }
+    // Used in libstdc++
+    // auto [ptr, ec] = std::from_chars(data.data(), data.size() + data.size(), target);
+    // if (ec != std::errc()) {
+    //     return false;
+    // }
     return true;
 }
 

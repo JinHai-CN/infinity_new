@@ -13,9 +13,37 @@
 // limitations under the License.
 
 #include "embedding_type.h"
+#include <arrow/type.h>
 #include <cstring>
 
 namespace infinity {
+
+bool operator==(const EmbeddingDataType &type, const arrow::Type::type &arrow_type) {
+    switch (type) {
+        case EmbeddingDataType::kElemBit:
+            return arrow_type == arrow::Type::BOOL;
+        case EmbeddingDataType::kElemUInt8:
+            return arrow_type == arrow::Type::UINT8;
+        case EmbeddingDataType::kElemInt8:
+            return arrow_type == arrow::Type::INT8;
+        case EmbeddingDataType::kElemInt16:
+            return arrow_type == arrow::Type::INT16;
+        case EmbeddingDataType::kElemInt32:
+            return arrow_type == arrow::Type::INT32;
+        case EmbeddingDataType::kElemInt64:
+            return arrow_type == arrow::Type::INT64;
+        case EmbeddingDataType::kElemFloat:
+            return arrow_type == arrow::Type::FLOAT;
+        case EmbeddingDataType::kElemFloat16:
+            return arrow_type == arrow::Type::HALF_FLOAT;
+        case EmbeddingDataType::kElemDouble:
+            return arrow_type == arrow::Type::DOUBLE;
+        default:
+            return false;
+    }
+}
+
+bool operator!=(const EmbeddingDataType &type, const arrow::Type::type &arrow_type) { return !(type == arrow_type); }
 
 size_t EmbeddingType::embedding_type_width[] = {
     0, // bit
@@ -25,7 +53,13 @@ size_t EmbeddingType::embedding_type_width[] = {
     8, // int64
     4, // float32
     8, // double64
+    1, // uint8
+    2, // float16
+    2, // bfloat16
 };
+
+static_assert(std::size(EmbeddingType::embedding_type_width) == static_cast<size_t>(EmbeddingDataType::kElemInvalid),
+              "embedding_type_width size should be equal to EmbeddingDataType enum num.");
 
 void EmbeddingType::Init(const void *from_ptr, size_t size) {
     // User need to guarantee the size is matched.

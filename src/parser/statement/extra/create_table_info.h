@@ -24,6 +24,7 @@
 #include "type/info/bitmap_info.h"
 #include "type/info/decimal_info.h"
 #include "type/info/embedding_info.h"
+#include "type/info/sparse_info.h"
 #include <unordered_set>
 
 namespace infinity {
@@ -36,11 +37,12 @@ public:
 
     [[nodiscard]] std::string ToString() const final;
 
-    std::string schema_name_{"default"};
     std::string table_name_{};
 
     std::vector<ColumnDef *> column_defs_{};
     std::vector<TableConstraint *> constraints_{};
+
+    std::vector<infinity::InitParameter *> properties_{};
 
     SelectStatement *select_{nullptr};
 };

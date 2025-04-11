@@ -14,23 +14,28 @@
 
 module;
 
+module plus;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module plus;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 struct PlusFunction {
     template <typename TA, typename TB>
     static inline bool Run(TA, TB &) {
-        Error<NotImplementException>("Not implement");
+        String error_message = "Not implement: PlusFunction::Run";
+        UnrecoverableError(error_message);
+        return false;
     }
 };
 
@@ -45,7 +50,7 @@ inline bool PlusFunction::Run(MixedT value, MixedT &result) {
     }
 }
 
-void RegisterPlusFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+SharedPtr<ScalarFunctionSet> GetPlusFunctionSet() {
     String func_name = "+";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -66,6 +71,12 @@ void RegisterPlusFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
     ScalarFunction plus_int128(func_name, {DataType(LogicalType::kHugeInt)}, DataType(LogicalType::kHugeInt), &ScalarFunction::NoOpFunction);
     function_set_ptr->AddFunction(plus_int128);
 
+    ScalarFunction plus_float16(func_name, {DataType(LogicalType::kFloat16)}, DataType(LogicalType::kFloat16), &ScalarFunction::NoOpFunction);
+    function_set_ptr->AddFunction(plus_float16);
+
+    ScalarFunction plus_bfloat16(func_name, {DataType(LogicalType::kBFloat16)}, DataType(LogicalType::kBFloat16), &ScalarFunction::NoOpFunction);
+    function_set_ptr->AddFunction(plus_bfloat16);
+
     ScalarFunction plus_float(func_name, {DataType(LogicalType::kFloat)}, DataType(LogicalType::kFloat), &ScalarFunction::NoOpFunction);
     function_set_ptr->AddFunction(plus_float);
 
@@ -81,7 +92,17 @@ void RegisterPlusFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                               &ScalarFunction::UnaryFunctionWithFailure<MixedT, MixedT, PlusFunction>);
     function_set_ptr->AddFunction(plus_mixed);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    return function_set_ptr;
+}
+
+void RegisterPlusFunction(const UniquePtr<Catalog> &catalog_ptr) {
+    auto function_set_ptr = GetPlusFunctionSet();
+    Catalog::AddFunctionSet(catalog_ptr.get(), std::move(function_set_ptr));
+}
+
+void AppendRegisterPlusFunction(const UniquePtr<Catalog> &catalog_ptr) {
+    auto function_set_ptr = GetPlusFunctionSet();
+    Catalog::AppendToScalarFunctionSet(catalog_ptr.get(), std::move(function_set_ptr));
 }
 
 } // namespace infinity

@@ -15,7 +15,7 @@
 module;
 
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -25,6 +25,8 @@ import value_expression;
 import data_table;
 import load_meta;
 import infinity_exception;
+import internal_types;
+import data_type;
 
 export module physical_limit;
 
@@ -34,6 +36,8 @@ class DataBlock;
 
 export class LimitCounter {
 public:
+    virtual ~LimitCounter() = default;
+
     // Returns the left index after offset
     virtual SizeT Offset(SizeT row_count) = 0;
 
@@ -41,15 +45,24 @@ public:
     virtual SizeT Limit(SizeT row_count) = 0;
 
     virtual bool IsLimitOver() = 0;
+
+    SizeT TotalHitsCount() const { return total_hits_count_; }
+
+    void AddHitsCount(u64 row_count);
+
+private:
+    Atomic<u64> total_hits_count_{};
 };
 
-export class AtomicCounter : public LimitCounter {
+export class AtomicCounter final : public LimitCounter {
 public:
     AtomicCounter(i64 offset, i64 limit) : offset_(offset), limit_(limit) {}
 
-    SizeT Offset(SizeT row_count);
+    ~AtomicCounter() final = default;
 
-    SizeT Limit(SizeT row_count);
+    SizeT Offset(SizeT row_count) final;
+
+    SizeT Limit(SizeT row_count) final;
 
     bool IsLimitOver();
 
@@ -58,57 +71,60 @@ private:
     ai64 limit_{};
 };
 
-export class UnSyncCounter : public LimitCounter {
+export class UnSyncCounter final : public LimitCounter {
 public:
     UnSyncCounter(i64 offset, i64 limit) : offset_(offset), limit_(limit) {}
 
-    SizeT Offset(SizeT row_count);
+    ~UnSyncCounter() final = default;
 
-    SizeT Limit(SizeT row_count);
+    SizeT Offset(SizeT row_count) final;
+
+    SizeT Limit(SizeT row_count) final;
 
     bool IsLimitOver();
 
 private:
     i64 offset_{};
-    i64 limit_{};
+    Atomic<i64> limit_{};
 };
 
-export class PhysicalLimit : public PhysicalOperator {
+export class PhysicalLimit final : public PhysicalOperator {
 public:
     explicit PhysicalLimit(u64 id,
                            UniquePtr<PhysicalOperator> left,
                            SharedPtr<BaseExpression> limit_expr,
                            SharedPtr<BaseExpression> offset_expr,
-                           SharedPtr<Vector<LoadMeta>> load_metas);
+                           SharedPtr<Vector<LoadMeta>> load_metas,
+                           bool total_hits_count_flag);
 
-    ~PhysicalLimit() override = default;
+    ~PhysicalLimit() final = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) final;
 
     static bool Execute(QueryContext *query_context,
                         const Vector<UniquePtr<DataBlock>> &input_blocks,
                         Vector<UniquePtr<DataBlock>> &output_blocks,
-                        LimitCounter *counter);
+                        LimitCounter *counter,
+                        bool total_hits_count_flag);
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
-    inline SharedPtr<Vector<String>> GetOutputNames() const final { return left_->GetOutputNames(); }
+    [[nodiscard]] inline SharedPtr<Vector<String>> GetOutputNames() const final { return left_->GetOutputNames(); }
 
-    inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return left_->GetOutputTypes(); }
+    [[nodiscard]] inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return left_->GetOutputTypes(); }
 
-    SizeT TaskletCount() override {
-        return left_->TaskletCount();
-    }
+    SizeT TaskletCount() override { return left_->TaskletCount(); }
 
-    inline const SharedPtr<BaseExpression> &limit_expr() const { return limit_expr_; }
+    [[nodiscard]] inline const SharedPtr<BaseExpression> &limit_expr() const { return limit_expr_; }
 
-    inline const SharedPtr<BaseExpression> &offset_expr() const { return offset_expr_; }
+    [[nodiscard]] inline const SharedPtr<BaseExpression> &offset_expr() const { return offset_expr_; }
 
 private:
     SharedPtr<BaseExpression> limit_expr_{};
     SharedPtr<BaseExpression> offset_expr_{};
 
     UniquePtr<LimitCounter> counter_{};
+    bool total_hits_count_flag_{};
 };
 
 } // namespace infinity

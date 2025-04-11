@@ -19,11 +19,16 @@ import txn;
 import query_context;
 import table_def;
 import data_table;
-import parser;
+
 import physical_operator_type;
 import operator_state;
 import status;
 import load_meta;
+import extra_ddl_info;
+import wal_manager;
+import infinity_context;
+
+import new_txn;
 
 module physical_create_table;
 
@@ -37,9 +42,9 @@ PhysicalCreateTable::PhysicalCreateTable(SharedPtr<String> schema_name,
                                          u64 table_index,
                                          u64 id,
                                          SharedPtr<Vector<LoadMeta>> load_metas)
-    : PhysicalOperator(PhysicalOperatorType::kCreateTable, nullptr, nullptr, id, load_metas), table_def_ptr_(Move(table_def_ptr)),
-      schema_name_(Move(schema_name)), table_index_(table_index), conflict_type_(conflict_type), output_names_(Move(output_names)),
-      output_types_(Move(output_types)) {}
+    : PhysicalOperator(PhysicalOperatorType::kCreateTable, nullptr, nullptr, id, load_metas), table_def_ptr_(std::move(table_def_ptr)),
+      schema_name_(std::move(schema_name)), table_index_(table_index), conflict_type_(conflict_type), output_names_(std::move(output_names)),
+      output_types_(std::move(output_types)) {}
 
 PhysicalCreateTable::PhysicalCreateTable(SharedPtr<String> schema_name,
                                          UniquePtr<PhysicalOperator> input,
@@ -49,19 +54,39 @@ PhysicalCreateTable::PhysicalCreateTable(SharedPtr<String> schema_name,
                                          u64 table_index,
                                          u64 id,
                                          SharedPtr<Vector<LoadMeta>> load_metas)
-    : PhysicalOperator(PhysicalOperatorType::kCreateTable, Move(input), nullptr, id, load_metas), schema_name_(Move(schema_name)),
-      table_index_(table_index), conflict_type_(conflict_type), output_names_(Move(output_names)), output_types_(Move(output_types)) {}
+    : PhysicalOperator(PhysicalOperatorType::kCreateTable, std::move(input), nullptr, id, load_metas), schema_name_(std::move(schema_name)),
+      table_index_(table_index), conflict_type_(conflict_type), output_names_(std::move(output_names)), output_types_(std::move(output_types)) {}
 
-void PhysicalCreateTable::Init() {}
+void PhysicalCreateTable::Init(QueryContext* query_context) {}
 
 bool PhysicalCreateTable::Execute(QueryContext *query_context, OperatorState *operator_state) {
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
+    bool use_new_meta = query_context->global_config()->UseNewCatalog();
+    if (use_new_meta) {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        Status status = new_txn->CreateTable(*schema_name_, table_def_ptr_, conflict_type_);
+        if (!status.ok()) {
+            operator_state->status_ = status;
+        }
+        operator_state->SetComplete();
+        return true;
+    }
 
     auto txn = query_context->GetTxn();
 
     Status status = txn->CreateTable(*schema_name_, table_def_ptr_, conflict_type_);
-    auto create_table_operator_state = (CreateTableOperatorState *)operator_state;
     if (!status.ok()) {
-        create_table_operator_state->error_message_ = Move(status.msg_);
+        operator_state->status_ = status;
     }
     operator_state->SetComplete();
     return true;

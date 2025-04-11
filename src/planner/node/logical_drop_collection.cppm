@@ -14,20 +14,23 @@
 
 module;
 
+export module logical_drop_collection;
+
 import stl;
-import parser;
+
 import logical_node;
 import logical_node_type;
 import column_binding;
-
-export module logical_drop_collection;
+import internal_types;
+import extra_ddl_info;
+import data_type;
 
 namespace infinity {
 
 export class LogicalDropCollection final : public LogicalNode {
 public:
     LogicalDropCollection(u64 node_id, SharedPtr<String> schema_name, SharedPtr<String> collection_name, ConflictType conflict_type)
-        : LogicalNode(node_id, LogicalNodeType::kDropCollection), schema_name_(Move(schema_name)), collection_name_(Move(collection_name)),
+        : LogicalNode(node_id, LogicalNodeType::kDropCollection), schema_name_(std::move(schema_name)), collection_name_(std::move(collection_name)),
           conflict_type_(conflict_type) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;

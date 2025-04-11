@@ -14,14 +14,15 @@
 
 module;
 
-import stl;
-
 export module minus;
+
+import stl;
 
 namespace infinity {
 
-class NewCatalog;
+class Catalog;
 
-export void RegisterMinusFunction(const UniquePtr<NewCatalog> &catalog_ptr);
+export void RegisterMinusFunction(const UniquePtr<Catalog> &catalog_ptr);
+export void AppendRegisterMinusFunction(const UniquePtr<Catalog> &catalog_ptr);
 
-}
+} // namespace infinity

@@ -17,11 +17,11 @@ module;
 import query_context;
 import operator_state;
 
-module physical_merge_join;
+module physical_sort_merge_join;
 
 namespace infinity {
 
-void PhysicalSortMergeJoin::Init() {}
+void PhysicalSortMergeJoin::Init(QueryContext* query_context) {}
 
 bool PhysicalSortMergeJoin::Execute(QueryContext *, OperatorState *) { return true; }
 

@@ -14,16 +14,19 @@
 
 module;
 
+export module plan_fragment;
+
 import stl;
-import parser;
+
 import data_table;
 import fragment_context;
 import physical_operator;
 import physical_source;
 import physical_sink;
 import query_context;
-
-export module plan_fragment;
+import internal_types;
+import data_type;
+import global_resource_usage;
 
 namespace infinity {
 
@@ -31,9 +34,17 @@ export class PlanFragment {
 public:
     PlanFragment() = default;
 
-    explicit inline PlanFragment(u64 fragment_id) : fragment_id_(fragment_id) {}
+    explicit inline PlanFragment(u64 fragment_id) : fragment_id_(fragment_id) {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("PlanFragment");
+#endif
+    }
 
-    virtual ~PlanFragment() = default;
+    virtual ~PlanFragment() {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::DecrObjectCount("PlanFragment");
+#endif
+    }
 
     void SetFragmentType(FragmentType fragment_type) { fragment_type_ = fragment_type; }
 
@@ -57,12 +68,14 @@ public:
 
     [[nodiscard]] inline PhysicalSink *GetSinkNode() const { return sink_.get(); }
 
-    inline void AddChild(UniquePtr<PlanFragment> child_fragment) {
-        child_fragment->parent_ = this;
-        children_.emplace_back(Move(child_fragment));
+    [[nodiscard]] inline Vector<PlanFragment *> GetParents() const { return parents_; }
+
+    inline void AddChild(SharedPtr<PlanFragment> child_fragment) {
+        child_fragment->parents_.emplace_back(this);
+        children_.emplace_back(std::move(child_fragment));
     }
 
-    inline Vector<UniquePtr<PlanFragment>> &Children() { return children_; }
+    inline Vector<SharedPtr<PlanFragment>> &Children() { return children_; }
 
     inline bool HasChild() { return !children_.empty(); }
 
@@ -70,11 +83,15 @@ public:
 
     [[nodiscard]] inline u64 FragmentID() const { return fragment_id_; }
 
-    inline void SetContext(UniquePtr<FragmentContext> context) { context_ = Move(context); }
+    inline void SetContext(UniquePtr<FragmentContext> context) { context_ = std::move(context); }
 
     inline FragmentContext *GetContext() { return context_.get(); }
 
     SharedPtr<DataTable> GetResult();
+
+    static void AddNext(SharedPtr<PlanFragment> root, PlanFragment *next);
+
+    SizeT GetStartFragments(Vector<PlanFragment *> &leaf_fragments);
 
 private:
     u64 fragment_id_{};
@@ -85,9 +102,9 @@ private:
 
     UniquePtr<PhysicalSource> source_{};
 
-    PlanFragment *parent_{};
+    Vector<PlanFragment *> parents_{};
 
-    Vector<UniquePtr<PlanFragment>> children_{};
+    Vector<SharedPtr<PlanFragment>> children_{};
 
     UniquePtr<FragmentContext> context_{};
 

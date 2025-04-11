@@ -16,45 +16,65 @@ module;
 
 #include <boost/asio/ip/tcp.hpp>
 
+module connection;
+
 import pg_protocol_handler;
 import boost;
 import stl;
 import session;
 import infinity_exception;
-
+import internal_types;
 import pg_message;
 import logger;
 import query_context;
 import infinity_context;
 import third_party;
 import data_table;
-import parser;
+
 import logical_node_type;
 import query_result;
 import session_manager;
-
-module connection;
+import type_info;
+import logical_type;
+import embedding_info;
+import sparse_info;
+import data_type;
+import global_resource_usage;
 
 namespace infinity {
 
-Connection::Connection(AsioIOService &io_service)
-    : socket_(MakeShared<AsioSocket>(io_service)), pg_handler_(MakeShared<PGProtocolHandler>(socket())) {}
+Connection::Connection(boost::asio::io_service &io_service)
+    : socket_(MakeShared<boost::asio::ip::tcp::socket>(io_service)), pg_handler_(MakeShared<PGProtocolHandler>(socket())) {}
 
 Connection::~Connection() {
-    if(session_ == nullptr) {
+    if (session_ == nullptr) {
         // To avoid null ptr access
-        return ;
+        return;
     }
-    SessionManager* session_mgr = InfinityContext::instance().session_manager();
+    SessionManager *session_mgr = InfinityContext::instance().session_manager();
     session_mgr->RemoveSessionByID(session_->session_id());
+}
+
+void Connection::HandleError(const char *error_message) {
+    HashMap<PGMessageType, String> error_message_map;
+    error_message_map[PGMessageType::kHumanReadableError] = error_message;
+    LOG_ERROR(error_message);
+    pg_handler_->send_error_response(error_message_map);
+    pg_handler_->send_ready_for_query();
 }
 
 void Connection::Run() {
     // Disable Nagle's algorithm to reduce TCP latency, but will reduce the throughput.
     socket_->set_option(boost::asio::ip::tcp::no_delay(true));
 
-    SessionManager* session_manager = InfinityContext::instance().session_manager();
-    session_ = session_manager->CreateRemoteSession();
+    SessionManager *session_manager = InfinityContext::instance().session_manager();
+    SharedPtr<RemoteSession> remote_session = session_manager->CreateRemoteSession();
+    if (remote_session == nullptr) {
+        HandleError("Infinity is running under maintenance mode, only one connection is allowed.");
+        return;
+    }
+
+    session_ = std::move(remote_session);
 
     HandleConnection();
 
@@ -63,15 +83,13 @@ void Connection::Run() {
     while (!terminate_connection_) {
         try {
             HandleRequest();
-        } catch (const infinity::ClientException &e) {
-            LOG_TRACE("Client is closed");
+        } catch (const infinity::RecoverableException &e) {
+            LOG_TRACE(fmt::format("Recoverable exception: {}", e.what()));
             return;
-        } catch (const Exception &e) {
-            HashMap<PGMessageType, String> error_message_map;
-            error_message_map[PGMessageType::kHumanReadableError] = e.what();
-            LOG_ERROR(e.what());
-            pg_handler_->send_error_response(error_message_map);
-            pg_handler_->send_ready_for_query();
+        } catch (const infinity::UnrecoverableException &e) {
+            HandleError(e.what());
+        } catch (const std::exception &e) {
+            HandleError(e.what());
         }
     }
 }
@@ -97,8 +115,8 @@ void Connection::HandleRequest() {
                             InfinityContext::instance().task_scheduler(),
                             InfinityContext::instance().storage(),
                             InfinityContext::instance().resource_manager(),
-                            InfinityContext::instance().session_manager());
-    query_context_ptr->set_current_schema(session_->current_database());
+                            InfinityContext::instance().session_manager(),
+                            InfinityContext::instance().persistence_manager());
 
     switch (cmd_type) {
         case PGMessageType::kBindCommand: {
@@ -130,14 +148,15 @@ void Connection::HandleRequest() {
             break;
         }
         default: {
-            Error<NetworkException>("Unknown PG command type");
+            String error_message = "Unknown PG command type";
+            UnrecoverableError(error_message);
         }
     }
 }
 
 void Connection::HandlerSimpleQuery(QueryContext *query_context) {
     const String &query = pg_handler_->read_command_body();
-    LOG_TRACE(Format("Query: {}", query));
+    LOG_TRACE(fmt::format("Query: {}", query));
 
     // Start to execute the query.
     QueryResult result = query_context->Query(query);
@@ -201,6 +220,8 @@ void Connection::SendTableDescription(const SharedPtr<DataTable> &result_table) 
                 object_width = 8;
                 break;
             }
+            case LogicalType::kFloat16:
+            case LogicalType::kBFloat16:
             case LogicalType::kFloat: {
                 object_id = 700;
                 object_width = 4;
@@ -241,57 +262,124 @@ void Connection::SendTableDescription(const SharedPtr<DataTable> &result_table) 
                 object_width = 16;
                 break;
             }
+            case LogicalType::kArray: {
+                object_id = 25;
+                object_width = -1;
+                break;
+            }
+            case LogicalType::kTensor:
+            case LogicalType::kTensorArray:
+            case LogicalType::kMultiVector:
             case LogicalType::kEmbedding: {
                 if (column_type->type_info()->type() != TypeInfoType::kEmbedding) {
-                    Error<TypeException>("Not embedding type");
+                    String error_message = "Not embedding type";
+                    UnrecoverableError(error_message);
                 }
 
                 EmbeddingInfo *embedding_info = static_cast<EmbeddingInfo *>(column_type->type_info().get());
                 switch (embedding_info->Type()) {
 
-                    case kElemBit: {
+                    case EmbeddingDataType::kElemBit: {
                         object_id = 1000;
                         object_width = 1;
                         break;
                     }
-                    case kElemInt8: {
+                    case EmbeddingDataType::kElemUInt8:
+                    case EmbeddingDataType::kElemInt8: {
                         object_id = 1002;
                         object_width = 1;
                         break;
                     }
-                    case kElemInt16: {
+                    case EmbeddingDataType::kElemInt16: {
                         object_id = 1005;
                         object_width = 2;
                         break;
                     }
-                    case kElemInt32: {
+                    case EmbeddingDataType::kElemInt32: {
                         object_id = 1007;
                         object_width = 4;
                         break;
                     }
-                    case kElemInt64: {
+                    case EmbeddingDataType::kElemInt64: {
                         object_id = 1016;
                         object_width = 8;
                         break;
                     }
-                    case kElemFloat: {
+                    case EmbeddingDataType::kElemFloat16:
+                    case EmbeddingDataType::kElemBFloat16:
+                    case EmbeddingDataType::kElemFloat: {
                         object_id = 1021;
                         object_width = 4;
                         break;
                     }
-                    case kElemDouble: {
+                    case EmbeddingDataType::kElemDouble: {
                         object_id = 1022;
                         object_width = 8;
                         break;
                     }
-                    case kElemInvalid: {
-                        Error<TypeException>("Invalid embedding data type");
+                    case EmbeddingDataType::kElemInvalid: {
+                        String error_message = "Invalid embedding data type";
+                        UnrecoverableError(error_message);
+                    }
+                }
+                break;
+            }
+            case LogicalType::kSparse: {
+                if (column_type->type_info()->type() != TypeInfoType::kSparse) {
+                    String error_message = "Not sparse type";
+                    UnrecoverableError(error_message);
+                }
+                const auto *sparse_info = static_cast<SparseInfo *>(column_type->type_info().get());
+                switch (sparse_info->DataType()) {
+                    case EmbeddingDataType::kElemBit: {
+                        object_id = 1000;
+                        object_width = 1;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemUInt8:
+                    case EmbeddingDataType::kElemInt8: {
+                        object_id = 1002;
+                        object_width = 1;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemInt16: {
+                        object_id = 1005;
+                        object_width = 2;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemInt32: {
+                        object_id = 1007;
+                        object_width = 4;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemInt64: {
+                        object_id = 1016;
+                        object_width = 8;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemFloat16:
+                    case EmbeddingDataType::kElemBFloat16:
+                    case EmbeddingDataType::kElemFloat: {
+                        object_id = 1021;
+                        object_width = 4;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemDouble: {
+                        object_id = 1022;
+                        object_width = 8;
+                        break;
+                    }
+                    case EmbeddingDataType::kElemInvalid: {
+                        String error_message = "Should not reach here";
+                        UnrecoverableError(error_message);
                     }
                 }
                 break;
             }
             default: {
-                Error<TypeException>("Unexpected type");
+                String error_message = "Unexpected type";
+                LOG_ERROR(error_message);
+                UnrecoverableError(error_message);
             }
         }
 
@@ -326,15 +414,17 @@ void Connection::SendQueryResponse(const QueryResult &query_result) {
     String message;
     switch (query_result.root_operator_type_) {
         case LogicalNodeType::kInsert: {
-            message = "INSERT 0 1";
+            message = query_result.ToString();
             break;
         }
-        case LogicalNodeType::kImport: {
+        case LogicalNodeType::kImport:
+        case LogicalNodeType::kExport: {
             message = *query_result.result_table_->result_msg();
             break;
         }
+
         default: {
-            message = Format("SELECT {}", ToStr(query_result.result_table_->row_count()));
+            message = fmt::format("SELECT {}", std::to_string(query_result.result_table_->row_count()));
         }
     }
 

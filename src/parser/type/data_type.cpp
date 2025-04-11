@@ -14,70 +14,84 @@
 
 #include "data_type.h"
 #include "info/bitmap_info.h"
-#include "serializable.h"
+#include "serialize.h"
 #include "spdlog/fmt/fmt.h"
+#include "type/info/array_info.h"
 #include "type/info/decimal_info.h"
 #include "type/info/embedding_info.h"
+#include "type/info/sparse_info.h"
 #include "type/logical_type.h"
 #include "type/type_info.h"
+#include <arrow/type.h>
 #include <charconv>
+#include <ctype.h>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
 
 namespace infinity {
 
 DataType::DataType(LogicalType logical_type, std::shared_ptr<TypeInfo> type_info_ptr) : type_(logical_type), type_info_(std::move(type_info_ptr)) {
     switch (logical_type) {
-        case kBoolean: {
+        case LogicalType::kBoolean: {
             plain_type_ = false;
             break;
         }
-        case kTinyInt:
-        case kSmallInt:
-        case kInteger:
-        case kBigInt:
-        case kHugeInt:
-        case kDecimal:
-        case kFloat:
-        case kDouble:
-        case kDate:
-        case kTime:
-        case kDateTime:
-        case kTimestamp:
-        case kInterval:
-        case kPoint:
-        case kLine:
-        case kLineSeg:
-        case kBox:
-        case kCircle:
-//        case kBitmap:
-        case kUuid:
-        case kEmbedding:
-        case kRowID: {
+        case LogicalType::kTinyInt:
+        case LogicalType::kSmallInt:
+        case LogicalType::kInteger:
+        case LogicalType::kBigInt:
+        case LogicalType::kHugeInt:
+        case LogicalType::kDecimal:
+        case LogicalType::kFloat:
+        case LogicalType::kDouble:
+        case LogicalType::kFloat16:
+        case LogicalType::kBFloat16:
+        case LogicalType::kDate:
+        case LogicalType::kTime:
+        case LogicalType::kDateTime:
+        case LogicalType::kTimestamp:
+        case LogicalType::kInterval:
+        case LogicalType::kPoint:
+        case LogicalType::kLine:
+        case LogicalType::kLineSeg:
+        case LogicalType::kBox:
+        case LogicalType::kCircle:
+            //        case kBitmap:
+        case LogicalType::kUuid:
+        case LogicalType::kEmbedding:
+        case LogicalType::kRowID: {
             plain_type_ = true;
             break;
         }
-        case kMixed:
-        case kVarchar:
-        case kArray:
-        case kTuple: {
-//        case kPath:
-//        case kPolygon:
-//        case kBlob:
+        case LogicalType::kMixed:
+        case LogicalType::kVarchar:
+        case LogicalType::kSparse:
+        case LogicalType::kTensor:
+        case LogicalType::kTensorArray:
+        case LogicalType::kMultiVector:
+        case LogicalType::kArray:
+        case LogicalType::kTuple: {
+            //        case kPath:
+            //        case kPolygon:
+            //        case kBlob:
             plain_type_ = false;
             break;
         }
-        case kNull:
-        case kMissing: {
+        case LogicalType::kNull:
+        case LogicalType::kEmptyArray:
+        case LogicalType::kMissing: {
             plain_type_ = true;
             break;
         }
-        case kInvalid:
+        case LogicalType::kInvalid:
             break;
     }
 }
 
 std::string DataType::ToString() const {
-    if (type_ > kInvalid) {
-        ParserError(fmt::format("Invalid logical data type {}.", int(type_)));
+    if (type_info_) {
+        return fmt::format("{}({})", LogicalType2Str(type_), type_info_->ToString());
     }
     return LogicalType2Str(type_);
 }
@@ -102,21 +116,121 @@ bool DataType::operator==(const DataType &other) const {
     }
 }
 
+bool DataType::operator==(const arrow::DataType &other) const {
+    switch (type_) {
+        case LogicalType::kBoolean:
+            return other.id() == arrow::Type::BOOL;
+        case LogicalType::kTinyInt:
+            return other.id() == arrow::Type::INT8;
+        case LogicalType::kSmallInt:
+            return other.id() == arrow::Type::INT16;
+        case LogicalType::kInteger:
+            return other.id() == arrow::Type::INT32;
+        case LogicalType::kBigInt:
+            return other.id() == arrow::Type::INT64;
+        case LogicalType::kFloat16:
+            return other.id() == arrow::Type::HALF_FLOAT;
+        case LogicalType::kBFloat16:
+            return other.id() == arrow::Type::FLOAT;
+        case LogicalType::kFloat:
+            return other.id() == arrow::Type::FLOAT;
+        case LogicalType::kDouble:
+            return other.id() == arrow::Type::DOUBLE;
+        case LogicalType::kDate:
+            return other.id() == arrow::Type::DATE32;
+        case LogicalType::kTime:
+            return other.id() == arrow::Type::TIME32;
+        case LogicalType::kDateTime:
+            return other.id() == arrow::Type::TIMESTAMP;
+        case LogicalType::kTimestamp:
+            return other.id() == arrow::Type::TIMESTAMP;
+        case LogicalType::kVarchar:
+            return other.id() == arrow::Type::STRING;
+        case LogicalType::kEmbedding: {
+            auto *embedding_info = static_cast<EmbeddingInfo *>(type_info_.get());
+            if (other.id() == arrow::Type::FIXED_SIZE_LIST) {
+                const auto &list_type = static_cast<const arrow::FixedSizeListType &>(other);
+                return *embedding_info == list_type;
+            } else if (other.id() == arrow::Type::LIST) {
+                const auto &list_type = static_cast<const arrow::ListType &>(other);
+                return *embedding_info == list_type;
+            } else {
+                return false;
+            }
+        }
+        case LogicalType::kSparse: {
+            const auto *sparse_info = static_cast<SparseInfo *>(type_info_.get());
+            if (other.id() != arrow::Type::STRUCT) {
+                return false;
+            }
+            const auto &struct_type = static_cast<const arrow::StructType &>(other);
+            return *sparse_info == struct_type;
+        }
+        case LogicalType::kMultiVector:
+        case LogicalType::kTensor: {
+            auto *embedding_info = static_cast<EmbeddingInfo *>(type_info_.get());
+            if (other.id() != arrow::Type::LIST) {
+                return false;
+            }
+            const auto &tensor_type = static_cast<const arrow::ListType &>(other);
+            if (tensor_type.value_type()->id() == arrow::Type::FIXED_SIZE_LIST) {
+                const auto &inner_type = static_cast<const arrow::FixedSizeListType &>(*tensor_type.value_field()->type());
+                return *embedding_info == inner_type;
+            } else if (tensor_type.value_type()->id() == arrow::Type::LIST) {
+                const auto &inner_type = static_cast<const arrow::ListType &>(*tensor_type.value_field()->type());
+                return *embedding_info == inner_type;
+            }
+            return false;
+        }
+        case LogicalType::kTensorArray: {
+            auto *embedding_info = static_cast<EmbeddingInfo *>(type_info_.get());
+            if (other.id() != arrow::Type::LIST) {
+                return false;
+            }
+            const auto &tensor_array_type = static_cast<const arrow::ListType &>(other);
+            if (tensor_array_type.value_type()->id() != arrow::Type::LIST) {
+                return false;
+            }
+            const auto &tensor_type = static_cast<const arrow::ListType &>(*tensor_array_type.value_field()->type());
+            if (tensor_type.value_type()->id() == arrow::Type::FIXED_SIZE_LIST) {
+                const auto &inner_type = static_cast<const arrow::FixedSizeListType &>(*tensor_type.value_field()->type());
+                return *embedding_info == inner_type;
+            } else if (tensor_type.value_type()->id() == arrow::Type::LIST) {
+                const auto &inner_type = static_cast<const arrow::ListType &>(*tensor_type.value_field()->type());
+                return *embedding_info == inner_type;
+            }
+            return false;
+        }
+        case LogicalType::kArray: {
+            if (other.id() != arrow::Type::LIST) {
+                return false;
+            }
+            const auto &other_array_type = static_cast<const arrow::ListType &>(other);
+            const auto &other_array_element_type = *other_array_type.value_type();
+            auto *array_info = static_cast<const ArrayInfo *>(type_info_.get());
+            return array_info->ElemType() == other_array_element_type;
+        }
+        default: {
+            return false;
+        }
+    }
+}
+
 bool DataType::operator!=(const DataType &other) const { return !operator==(other); }
 
+bool DataType::operator!=(const arrow::DataType &other) const { return !operator==(other); }
+
 size_t DataType::Size() const {
-    if (type_ > kInvalid) {
-        ParserError(fmt::format("Invalid logical data type {}.", int(type_)));
+    switch (type_) {
+        case LogicalType::kEmbedding:
+        case LogicalType::kSparse: {
+            // embedding type should get size from EmbeddingInfo
+            return type_info_->Size();
+        }
+        default: {
+            return LogicalTypeWidth(type_);
+        }
     }
-
-    // embedding, varchar data can get data here.
-    if (type_info_ != nullptr) {
-        return type_info_->Size();
-    }
-
-    // StorageAssert(type_ != kEmbedding && type_ != kVarchar, "This ype should have type info");
-
-    return LogicalTypeWidth(type_);
 }
 
 void DataType::MaxDataType(const DataType &right) {
@@ -164,23 +278,36 @@ void DataType::MaxDataType(const DataType &right) {
 
 int32_t DataType::GetSizeInBytes() const {
     int32_t size = sizeof(LogicalType);
-    if (this->type_info_ != nullptr) {
+    if (this->type_info_) {
         switch (this->type_) {
-            case LogicalType::kArray:
-                ParserError("Array isn't implemented here.");
+            case LogicalType::kArray: {
+                const auto *array_info = dynamic_cast<const ArrayInfo *>(this->type_info_.get());
+                size += array_info->ElemType().GetSizeInBytes();
                 break;
-//            case LogicalType::kBitmap:
-//                size += sizeof(int64_t);
-//                break;
-            case LogicalType::kDecimal:
+            }
+                //            case LogicalType::kBitmap:
+                //                size += sizeof(int64_t);
+                //                break;
+            case LogicalType::kDecimal: {
                 size += sizeof(int64_t) * 2;
                 break;
-            case LogicalType::kEmbedding:
+            }
+            case LogicalType::kTensor:
+            case LogicalType::kTensorArray:
+            case LogicalType::kMultiVector:
+            case LogicalType::kEmbedding: {
                 size += sizeof(EmbeddingDataType);
                 size += sizeof(int32_t);
                 break;
+            }
+            case LogicalType::kSparse: {
+                size += sizeof(EmbeddingDataType) * 2;
+                size += sizeof(int64_t);
+                size += sizeof(SparseStoreType);
+                break;
+            }
             default:
-                ParserError(fmt::format("Unexpected type {} here.", int(this->type_)));
+                ParserError(fmt::format("Unexpected type {} here.", LogicalType2Str(this->type_)));
         }
     }
     return size;
@@ -189,19 +316,21 @@ int32_t DataType::GetSizeInBytes() const {
 void DataType::WriteAdv(char *&ptr) const {
     WriteBufAdv<LogicalType>(ptr, this->type_);
     switch (this->type_) {
-        case LogicalType::kArray:
-            ParserError("Array isn't implemented here.");
+        case LogicalType::kArray: {
+            const auto *array_info = dynamic_cast<const ArrayInfo *>(this->type_info_.get());
+            array_info->ElemType().WriteAdv(ptr);
             break;
-//        case LogicalType::kBitmap: {
-//            int64_t limit = MAX_BITMAP_SIZE_INTERNAL;
-//            if (this->type_info_ != nullptr) {
-//                const BitmapInfo *bitmap_info = dynamic_cast<BitmapInfo *>(this->type_info_.get());
-//                if (bitmap_info != nullptr)
-//                    limit = bitmap_info->length_limit();
-//            }
-//            WriteBufAdv<int64_t>(ptr, limit);
-//            break;
-//        }
+        }
+            //        case LogicalType::kBitmap: {
+            //            int64_t limit = MAX_BITMAP_SIZE_INTERNAL;
+            //            if (this->type_info_ != nullptr) {
+            //                const BitmapInfo *bitmap_info = dynamic_cast<BitmapInfo *>(this->type_info_.get());
+            //                if (bitmap_info != nullptr)
+            //                    limit = bitmap_info->length_limit();
+            //            }
+            //            WriteBufAdv<int64_t>(ptr, limit);
+            //            break;
+            //        }
         case LogicalType::kDecimal: {
             int64_t precision = 0;
             int64_t scale = 0;
@@ -216,11 +345,22 @@ void DataType::WriteAdv(char *&ptr) const {
             WriteBufAdv<int64_t>(ptr, scale);
             break;
         }
+        case LogicalType::kTensor:
+        case LogicalType::kTensorArray:
+        case LogicalType::kMultiVector:
         case LogicalType::kEmbedding: {
             const EmbeddingInfo *embedding_info = dynamic_cast<EmbeddingInfo *>(this->type_info_.get());
             ParserAssert(embedding_info != nullptr, fmt::format("kEmbedding associated type_info is nullptr here."));
             WriteBufAdv<EmbeddingDataType>(ptr, embedding_info->Type());
             WriteBufAdv<int32_t>(ptr, int32_t(embedding_info->Dimension()));
+            break;
+        }
+        case LogicalType::kSparse: {
+            const auto *sparse_info = static_cast<SparseInfo *>(this->type_info().get());
+            WriteBufAdv<EmbeddingDataType>(ptr, sparse_info->DataType());
+            WriteBufAdv<EmbeddingDataType>(ptr, sparse_info->IndexType());
+            WriteBufAdv<int64_t>(ptr, sparse_info->Dimension());
+            WriteBufAdv<SparseStoreType>(ptr, sparse_info->StoreType());
             break;
         }
         default:
@@ -230,29 +370,44 @@ void DataType::WriteAdv(char *&ptr) const {
     return;
 }
 
-std::shared_ptr<DataType> DataType::ReadAdv(char *&ptr, int32_t maxbytes) {
-    char *const ptr_end = ptr + maxbytes;
+std::shared_ptr<DataType> DataType::ReadAdv(const char *&ptr, int32_t maxbytes) {
+    const char *const ptr_end = ptr + maxbytes;
     LogicalType type = ReadBufAdv<LogicalType>(ptr);
     std::shared_ptr<TypeInfo> type_info{nullptr};
     switch (type) {
-        case LogicalType::kArray:
-            ParserError("Array isn't implemented here.");
+        case LogicalType::kArray: {
+            ParserAssert(ptr_end > ptr, "ptr goes out of range when reading Array element DataType");
+            const auto array_element_type = DataType::ReadAdv(ptr, ptr_end - ptr);
+            type_info = ArrayInfo::Make(std::move(*array_element_type));
             break;
-//        case LogicalType::kBitmap: {
-//            int64_t limit = ReadBufAdv<int64_t>(ptr);
-//            type_info = BitmapInfo::Make(limit);
-//            break;
-//        }
+        }
+            //        case LogicalType::kBitmap: {
+            //            int64_t limit = ReadBufAdv<int64_t>(ptr);
+            //            type_info = BitmapInfo::Make(limit);
+            //            break;
+            //        }
         case LogicalType::kDecimal: {
             int64_t precision = ReadBufAdv<int64_t>(ptr);
             int64_t scale = ReadBufAdv<int64_t>(ptr);
             type_info = DecimalInfo::Make(precision, scale);
             break;
         }
+        case LogicalType::kTensor:
+        case LogicalType::kTensorArray:
+        case LogicalType::kMultiVector:
         case LogicalType::kEmbedding: {
             EmbeddingDataType embedding_type = ReadBufAdv<EmbeddingDataType>(ptr);
             int32_t dimension = ReadBufAdv<int32_t>(ptr);
             type_info = EmbeddingInfo::Make(EmbeddingDataType(embedding_type), dimension);
+            break;
+        }
+        case LogicalType::kSparse: {
+            EmbeddingDataType data_type = ReadBufAdv<EmbeddingDataType>(ptr);
+            EmbeddingDataType index_type = ReadBufAdv<EmbeddingDataType>(ptr);
+            int64_t dimension = ReadBufAdv<int64_t>(ptr);
+            SparseStoreType store_type = ReadBufAdv<SparseStoreType>(ptr);
+            auto sparse_info = SparseInfo::Make(data_type, index_type, dimension, store_type);
+            type_info = sparse_info;
             break;
         }
         default:
@@ -265,7 +420,7 @@ std::shared_ptr<DataType> DataType::ReadAdv(char *&ptr, int32_t maxbytes) {
     return data_type;
 }
 
-nlohmann::json DataType::Serialize() {
+nlohmann::json DataType::Serialize() const {
     nlohmann::json json_res;
     json_res["data_type"] = this->type_;
 
@@ -277,26 +432,34 @@ nlohmann::json DataType::Serialize() {
 }
 
 std::shared_ptr<DataType> DataType::Deserialize(const nlohmann::json &data_type_json) {
-    LogicalType logical_type = data_type_json["data_type"];
+    const auto logical_type = data_type_json["data_type"].get<LogicalType>();
+
     std::shared_ptr<TypeInfo> type_info{nullptr};
     if (data_type_json.contains("type_info")) {
         const nlohmann::json &type_info_json = data_type_json["type_info"];
         switch (logical_type) {
             case LogicalType::kArray: {
-                ParserError("Array isn't implemented here.");
-                type_info = nullptr;
+                const auto element_type = DataType::Deserialize(type_info_json);
+                type_info = ArrayInfo::Make(std::move(*element_type));
                 break;
             }
-//            case LogicalType::kBitmap: {
-//                type_info = BitmapInfo::Make(type_info_json["length_limit"]);
-//                break;
-//            }
+                //            case LogicalType::kBitmap: {
+                //                type_info = BitmapInfo::Make(type_info_json["length_limit"]);
+                //                break;
+                //            }
             case LogicalType::kDecimal: {
                 type_info = DecimalInfo::Make(type_info_json["precision"], type_info_json["scale"]);
                 break;
             }
+            case LogicalType::kTensor:
+            case LogicalType::kTensorArray:
+            case LogicalType::kMultiVector:
             case LogicalType::kEmbedding: {
-                type_info = EmbeddingInfo::Make(type_info_json["embedding_type"], type_info_json["dimension"]);
+                type_info = EmbeddingInfo::Make(type_info_json["embedding_type"].get<EmbeddingDataType>(), type_info_json["dimension"]);
+                break;
+            }
+            case LogicalType::kSparse: {
+                type_info = SparseInfo::Deserialize(type_info_json);
                 break;
             }
             default:
@@ -305,6 +468,27 @@ std::shared_ptr<DataType> DataType::Deserialize(const nlohmann::json &data_type_
         }
     }
     std::shared_ptr<DataType> data_type = std::make_shared<DataType>(logical_type, type_info);
+    return data_type;
+}
+
+std::shared_ptr<DataType> DataType::StringDeserialize(const std::string &data_type_string) {
+    const LogicalType logical_type = Str2LogicalType(data_type_string);
+
+    switch (logical_type) {
+        case LogicalType::kArray:
+        case LogicalType::kDecimal:
+        case LogicalType::kEmbedding: {
+            return nullptr;
+        }
+        case LogicalType::kInvalid: {
+            ParserError("Invalid data type");
+        }
+        default: {
+            // There's no type_info for other types
+            break;
+        }
+    }
+    std::shared_ptr<DataType> data_type = std::make_shared<DataType>(logical_type, nullptr);
     return data_type;
 }
 
@@ -346,6 +530,16 @@ std::string DataType::TypeToString<FloatT>() {
 template <>
 std::string DataType::TypeToString<DoubleT>() {
     return "Double";
+}
+
+template <>
+std::string DataType::TypeToString<Float16T>() {
+    return "Float16";
+}
+
+template <>
+std::string DataType::TypeToString<BFloat16T>() {
+    return "BFloat16";
 }
 
 template <>
@@ -409,35 +603,35 @@ std::string DataType::TypeToString<BoxT>() {
     return "Box";
 }
 
-//template <>
-//std::string DataType::TypeToString<PathT>() {
-//    return "Path";
-//}
+// template <>
+// std::string DataType::TypeToString<PathT>() {
+//     return "Path";
+// }
 //
-//template <>
-//std::string DataType::TypeToString<PolygonT>() {
-//    return "Polygon";
-//}
+// template <>
+// std::string DataType::TypeToString<PolygonT>() {
+//     return "Polygon";
+// }
 
 template <>
 std::string DataType::TypeToString<CircleT>() {
     return "Circle";
 }
 
-//template <>
-//std::string DataType::TypeToString<BitmapT>() {
-//    return "Bitmap";
-//}
+// template <>
+// std::string DataType::TypeToString<BitmapT>() {
+//     return "Bitmap";
+// }
 
 template <>
 std::string DataType::TypeToString<UuidT>() {
     return "UUID";
 }
 
-//template <>
-//std::string DataType::TypeToString<BlobT>() {
-//    return "Blob";
-//}
+// template <>
+// std::string DataType::TypeToString<BlobT>() {
+//     return "Blob";
+// }
 
 template <>
 std::string DataType::TypeToString<EmbeddingT>() {
@@ -455,6 +649,21 @@ std::string DataType::TypeToString<MixedT>() {
 }
 
 template <>
+std::string DataType::TypeToString<TensorT>() {
+    return "Tensor";
+}
+
+template <>
+std::string DataType::TypeToString<TensorArrayT>() {
+    return "TensorArray";
+}
+
+template <>
+std::string DataType::TypeToString<MultiVectorT>() {
+    return "MultiVector";
+}
+
+template <>
 BooleanT DataType::StringToValue<BooleanT>(const std::string_view &str) {
     if (str.empty()) {
         return BooleanT{};
@@ -469,13 +678,32 @@ BooleanT DataType::StringToValue<BooleanT>(const std::string_view &str) {
 }
 
 template <>
+uint8_t DataType::StringToValue<uint8_t>(const std::string_view &str) {
+    if (str.empty()) {
+        return {};
+    }
+    uint8_t value{};
+    auto res = std::from_chars(str.begin(), str.end(), value);
+    if (res.ptr != str.data() + str.size()) {
+        std::string error_message = fmt::format("Error: parse u8 integer: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
+    return value;
+}
+
+template <>
 TinyIntT DataType::StringToValue<TinyIntT>(const std::string_view &str) {
     if (str.empty()) {
         return TinyIntT{};
     }
     TinyIntT value{};
     auto res = std::from_chars(str.begin(), str.end(), value);
-    ParserAssert(res.ptr == str.data() + str.size(), "Parse TinyInt error"); // TODO: throw error here
+    if (res.ptr != str.data() + str.size()) {
+        std::string error_message = fmt::format("Error: parse tiny integer: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
     return value;
 }
 
@@ -486,7 +714,11 @@ SmallIntT DataType::StringToValue<SmallIntT>(const std::string_view &str) {
     }
     SmallIntT value{};
     auto res = std::from_chars(str.begin(), str.end(), value);
-    ParserAssert(res.ptr == str.data() + str.size(), "Parse SmallInt error");
+    if (res.ptr != str.data() + str.size()) {
+        std::string error_message = fmt::format("Error: parse small integer: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
     return value;
 }
 
@@ -497,7 +729,11 @@ IntegerT DataType::StringToValue<IntegerT>(const std::string_view &str) {
     }
     IntegerT value{};
     auto res = std::from_chars(str.begin(), str.end(), value);
-    ParserAssert(res.ptr == str.data() + str.size(), "Parse Integer error");
+    if (res.ptr != str.data() + str.size()) {
+        std::string error_message = fmt::format("Error: parse integer: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
     return value;
 }
 
@@ -508,7 +744,11 @@ BigIntT DataType::StringToValue<BigIntT>(const std::string_view &str) {
     }
     BigIntT value{};
     auto res = std::from_chars(str.begin(), str.end(), value);
-    ParserAssert(res.ptr == str.data() + str.size(), "Parse BigInt error");
+    if (res.ptr != str.data() + str.size()) {
+        std::string error_message = fmt::format("Error: parse big integer: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
     return value;
 }
 
@@ -520,10 +760,17 @@ FloatT DataType::StringToValue<FloatT>(const std::string_view &str) {
     FloatT value{};
 #if defined(__APPLE__)
     auto ret = std::sscanf(str.data(), "%a", &value);
-    ParserAssert(ret == str.size(), "Parse Float error");
+    ParserAssert((size_t)ret == str.size(), "Error: parse float error");
 #else
-    auto res = std::from_chars(str.begin(), str.end(), value);
-    ParserAssert(res.ptr == str.data() + str.size(), "Parse Float error");
+    // Used in libc++
+    try {
+        const std::string float_str(str);
+        value = std::stof(float_str);
+    } catch (const std::exception &e) {
+        std::string error_message = fmt::format("Error: parse float: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
 #endif
     return value;
 }
@@ -536,11 +783,30 @@ DoubleT DataType::StringToValue<DoubleT>(const std::string_view &str) {
     DoubleT value{};
 #if defined(__APPLE__)
     auto ret = std::sscanf(str.data(), "%la", &value);
-    ParserAssert(ret == str.size(), "Parse Double error");
+    ParserAssert((size_t)ret == str.size(), "Error: parse double error");
 #else
-    auto res = std::from_chars(str.begin(), str.end(), value);
-    ParserAssert(res.ptr == str.data() + str.size(), "Parse Double error");
+    try {
+        const std::string double_str(str);
+        value = std::stod(double_str);
+    } catch (const std::exception &e) {
+        std::string error_message = fmt::format("Error: parse double: {} to {}", str, value);
+        std::cerr << error_message << std::endl;
+        ParserError(error_message);
+    }
 #endif
     return value;
 }
+
+template <>
+Float16T DataType::StringToValue<Float16T>(const std::string_view &str) {
+    FloatT float_value = StringToValue<FloatT>(str);
+    return static_cast<Float16T>(float_value);
+}
+
+template <>
+BFloat16T DataType::StringToValue<BFloat16T>(const std::string_view &str) {
+    FloatT float_value = StringToValue<FloatT>(str);
+    return static_cast<BFloat16T>(float_value);
+}
+
 } // namespace infinity

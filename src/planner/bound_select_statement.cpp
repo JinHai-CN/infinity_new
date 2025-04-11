@@ -14,7 +14,10 @@
 
 module;
 
-#include <memory>
+#include <cstdlib>
+#include <string>
+
+module bound_select_statement;
 
 import logical_node;
 import stl;
@@ -41,9 +44,12 @@ import logical_project;
 import logical_filter;
 import logical_table_scan;
 import logical_knn_scan;
+import logical_match_tensor_scan;
+import logical_match_sparse_scan;
 import logical_aggregate;
 import logical_sort;
 import logical_limit;
+import logical_top;
 import logical_cross_product;
 import logical_join;
 import logical_show;
@@ -52,29 +58,54 @@ import logical_import;
 import logical_dummy_scan;
 import logical_match;
 import logical_fusion;
+import logical_unnest;
 
 import subquery_unnest;
 
 import infinity_exception;
 import expression_transformer;
 import expression_type;
-import knn_scan;
 
-import parser;
 import base_table_ref;
 import subquery_table_ref;
 import cross_product_table_ref;
 import join_table_ref;
 import knn_expression;
+import match_expression;
+import match_tensor_expression;
+import match_sparse_expression;
+import third_party;
+import table_reference;
+import common_query_filter;
+import logger;
 
-module bound_select_statement;
+import search_options;
+import search_driver;
+import query_node;
+import doc_iterator;
+import status;
+import default_values;
+import parse_fulltext_options;
+import highlighter;
+import data_type;
+import internal_types;
+import txn;
+
+import new_txn;
 
 namespace infinity {
 
 SharedPtr<LogicalNode> BoundSelectStatement::BuildPlan(QueryContext *query_context) {
     const SharedPtr<BindContext> &bind_context = this->bind_context_;
-    if (search_expr_ == nullptr) {
+    if (search_expr_.get() == nullptr) {
         SharedPtr<LogicalNode> root = BuildFrom(table_ref_ptr_, query_context, bind_context);
+
+        if (!unnest_expressions_.empty()) {
+            SharedPtr<LogicalNode> unnest = BuildUnnest(root, unnest_expressions_, query_context, bind_context);
+            unnest->set_left_node(root);
+            root = unnest;
+        }
+
         if (!where_conditions_.empty()) {
             SharedPtr<LogicalNode> filter = BuildFilter(root, where_conditions_, query_context, bind_context);
             filter->set_left_node(root);
@@ -83,7 +114,7 @@ SharedPtr<LogicalNode> BoundSelectStatement::BuildPlan(QueryContext *query_conte
 
         if (!group_by_expressions_.empty() || !aggregate_expressions_.empty()) {
             // Build logical aggregate
-            auto base_table_ref = static_pointer_cast<BaseTableRef>(table_ref_ptr_);
+            auto base_table_ref = std::static_pointer_cast<BaseTableRef>(table_ref_ptr_);
             auto aggregate = MakeShared<LogicalAggregate>(bind_context->GetNewLogicalNodeId(),
                                                           base_table_ref,
                                                           group_by_expressions_,
@@ -103,25 +134,49 @@ SharedPtr<LogicalNode> BoundSelectStatement::BuildPlan(QueryContext *query_conte
 
         if (!order_by_expressions_.empty()) {
             if (order_by_expressions_.size() != order_by_types_.size()) {
-                Error<PlannerException>("Unknown error on order by expression");
+                String error_message = "Unknown error on order by expression";
+                UnrecoverableError(error_message);
             }
-            SharedPtr<LogicalNode> sort = MakeShared<LogicalSort>(bind_context->GetNewLogicalNodeId(), order_by_expressions_, order_by_types_);
-            sort->set_left_node(root);
-            root = sort;
-        }
 
-        if (limit_expression_ != nullptr) {
-            auto limit = MakeShared<LogicalLimit>(bind_context->GetNewLogicalNodeId(), limit_expression_, offset_expression_);
+            if (limit_expression_.get() == nullptr) {
+                SharedPtr<LogicalNode> sort = MakeShared<LogicalSort>(bind_context->GetNewLogicalNodeId(), order_by_expressions_, order_by_types_);
+                sort->set_left_node(root);
+                root = sort;
+            } else {
+                SharedPtr<LogicalNode> top = MakeShared<LogicalTop>(bind_context->GetNewLogicalNodeId(),
+                                                                    std::static_pointer_cast<BaseTableRef>(table_ref_ptr_),
+                                                                    limit_expression_,
+                                                                    offset_expression_,
+                                                                    order_by_expressions_,
+                                                                    order_by_types_,
+                                                                    total_hits_count_flag_);
+                top->set_left_node(root);
+                root = top;
+            }
+        } else if (limit_expression_.get() != nullptr) {
+            auto limit = MakeShared<LogicalLimit>(bind_context->GetNewLogicalNodeId(),
+                                                  std::static_pointer_cast<BaseTableRef>(table_ref_ptr_),
+                                                  limit_expression_,
+                                                  offset_expression_,
+                                                  total_hits_count_flag_);
             limit->set_left_node(root);
             root = limit;
         }
 
-        auto project = MakeShared<LogicalProject>(bind_context->GetNewLogicalNodeId(), projection_expressions_, projection_index_);
+        auto project = MakeShared<LogicalProject>(bind_context->GetNewLogicalNodeId(),
+                                                  projection_expressions_,
+                                                  projection_index_,
+                                                  Map<SizeT, SharedPtr<HighlightInfo>>());
         project->set_left_node(root);
         root = project;
 
         if (!pruned_expression_.empty()) {
-            auto pruned_project = MakeShared<LogicalProject>(bind_context->GetNewLogicalNodeId(), pruned_expression_, result_index_);
+            String error_message = "Projection method changed!";
+            UnrecoverableError(error_message);
+            auto pruned_project = MakeShared<LogicalProject>(bind_context->GetNewLogicalNodeId(),
+                                                             pruned_expression_,
+                                                             result_index_,
+                                                             Map<SizeT, SharedPtr<HighlightInfo>>());
             pruned_project->set_left_node(root);
             root = pruned_project;
         }
@@ -129,50 +184,315 @@ SharedPtr<LogicalNode> BoundSelectStatement::BuildPlan(QueryContext *query_conte
         return root;
     } else {
         SharedPtr<LogicalNode> root = nullptr;
-        SizeT num_children = search_expr_->match_exprs_.size() + search_expr_->knn_exprs_.size();
+        const SizeT num_children = search_expr_->match_exprs_.size();
         if (num_children <= 0) {
-            Error<PlannerException>("SEARCH shall have at least one MATCH or KNN expression");
-        } else if (num_children >= 3) {
-            Error<PlannerException>("SEARCH shall have at max two MATCH or KNN expression");
+            String error_message = "SEARCH shall have at least one MATCH TEXT or MATCH VECTOR or MATCH TENSOR or MATCH SPARSE expression";
+            UnrecoverableError(error_message);
+        }
+        if (table_ref_ptr_->type() != TableRefType::kTable) {
+            String error_message = "Not base table reference";
+            UnrecoverableError(error_message);
+        }
+        auto base_table_ref = std::static_pointer_cast<BaseTableRef>(table_ref_ptr_);
+        // FIXME: need check if there is subquery inside the where conditions
+        auto default_filter_expr = ComposeExpressionWithDelimiter(where_conditions_, ConjunctionType::kAnd);
+        if (default_filter_expr && search_expr_->have_filter_in_subsearch_) {
+            RecoverableError(Status::SyntaxError("Cannot have filter in subsearch and where clause at the same time."));
+        }
+
+        bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+        Txn *txn_ptr = query_context->GetTxn();
+        NewTxn *new_txn_ptr = query_context->GetNewTxn();
+
+        SharedPtr<CommonQueryFilter> default_common_query_filter;
+        if (use_new_catalog) {
+            default_common_query_filter = MakeShared<CommonQueryFilter>(default_filter_expr, base_table_ref, new_txn_ptr);
+        } else {
+            default_common_query_filter = MakeShared<CommonQueryFilter>(default_filter_expr, base_table_ref, txn_ptr);
         }
 
         Vector<SharedPtr<LogicalNode>> match_knn_nodes;
-        match_knn_nodes.reserve(search_expr_->match_exprs_.size());
+        match_knn_nodes.reserve(num_children);
         for (auto &match_expr : search_expr_->match_exprs_) {
-            if (table_ref_ptr_->type() != TableRefType::kTable) {
-                Error<PlannerException>("Not base table reference");
-            }
-            auto base_table_ref = static_pointer_cast<BaseTableRef>(table_ref_ptr_);
-            SharedPtr<LogicalNode> matchNode = MakeShared<LogicalMatch>(bind_context->GetNewLogicalNodeId(), base_table_ref, match_expr);
-            match_knn_nodes.push_back(matchNode);
-        }
+            auto filter_expr = default_filter_expr;
+            auto common_query_filter = default_common_query_filter;
+            switch (match_expr->type()) {
+                case ExpressionType::kMatch: {
+                    auto match_text_expr = std::dynamic_pointer_cast<MatchExpression>(match_expr);
+                    if (match_text_expr->optional_filter_) {
+                        filter_expr = match_text_expr->optional_filter_;
+                        common_query_filter = MakeShared<CommonQueryFilter>(filter_expr, base_table_ref, query_context->GetTxn());
+                    }
+                    SharedPtr<LogicalMatch> match_node =
+                        MakeShared<LogicalMatch>(bind_context->GetNewLogicalNodeId(), base_table_ref, std::move(match_text_expr));
+                    match_node->filter_expression_ = std::move(filter_expr);
+                    match_node->common_query_filter_ = std::move(common_query_filter);
 
+                    if (!use_new_catalog) {
+                        match_node->index_reader_ =
+                            txn_ptr->GetFullTextIndexReader(*base_table_ref->table_info_->db_name_, *base_table_ref->table_info_->table_name_);
+                    } else {
+                        Status status = new_txn_ptr->GetFullTextIndexReader(*base_table_ref->table_info_->db_name_,
+                                                                        *base_table_ref->table_info_->table_name_,
+                                                                        match_node->index_reader_);
+                        if (!status.ok()) {
+                            UnrecoverableError(fmt::format("Get full text index reader error: {}", status.message()));
+                        }
+                    }
+
+                    Map<String, String> column2analyzer = match_node->index_reader_->GetColumn2Analyzer(match_node->match_expr_->index_names_);
+                    SearchOptions search_ops(match_node->match_expr_->options_text_);
+
+                    // option: begin_threshold
+                    const String &threshold = search_ops.options_["begin_threshold"];
+                    match_node->begin_threshold_ = strtof(threshold.c_str(), nullptr);
+
+                    // option: default field
+                    auto iter = search_ops.options_.find("default_field");
+                    String default_field;
+                    if (iter != search_ops.options_.end()) {
+                        default_field = iter->second;
+                    }
+
+                    // option: block max
+                    iter = search_ops.options_.find("block_max");
+                    if (iter == search_ops.options_.end() || iter->second == "auto") {
+                        match_node->early_term_algo_ = EarlyTermAlgo::kAuto;
+                    } else if (iter->second == "true" || iter->second == "bmw") {
+                        match_node->early_term_algo_ = EarlyTermAlgo::kBMW;
+                    } else if (iter->second == "batch") {
+                        match_node->early_term_algo_ = EarlyTermAlgo::kBatch;
+                    } else if (iter->second == "false") {
+                        match_node->early_term_algo_ = EarlyTermAlgo::kNaive;
+                    } else if (iter->second == "compare") {
+                        match_node->early_term_algo_ = EarlyTermAlgo::kCompare;
+                    } else {
+                        RecoverableError(Status::SyntaxError("block_max option must be empty, auto, bmw, true, batch, false, or compare"));
+                    }
+
+                    // option: top n
+                    iter = search_ops.options_.find("topn");
+                    if (iter != search_ops.options_.end()) {
+                        i32 top_n_option = std::strtol(iter->second.c_str(), nullptr, 0);
+                        if (top_n_option <= 0) {
+                            Status status = Status::SyntaxError("top n must be a positive integer");
+                            RecoverableError(status);
+                        }
+                        match_node->top_n_ = top_n_option;
+                    } else {
+                        match_node->top_n_ = DEFAULT_MATCH_TEXT_OPTION_TOP_N;
+                    }
+
+                    auto query_operator_option = FulltextQueryOperatorOption::kInfinitySyntax;
+                    // option: operator
+                    if (iter = search_ops.options_.find("operator"); iter != search_ops.options_.end()) {
+                        ToLower(iter->second);
+                        if (iter->second == "and") {
+                            query_operator_option = FulltextQueryOperatorOption::kAnd;
+                        } else if (iter->second == "or") {
+                            query_operator_option = FulltextQueryOperatorOption::kOr;
+                        } else {
+                            RecoverableError(Status::SyntaxError(R"(operator option must be "and" or "or".)"));
+                        }
+                    }
+
+                    // option: minimum_should_match
+                    if (iter = search_ops.options_.find("minimum_should_match"); iter != search_ops.options_.end()) {
+                        match_node->minimum_should_match_option_ = ParseMinimumShouldMatchOption(iter->second);
+                    }
+
+                    // option: rank_features
+                    if (iter = search_ops.options_.find("rank_features"); iter != search_ops.options_.end()) {
+                        match_node->rank_features_option_ = ParseRankFeaturesOption(iter->second);
+                    }
+
+                    // option: threshold
+                    if (iter = search_ops.options_.find("threshold"); iter != search_ops.options_.end()) {
+                        match_node->score_threshold_ = DataType::StringToValue<FloatT>(iter->second);
+                    }
+
+                    // option: similarity
+                    if (iter = search_ops.options_.find("similarity"); iter != search_ops.options_.end()) {
+                        String ft_sim = iter->second;
+                        ToLower(ft_sim);
+                        if (ft_sim == "bm25") {
+                            match_node->ft_similarity_ = FulltextSimilarity::kBM25;
+                        } else if (ft_sim == "boolean") {
+                            match_node->ft_similarity_ = FulltextSimilarity::kBoolean;
+                        } else {
+                            RecoverableError(Status::SyntaxError(R"(similarity option must be "BM25" or "boolean".)"));
+                        }
+                    }
+                    // option: bm25_params
+                    if (iter = search_ops.options_.find("bm25_param_k1"); iter != search_ops.options_.end()) {
+                        const auto k1_v = DataType::StringToValue<FloatT>(iter->second);
+                        if (k1_v < 0.0f) {
+                            RecoverableError(Status::SyntaxError("bm25_param_k1 must be a non-negative float. default value: 1.2"));
+                        }
+                        match_node->bm25_params_.k1 = k1_v;
+                    }
+                    if (iter = search_ops.options_.find("bm25_param_b"); iter != search_ops.options_.end()) {
+                        const auto b_v = DataType::StringToValue<FloatT>(iter->second);
+                        if (b_v < 0.0f || b_v > 1.0f) {
+                            RecoverableError(Status::SyntaxError("bm25_param_b must be in the range [0.0f, 1.0f]. default value: 0.75"));
+                        }
+                        match_node->bm25_params_.b = b_v;
+                    }
+                    if (iter = search_ops.options_.find("bm25_param_delta"); iter != search_ops.options_.end()) {
+                        const auto delta_v = DataType::StringToValue<FloatT>(iter->second);
+                        if (delta_v < 0.0f) {
+                            RecoverableError(Status::SyntaxError("bm25_param_delta must be a non-negative float. default value: 0.0"));
+                        }
+                        match_node->bm25_params_.delta_term = delta_v;
+                        match_node->bm25_params_.delta_phrase = delta_v;
+                    }
+                    if (iter = search_ops.options_.find("bm25_param_delta_term"); iter != search_ops.options_.end()) {
+                        const auto delta_term_v = DataType::StringToValue<FloatT>(iter->second);
+                        if (delta_term_v < 0.0f) {
+                            RecoverableError(Status::SyntaxError("bm25_param_delta_term must be a non-negative float. default value: 0.0"));
+                        }
+                        match_node->bm25_params_.delta_term = delta_term_v;
+                    }
+                    if (iter = search_ops.options_.find("bm25_param_delta_phrase"); iter != search_ops.options_.end()) {
+                        const auto delta_phrase_v = DataType::StringToValue<FloatT>(iter->second);
+                        if (delta_phrase_v < 0.0f) {
+                            RecoverableError(Status::SyntaxError("bm25_param_delta_phrase must be a non-negative float. default value: 0.0"));
+                        }
+                        match_node->bm25_params_.delta_phrase = delta_phrase_v;
+                    }
+
+                    SearchDriver search_driver(column2analyzer, default_field, query_operator_option);
+                    UniquePtr<QueryNode> query_tree =
+                        search_driver.ParseSingleWithFields(match_node->match_expr_->fields_, match_node->match_expr_->matching_text_);
+                    if (query_tree.get() == nullptr) {
+                        Status status = Status::ParseMatchExprFailed(match_node->match_expr_->fields_, match_node->match_expr_->matching_text_);
+                        RecoverableError(status);
+                    }
+
+                    // Initialize highlight info
+                    if (!highlight_columns_.empty()) {
+                        Vector<String> columns, terms;
+                        query_tree->GetQueryColumnsTerms(columns, terms);
+
+                        // Deduplicate columns
+                        std::sort(columns.begin(), columns.end());
+                        columns.erase(std::unique(columns.begin(), columns.end()), columns.end());
+
+                        for (auto &column_name : columns) {
+                            for (auto &[highlight_column_id, highlight_info] : highlight_columns_) {
+                                if (column_name == projection_expressions_[highlight_column_id]->Name()) {
+                                    highlight_info->query_terms_.insert(highlight_info->query_terms_.end(), terms.begin(), terms.end());
+                                    const auto &it = column2analyzer.find(column_name);
+                                    if (it == column2analyzer.end()) {
+                                        highlight_info->analyzer_ = "standard";
+                                    } else {
+                                        highlight_info->analyzer_ = it->second;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    match_node->query_tree_ = std::move(query_tree);
+                    match_knn_nodes.push_back(std::move(match_node));
+                    break;
+                }
+                case ExpressionType::kKnn: {
+                    auto match_dense_expr = std::dynamic_pointer_cast<KnnExpression>(match_expr);
+                    if (match_dense_expr->optional_filter_) {
+                        filter_expr = match_dense_expr->optional_filter_;
+                        common_query_filter = MakeShared<CommonQueryFilter>(filter_expr, base_table_ref, query_context->GetTxn());
+                    }
+                    auto knn_scan = MakeShared<LogicalKnnScan>(bind_context->GetNewLogicalNodeId(),
+                                                               base_table_ref,
+                                                               std::move(match_dense_expr),
+                                                               bind_context->knn_table_index_);
+                    knn_scan->filter_expression_ = std::move(filter_expr);
+                    knn_scan->common_query_filter_ = std::move(common_query_filter);
+                    match_knn_nodes.push_back(std::move(knn_scan));
+                    break;
+                }
+                case ExpressionType::kMatchTensor: {
+                    auto match_tensor_expr = std::dynamic_pointer_cast<MatchTensorExpression>(match_expr);
+                    if (match_tensor_expr->optional_filter_) {
+                        filter_expr = match_tensor_expr->optional_filter_;
+                        common_query_filter = MakeShared<CommonQueryFilter>(filter_expr, base_table_ref, query_context->GetTxn());
+                    }
+                    auto match_tensor_node =
+                        MakeShared<LogicalMatchTensorScan>(bind_context->GetNewLogicalNodeId(), base_table_ref, std::move(match_tensor_expr));
+                    match_tensor_node->filter_expression_ = std::move(filter_expr);
+                    match_tensor_node->common_query_filter_ = std::move(common_query_filter);
+                    match_tensor_node->InitExtraOptions();
+                    match_knn_nodes.push_back(std::move(match_tensor_node));
+                    break;
+                }
+                case ExpressionType::kMatchSparse: {
+                    auto match_sparse_expr = std::dynamic_pointer_cast<MatchSparseExpression>(match_expr);
+                    if (match_sparse_expr->optional_filter_) {
+                        filter_expr = match_sparse_expr->optional_filter_;
+                        common_query_filter = MakeShared<CommonQueryFilter>(filter_expr, base_table_ref, query_context->GetTxn());
+                    }
+                    auto match_sparse_node =
+                        MakeShared<LogicalMatchSparseScan>(bind_context->GetNewLogicalNodeId(), base_table_ref, std::move(match_sparse_expr));
+                    match_sparse_node->filter_expression_ = std::move(filter_expr);
+                    match_sparse_node->common_query_filter_ = std::move(common_query_filter);
+                    match_knn_nodes.push_back(std::move(match_sparse_node));
+                    break;
+                }
+                default: {
+                    UnrecoverableError(fmt::format("Unsupported match expression: {}.", match_expr->ToString()));
+                }
+            }
+        }
         bind_context->GenerateTableIndex();
-        for (auto &knn_expr : search_expr_->knn_exprs_) {
-            if (table_ref_ptr_->type() != TableRefType::kTable) {
-                Error<PlannerException>("Not base table reference");
+        if (!(search_expr_->fusion_exprs_.empty())) {
+            auto firstfusionNode = MakeShared<LogicalFusion>(bind_context->GetNewLogicalNodeId(), base_table_ref, search_expr_->fusion_exprs_[0]);
+            firstfusionNode->set_left_node(match_knn_nodes[0]);
+            if (match_knn_nodes.size() > 1) {
+                firstfusionNode->set_right_node(match_knn_nodes[1]);
+                if (match_knn_nodes.size() > 2) {
+                    for (SizeT i = 2; i < match_knn_nodes.size(); i++) {
+                        firstfusionNode->other_children_.push_back(std::move(match_knn_nodes[i]));
+                    }
+                }
             }
-            SharedPtr<LogicalKnnScan> knn_scan = BuildInitialKnnScan(table_ref_ptr_, knn_expr, query_context, bind_context);
-            // FIXME: need check if there is subquery inside the where conditions
-            auto filter_expr = ComposeExpressionWithDelimiter(where_conditions_, ConjunctionType::kAnd);
-            knn_scan->filter_expression_ = filter_expr;
-            SharedPtr<LogicalNode> logicKnnScan = std::dynamic_pointer_cast<LogicalNode>(knn_scan);
-            match_knn_nodes.push_back(logicKnnScan);
-        }
-
-        if (search_expr_->fusion_expr_ != nullptr) {
-            SharedPtr<LogicalNode> fusionNode = MakeShared<LogicalFusion>(bind_context->GetNewLogicalNodeId(), search_expr_->fusion_expr_);
-            fusionNode->set_left_node(match_knn_nodes[0]);
-            if (match_knn_nodes.size() > 1)
-                fusionNode->set_right_node(match_knn_nodes[1]);
-            root = fusionNode;
+            root = std::move(firstfusionNode);
+            // extra fusion nodes
+            for (u32 i = 1; i < search_expr_->fusion_exprs_.size(); ++i) {
+                auto extrafusionNode = MakeShared<LogicalFusion>(bind_context->GetNewLogicalNodeId(), base_table_ref, search_expr_->fusion_exprs_[i]);
+                extrafusionNode->set_left_node(root);
+                root = std::move(extrafusionNode);
+            }
         } else {
-            root = match_knn_nodes[0];
+            root = std::move(match_knn_nodes[0]);
         }
 
-        auto project = MakeShared<LogicalProject>(bind_context->GetNewLogicalNodeId(), projection_expressions_, projection_index_);
+        if (limit_expression_.get() != nullptr) {
+            auto limit = MakeShared<LogicalLimit>(bind_context->GetNewLogicalNodeId(),
+                                                  base_table_ref,
+                                                  limit_expression_,
+                                                  offset_expression_,
+                                                  total_hits_count_flag_);
+            limit->set_left_node(root);
+            root = limit;
+        }
+
+        // Finalize highlight info
+        if (!highlight_columns_.empty()) {
+            for (auto &[highlight_column_id, highlight_info] : highlight_columns_) {
+                // Deduplicate terms
+                std::sort(highlight_info->query_terms_.begin(), highlight_info->query_terms_.end());
+                highlight_info->query_terms_.erase(std::unique(highlight_info->query_terms_.begin(), highlight_info->query_terms_.end()),
+                                                   highlight_info->query_terms_.end());
+            }
+        }
+
+        auto project = MakeShared<LogicalProject>(bind_context->GetNewLogicalNodeId(),
+                                                  projection_expressions_,
+                                                  projection_index_,
+                                                  std::move(highlight_columns_));
         project->set_left_node(root);
-        root = project;
+        root = std::move(project);
 
         return root;
     }
@@ -183,32 +503,36 @@ SharedPtr<LogicalKnnScan> BoundSelectStatement::BuildInitialKnnScan(SharedPtr<Ta
                                                                     QueryContext *query_context,
                                                                     const SharedPtr<BindContext> &bind_context) {
     if (table_ref.get() == nullptr) {
-        Error<PlannerException>("Attempt to do KNN scan without table");
+        String error_message = "Attempt to do KNN scan without table";
+        UnrecoverableError(error_message);
     }
     switch (table_ref->type_) {
         case TableRefType::kCrossProduct: {
-            Error<PlannerException>("KNN is not supported on CROSS PRODUCT relation, now.");
+            String error_message = "KNN is not supported on CROSS PRODUCT relation, now.";
+            UnrecoverableError(error_message);
             break;
         }
         case TableRefType::kJoin: {
-            Error<PlannerException>("KNN is not supported on JOIN relation, now.");
+            String error_message = "KNN is not supported on JOIN relation, now.";
+            UnrecoverableError(error_message);
         }
         case TableRefType::kTable: {
-            auto base_table_ref = static_pointer_cast<BaseTableRef>(table_ref);
-
+            auto base_table_ref = std::static_pointer_cast<BaseTableRef>(table_ref);
             // Change function table to knn table scan function
-            SharedPtr<LogicalKnnScan> knn_scan_node = MakeShared<LogicalKnnScan>(bind_context->GetNewLogicalNodeId(), base_table_ref);
-
-            knn_scan_node->knn_expression_ = knn_expr;
-            knn_scan_node->knn_table_index_ = bind_context->knn_table_index_;
+            SharedPtr<LogicalKnnScan> knn_scan_node = MakeShared<LogicalKnnScan>(bind_context->GetNewLogicalNodeId(),
+                                                                                 std::move(base_table_ref),
+                                                                                 std::move(knn_expr),
+                                                                                 bind_context->knn_table_index_);
             return knn_scan_node;
         }
         case TableRefType::kSubquery: {
-            Error<PlannerException>("KNN is not supported on a SUBQUERY, now.");
+            String error_message = "KNN is not supported on a SUBQUERY, now.";
+            UnrecoverableError(error_message);
             break;
         }
         default: {
-            Error<PlannerException>("Unexpected table type");
+            String error_message = "Unexpected table type";
+            UnrecoverableError(error_message);
         }
     }
 
@@ -235,7 +559,8 @@ BoundSelectStatement::BuildFrom(SharedPtr<TableRef> &table_ref, QueryContext *qu
                 return BuildDummyTable(table_ref, query_context, bind_context);
             }
             default: {
-                Error<PlannerException>("Unknown table reference type.");
+                String error_message = "Unknown table reference type.";
+                UnrecoverableError(error_message);
             }
         }
     } else {
@@ -273,7 +598,7 @@ SharedPtr<LogicalNode> BoundSelectStatement::BuildCrossProductTable(SharedPtr<Ta
 
     // TODO: Merge bind context ?
     u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-    String alias("cross_product" + ToStr(logical_node_id));
+    String alias(fmt::format("cross_product{}", logical_node_id));
     SharedPtr<LogicalCrossProduct> logical_cross_product_node = MakeShared<LogicalCrossProduct>(logical_node_id, alias, left_node, right_node);
     return logical_cross_product_node;
 }
@@ -288,7 +613,7 @@ BoundSelectStatement::BuildJoinTable(SharedPtr<TableRef> &table_ref, QueryContex
 
     // TODO: Merge bind context ?
     u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-    String alias("join" + ToStr(logical_node_id));
+    String alias(fmt::format("join{}", logical_node_id));
     SharedPtr<LogicalJoin> logical_join_node =
         MakeShared<LogicalJoin>(logical_node_id, join_table_ref->join_type_, alias, join_table_ref->on_conditions_, left_node, right_node);
     return logical_join_node;
@@ -296,7 +621,7 @@ BoundSelectStatement::BuildJoinTable(SharedPtr<TableRef> &table_ref, QueryContex
 
 SharedPtr<LogicalNode> BoundSelectStatement::BuildDummyTable(SharedPtr<TableRef> &, QueryContext *, const SharedPtr<BindContext> &bind_context) {
     u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-    String alias("DummyTable" + ToStr(logical_node_id));
+    String alias(fmt::format("DummyTable{}", logical_node_id));
     SharedPtr<LogicalDummyScan> dummy_scan_node = MakeShared<LogicalDummyScan>(logical_node_id, alias, bind_context->GenerateTableIndex());
     return dummy_scan_node;
 }
@@ -323,6 +648,17 @@ SharedPtr<LogicalNode> BoundSelectStatement::BuildFilter(SharedPtr<LogicalNode> 
     return filter;
 }
 
+SharedPtr<LogicalNode> BoundSelectStatement::BuildUnnest(SharedPtr<LogicalNode> &root,
+                                                         Vector<SharedPtr<BaseExpression>> &expressions,
+                                                         QueryContext *query_context,
+                                                         const SharedPtr<BindContext> &bind_context) {
+    // SharedPtr<LogicalUnnest> unnest
+    expressions = {bind_context->unnest_exprs_};
+    SizeT unnest_idx = bind_context->unnest_table_index_;
+    auto unnest = MakeShared<LogicalUnnest>(bind_context->GetNewLogicalNodeId(), expressions, unnest_idx);
+    return unnest;
+}
+
 void BoundSelectStatement::BuildSubquery(SharedPtr<LogicalNode> &root,
                                          SharedPtr<BaseExpression> &condition,
                                          QueryContext *query_context,
@@ -336,7 +672,8 @@ void BoundSelectStatement::BuildSubquery(SharedPtr<LogicalNode> &root,
     if (condition->type() == ExpressionType::kSubQuery) {
         if (building_subquery_) {
             // nested subquery
-            Error<PlannerException>("Nested subquery detected");
+            String error_message = "Nested subquery detected";
+            UnrecoverableError(error_message);
         }
         condition = UnnestSubquery(root, condition, query_context, bind_context);
     }

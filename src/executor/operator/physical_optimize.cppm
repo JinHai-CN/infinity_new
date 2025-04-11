@@ -14,8 +14,10 @@
 
 module;
 
+export module physical_optimize;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -23,20 +25,28 @@ import physical_operator_type;
 import base_expression;
 import load_meta;
 import infinity_exception;
-
-export module physical_optimize;
+import internal_types;
+import optimize_statement;
+import data_type;
+import logger;
+import statement_common;
 
 namespace infinity {
 
 export class PhysicalOptimize final : public PhysicalOperator {
 public:
-    explicit PhysicalOptimize(u64 id, String db_name, String object_name, SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kOptimize, nullptr, nullptr, id, load_metas), db_name_(Move(db_name)),
-          object_name_(Move(object_name)) {}
+    explicit PhysicalOptimize(u64 id,
+                              String db_name,
+                              String table_name,
+                              String index_name,
+                              Vector<UniquePtr<InitParameter>> opt_params,
+                              SharedPtr<Vector<LoadMeta>> load_metas)
+        : PhysicalOperator(PhysicalOperatorType::kOptimize, nullptr, nullptr, id, load_metas), db_name_(std::move(db_name)),
+          table_name_(std::move(table_name)), index_name_(std::move(index_name)), opt_params_(std::move(opt_params)) {}
 
     ~PhysicalOptimize() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
@@ -44,20 +54,16 @@ public:
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
 
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
-
-    inline OptimizeType optimize_type() const { return optimize_type_; }
-
 private:
     void OptimizeIndex(QueryContext *query_context, OperatorState *operator_state);
 
+    void OptIndex(QueryContext *query_context, OperatorState *operator_state);
+
 private:
-    OptimizeType optimize_type_{OptimizeType::kIRS};
     String db_name_{};
-    String object_name_{};
+    String table_name_{};
+    String index_name_{};
+    Vector<UniquePtr<InitParameter>> opt_params_;
 
     SharedPtr<Vector<String>> output_names_{};
     SharedPtr<Vector<SharedPtr<DataType>>> output_types_{};

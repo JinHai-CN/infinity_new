@@ -28,6 +28,8 @@ void yyerror(YYLTYPE * llocp, void* lexer, infinity::ParserResult* result, const
 #include "statement/show_statement.h"
 #include "statement/update_statement.h"
 #include "statement/command_statement.h"
+#include "statement/compact_statement.h"
+#include "statement/admin_statement.h"
 #include "table_reference/base_table_reference.h"
 #include "table_reference/join_reference.h"
 #include "table_reference/cross_product_reference.h"
@@ -92,6 +94,13 @@ struct SQL_LTYPE {
   @$.string_length = 0;
 };
 
+%code{
+// Avoid warnings with the error counter.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+#endif
+}
+
 %union {
     bool    bool_value;
     char*   str_value;
@@ -114,15 +123,19 @@ struct SQL_LTYPE {
     infinity::FlushStatement*  flush_stmt;
     infinity::OptimizeStatement*  optimize_stmt;
     infinity::CommandStatement* command_stmt;
+    infinity::CompactStatement* compact_stmt;
+    infinity::AdminStatement* admin_stmt;
 
     std::vector<infinity::BaseStatement*>* stmt_array;
 
     std::vector<infinity::TableElement*>*  table_element_array_t;
+    std::vector<infinity::ColumnDef*>*     column_def_array_t;
     infinity::TableElement*           table_element_t;
     infinity::ColumnDef*              table_column_t;
-    infinity::ColumnType              column_type_t;
+    infinity::ColumnType*              column_type_t;
+    std::vector<std::unique_ptr<infinity::ColumnType>>*     column_type_array_t;
     infinity::ConstraintType          column_constraint_t;
-    std::unordered_set<infinity::ConstraintType>* column_constraints_t;
+    std::set<infinity::ConstraintType>* column_constraints_t;
     std::vector<std::string>*         identifier_array_t;
     infinity::TableConstraint*        table_constraint_t;
 
@@ -144,7 +157,7 @@ struct SQL_LTYPE {
     infinity::ParsedExpr*             expr_t;
     infinity::ConstantExpr*           const_expr_t;
     std::vector<infinity::ParsedExpr*>*    expr_array_t;
-    std::vector<std::vector<infinity::ParsedExpr*>*>*    expr_array_list_t;
+    std::vector<infinity::InsertRowExpr*>*    insert_row_list_t;
 
     std::vector<infinity::WhenThen*>*     case_check_array_t;
 
@@ -159,21 +172,31 @@ struct SQL_LTYPE {
     std::vector<infinity::InitParameter*>* index_param_list_t;
     std::vector<infinity::InitParameter*>* with_index_param_list_t;
 
-    std::vector<infinity::IndexInfo*>* index_info_list_t;
+    infinity::IndexInfo* index_info_t;
 
     // infinity::IfExistsInfo*        if_exists_info_t;
     infinity::IfNotExistsInfo*     if_not_exists_info_t;
+
+    std::pair<int64_t, int64_t>*    int_sparse_ele_t;
+    std::pair<int64_t, double>*     float_sparse_ele_t;
 }
 
 %destructor {
-    fprintf(stderr, "destroy index info list\n");
+    fprintf(stderr, "destroy column_type\n");
+    delete ($$);
+} <column_type_t>
+
+%destructor {
+    fprintf(stderr, "destroy column_type_array\n");
+    delete ($$);
+} <column_type_array_t>
+
+%destructor {
+    fprintf(stderr, "destroy index info\n");
     if (($$) != nullptr) {
-        for (auto ptr : *($$)) {
-            delete ptr;
-        }
         delete ($$);
     }
-} <index_info_list_t>
+} <index_info_t>
 
 %destructor {
     fprintf(stderr, "destroy create index param list\n");
@@ -210,6 +233,16 @@ struct SQL_LTYPE {
 } <table_element_array_t>
 
 %destructor {
+    fprintf(stderr, "destroy column def array\n");
+    if (($$) != nullptr) {
+        for (auto ptr : *($$)) {
+            delete ptr;
+        }
+        delete ($$);
+    }
+} <column_def_array_t>
+
+%destructor {
     fprintf(stderr, "destroy statement array\n");
     if (($$) != nullptr) {
         for (auto ptr : *($$)) {
@@ -230,17 +263,14 @@ struct SQL_LTYPE {
 } <expr_array_t>
 
 %destructor {
-    fprintf(stderr, "destroy expression array list\n");
+    fprintf(stderr, "destroy insert row list\n");
     if (($$) != nullptr) {
-        for (auto arr_ptr : *($$)) {
-            for (auto ptr : *arr_ptr) {
-                delete ptr;
-            }
-            delete (arr_ptr);
+        for (auto ptr : *($$)) {
+            delete ptr;
         }
         delete ($$);
     }
-} <expr_array_list_t>
+} <insert_row_list_t>
 
 %destructor {
     fprintf(stderr, "destroy order by expr list\n");
@@ -349,25 +379,36 @@ struct SQL_LTYPE {
     }
 } <case_check_array_t>
 
+%destructor {
+    delete ($$);
+} <int_sparse_ele_t>
+
+%destructor {
+    delete ($$);
+} <float_sparse_ele_t>
+
 %token <str_value>              IDENTIFIER STRING
 %token <double_value>           DOUBLE_VALUE
 %token <long_value>             LONG_VALUE
 
 /* SQL keywords */
 
-%token CREATE SELECT INSERT DROP UPDATE DELETE COPY SET EXPLAIN SHOW ALTER EXECUTE PREPARE DESCRIBE UNION ALL INTERSECT
-%token EXCEPT FLUSH USE OPTIMIZE
-%token DATABASE TABLE COLLECTION TABLES INTO VALUES AST PIPELINE RAW LOGICAL PHYSICAL FRAGMENT VIEW INDEX ANALYZE VIEWS DATABASES SEGMENT SEGMENTS BLOCK
+%token CREATE SELECT INSERT DROP UPDATE DELETE COPY SET EXPLAIN SHOW ALTER EXECUTE PREPARE UNION ALL INTERSECT COMPACT LOCK UNLOCK ADD RENAME
+%token EXCEPT FLUSH USE OPTIMIZE PROPERTIES
+%token DATABASE TABLE COLLECTION TABLES INTO VALUES VIEW INDEX VIEWS DATABASES SEGMENT SEGMENTS BLOCK BLOCKS COLUMN COLUMNS INDEXES CHUNK SYSTEM
 %token GROUP BY HAVING AS NATURAL JOIN LEFT RIGHT OUTER FULL ON INNER CROSS DISTINCT WHERE ORDER LIMIT OFFSET ASC DESC
-%token IF NOT EXISTS IN FROM TO WITH DELIMITER FORMAT HEADER CAST END CASE ELSE THEN WHEN
-%token BOOLEAN INTEGER INT TINYINT SMALLINT BIGINT HUGEINT VARCHAR FLOAT DOUBLE REAL DECIMAL DATE TIME DATETIME
-%token TIMESTAMP UUID POINT LINE LSEG BOX PATH POLYGON CIRCLE BLOB BITMAP EMBEDDING VECTOR BIT
-%token PRIMARY KEY UNIQUE NULLABLE IS
+%token IF NOT EXISTS IN FROM TO WITH DELIMITER FORMAT HEADER HIGHLIGHT CAST END CASE ELSE THEN WHEN
+%token BOOLEAN INTEGER INT TINYINT SMALLINT BIGINT HUGEINT VARCHAR FLOAT DOUBLE REAL DECIMAL DATE TIME DATETIME FLOAT16 BFLOAT16 UNSIGNED
+%token TIMESTAMP UUID POINT LINE LSEG BOX PATH POLYGON CIRCLE BLOB BITMAP
+%token ARRAY TUPLE EMBEDDING VECTOR MULTIVECTOR TENSOR SPARSE TENSORARRAY BIT TEXT
+%token PRIMARY KEY UNIQUE NULLABLE IS DEFAULT COMMENT IGNORE
 %token TRUE FALSE INTERVAL SECOND SECONDS MINUTE MINUTES HOUR HOURS DAY DAYS MONTH MONTHS YEAR YEARS
 %token EQUAL NOT_EQ LESS_EQ GREATER_EQ BETWEEN AND OR EXTRACT LIKE
-%token DATA LOG BUFFER
-%token KNN USING SESSION GLOBAL OFF EXPORT PROFILE CONFIGS PROFILES STATUS
-%token SEARCH MATCH QUERY FUSION
+%token DATA LOG BUFFER TRANSACTIONS TRANSACTION MEMINDEX
+%token USING SESSION GLOBAL OFF EXPORT CONFIGS CONFIG PROFILES VARIABLES VARIABLE DELTA LOGS CATALOGS CATALOG
+%token SEARCH MATCH MAXSIM QUERY QUERIES FUSION ROWLIMIT
+%token ADMIN LEADER FOLLOWER LEARNER CONNECT STANDALONE NODES NODE REMOVE SNAPSHOT SNAPSHOTS RECOVER RESTORE
+%token PERSISTENCE OBJECT OBJECTS FILES MEMORY ALLOCATION HISTORY
 
 %token NUMBER
 
@@ -387,12 +428,16 @@ struct SQL_LTYPE {
 %type <flush_stmt>        flush_statement
 %type <optimize_stmt>     optimize_statement
 %type <command_stmt>      command_statement
+%type <compact_stmt>      compact_statement
+%type <admin_stmt>        admin_statement
+%type <alter_stmt>        alter_statement
 
 %type <stmt_array>        statement_list
 
 %type <table_element_t>         table_element
 %type <table_column_t>          table_column
 %type <column_type_t>           column_type
+%type <column_type_array_t>     column_type_array
 %type <identifier_array_t>      identifier_array optional_identifier_array
 %type <table_constraint_t>      table_constraint
 %type <column_constraint_t>     column_constraint
@@ -407,21 +452,27 @@ struct SQL_LTYPE {
 %type <with_expr_t>             with_expr
 %type <with_expr_list_t>        with_expr_list with_clause
 %type <set_operator_t>          set_operator
-%type <explain_type_t>          explain_type
 
-%type <expr_t>                  expr expr_alias column_expr function_expr subquery_expr knn_expr
+%type <expr_t>                  expr expr_alias column_expr function_expr subquery_expr match_vector_expr match_tensor_expr match_sparse_expr sub_search
 %type <expr_t>                  having_clause where_clause limit_expr offset_expr operand in_expr between_expr
 %type <expr_t>                  conjunction_expr cast_expr case_expr
-%type <expr_t>                  match_expr query_expr fusion_expr search_clause
-%type <const_expr_t>            constant_expr interval_expr
+%type <expr_t>                  match_text_expr query_expr fusion_expr search_clause optional_search_filter_expr
+%type <const_expr_t>            constant_expr interval_expr default_expr
 %type <const_expr_t>            array_expr long_array_expr unclosed_long_array_expr double_array_expr unclosed_double_array_expr
-%type <expr_array_t>            expr_array group_by_clause sub_search_array
-%type <expr_array_list_t>       expr_array_list
+%type <const_expr_t>            curly_brackets_expr unclosed_curly_brackets_expr
+%type <const_expr_t>            common_array_expr subarray_array_expr unclosed_subarray_array_expr
+%type <const_expr_t>            sparse_array_expr long_sparse_array_expr unclosed_long_sparse_array_expr double_sparse_array_expr unclosed_double_sparse_array_expr
+%type <const_expr_t>            empty_array_expr common_sparse_array_expr
+%type <int_sparse_ele_t>        int_sparse_ele
+%type <float_sparse_ele_t>      float_sparse_ele
+%type <expr_array_t>            expr_array group_by_clause sub_search_array highlight_clause
+%type <insert_row_list_t>       insert_row_list
 %type <update_expr_t>           update_expr;
 %type <update_expr_array_t>     update_expr_array;
 %type <case_check_array_t>      case_check_array;
 
 %type <table_element_array_t>   table_element_array
+%type <column_def_array_t>      column_def_array
 
 %type <table_name_t>      table_name
 %type <copy_option_array> copy_option_list
@@ -433,9 +484,9 @@ struct SQL_LTYPE {
 
 %type <index_param_t> index_param
 %type <index_param_list_t> index_param_list
-%type <with_index_param_list_t> with_index_param_list
+%type <with_index_param_list_t> with_index_param_list optional_table_properties_list
 
-%type <index_info_list_t> index_info_list
+%type <index_info_t> index_info
 
 /* %type <if_exists_info_t> if_exists_info */
 %type <if_not_exists_info_t> if_not_exists_info 
@@ -492,6 +543,9 @@ statement : create_statement { $$ = $1; }
 | flush_statement { $$ = $1; }
 | optimize_statement { $$ = $1; }
 | command_statement { $$ = $1; }
+| compact_statement { $$ = $1; }
+| admin_statement { $$ = $1; }
+| alter_statement { $$ = $1; }
 
 explainable_statement : create_statement { $$ = $1; }
 | drop_statement { $$ = $1; }
@@ -504,13 +558,31 @@ explainable_statement : create_statement { $$ = $1; }
 | flush_statement { $$ = $1; }
 | optimize_statement { $$ = $1; }
 | command_statement { $$ = $1; }
+| compact_statement { $$ = $1; }
 
 /*
  * CREATE STATEMENT
  */
 
 /* CREATE DATABASE schema_name; */
-create_statement : CREATE DATABASE if_not_exists IDENTIFIER {
+create_statement : CREATE DATABASE if_not_exists IDENTIFIER COMMENT STRING {
+    $$ = new infinity::CreateStatement();
+    std::shared_ptr<infinity::CreateSchemaInfo> create_schema_info = std::make_shared<infinity::CreateSchemaInfo>();
+
+    ParserHelper::ToLower($4);
+    create_schema_info->schema_name_ = $4;
+    free($4);
+    if(create_schema_info->schema_name_.empty()) {
+        yyerror(&yyloc, scanner, result, "Empty database name is given.");
+        YYERROR;
+    }
+
+    $$->create_info_ = create_schema_info;
+    $$->create_info_->conflict_type_ = $3 ? infinity::ConflictType::kIgnore : infinity::ConflictType::kError;
+    $$->create_info_->comment_ = $6;
+    free($6);
+}
+| CREATE DATABASE if_not_exists IDENTIFIER {
     $$ = new infinity::CreateStatement();
     std::shared_ptr<infinity::CreateSchemaInfo> create_schema_info = std::make_shared<infinity::CreateSchemaInfo>();
 
@@ -542,7 +614,8 @@ create_statement : CREATE DATABASE if_not_exists IDENTIFIER {
 }
 
 /* CREATE TABLE table_name ( column list ); */
-| CREATE TABLE if_not_exists table_name '(' table_element_array ')' {
+/* CREATE TABLE table_name ( column list ) PROPERTIES ("p1"="111", "p2"="xxx", ...); */
+| CREATE TABLE if_not_exists table_name '(' table_element_array ')' optional_table_properties_list {
     $$ = new infinity::CreateStatement();
     std::shared_ptr<infinity::CreateTableInfo> create_table_info = std::make_shared<infinity::CreateTableInfo>();
     if($4->schema_name_ptr_ != nullptr) {
@@ -562,6 +635,11 @@ create_statement : CREATE DATABASE if_not_exists IDENTIFIER {
     }
     delete $6;
 
+    if ($8 != nullptr) {
+        create_table_info->properties_ = std::move(*$8);
+        delete $8;
+    }
+
     $$->create_info_ = create_table_info;
     $$->create_info_->conflict_type_ = $3 ? infinity::ConflictType::kIgnore : infinity::ConflictType::kError;
 }
@@ -579,6 +657,55 @@ create_statement : CREATE DATABASE if_not_exists IDENTIFIER {
 
     create_table_info->conflict_type_ = $3 ? infinity::ConflictType::kIgnore : infinity::ConflictType::kError;
     create_table_info->select_ = $6;
+    $$->create_info_ = create_table_info;
+}
+| CREATE TABLE if_not_exists table_name '(' table_element_array ')' optional_table_properties_list COMMENT STRING {
+    $$ = new infinity::CreateStatement();
+    std::shared_ptr<infinity::CreateTableInfo> create_table_info = std::make_shared<infinity::CreateTableInfo>();
+    if($4->schema_name_ptr_ != nullptr) {
+        create_table_info->schema_name_ = $4->schema_name_ptr_;
+        free($4->schema_name_ptr_);
+    }
+    create_table_info->table_name_ = $4->table_name_ptr_;
+    free($4->table_name_ptr_);
+    delete $4;
+
+    for (infinity::TableElement*& element : *$6) {
+        if(element->type_ == infinity::TableElementType::kColumn) {
+            create_table_info->column_defs_.emplace_back((infinity::ColumnDef*)element);
+        } else {
+            create_table_info->constraints_.emplace_back((infinity::TableConstraint*)element);
+        }
+    }
+    delete $6;
+
+    if ($8 != nullptr) {
+        create_table_info->properties_ = std::move(*$8);
+        delete $8;
+    }
+
+    create_table_info->comment_ = $10;
+    free($10);
+
+    $$->create_info_ = create_table_info;
+    $$->create_info_->conflict_type_ = $3 ? infinity::ConflictType::kIgnore : infinity::ConflictType::kError;
+}
+/* CREATE TABLE table_name AS SELECT .... ; */
+| CREATE TABLE if_not_exists table_name AS select_statement COMMENT STRING {
+    $$ = new infinity::CreateStatement();
+    std::shared_ptr<infinity::CreateTableInfo> create_table_info = std::make_shared<infinity::CreateTableInfo>();
+    if($4->schema_name_ptr_ != nullptr) {
+        create_table_info->schema_name_ = $4->schema_name_ptr_;
+        free($4->schema_name_ptr_);
+    }
+    create_table_info->table_name_ = $4->table_name_ptr_;
+    free($4->table_name_ptr_);
+    delete $4;
+
+    create_table_info->conflict_type_ = $3 ? infinity::ConflictType::kIgnore : infinity::ConflictType::kError;
+    create_table_info->select_ = $6;
+    create_table_info->comment_ = $8;
+    free($8);
     $$->create_info_ = create_table_info;
 }
 /* CREATE VIEW table_name AS SELECT .... ; */
@@ -600,7 +727,7 @@ create_statement : CREATE DATABASE if_not_exists IDENTIFIER {
 }
 // TODO shenyushi 4: should support default index name if the name does not exist
 /* CREATE INDEX [[IF NOT EXISTS] index_name] ON table_name (column1[, ...column2]) USING method [WITH (param[, ...param])]; */
-| CREATE INDEX if_not_exists_info ON table_name index_info_list {
+| CREATE INDEX if_not_exists_info ON table_name index_info {
     std::shared_ptr<infinity::CreateIndexInfo> create_index_info = std::make_shared<infinity::CreateIndexInfo>();
     if($5->schema_name_ptr_ != nullptr) {
         create_index_info->schema_name_ = $5->schema_name_ptr_;
@@ -618,7 +745,37 @@ create_statement : CREATE DATABASE if_not_exists IDENTIFIER {
     }
     delete $3;
 
-    create_index_info->index_info_list_ = $6;
+    create_index_info->index_info_ = $6;
+
+    if(create_index_info->index_name_.empty()) {
+        yyerror(&yyloc, scanner, result, "No index name");
+        YYERROR;
+    }
+
+    $$ = new infinity::CreateStatement();
+    $$->create_info_ = create_index_info;
+}
+| CREATE INDEX if_not_exists_info ON table_name index_info COMMENT STRING {
+    std::shared_ptr<infinity::CreateIndexInfo> create_index_info = std::make_shared<infinity::CreateIndexInfo>();
+    if($5->schema_name_ptr_ != nullptr) {
+        create_index_info->schema_name_ = $5->schema_name_ptr_;
+        free($5->schema_name_ptr_);
+    }
+    create_index_info->table_name_ = $5->table_name_ptr_;
+    free($5->table_name_ptr_);
+    delete $5;
+
+    create_index_info->index_name_ = $3->info_;
+    if ($3->exists_) {
+        create_index_info->conflict_type_ = $3->if_not_exists_ ? infinity::ConflictType::kIgnore : infinity::ConflictType::kError;
+    } else {
+        create_index_info->conflict_type_ = infinity::ConflictType::kIgnore;
+    }
+    delete $3;
+
+    create_index_info->index_info_ = $6;
+    create_index_info->comment_ = $8;
+    free($8);
 
     if(create_index_info->index_name_.empty()) {
         yyerror(&yyloc, scanner, result, "No index name");
@@ -638,6 +795,15 @@ table_element_array : table_element {
     $$ = $1;
 };
 
+column_def_array : table_column {
+    $$ = new std::vector<infinity::ColumnDef*>();
+    $$->push_back($1);
+}
+| column_def_array ',' table_column {
+    $1->push_back($3);
+    $$ = $1;
+};
+
 
 table_element : table_column {
     $$ = $1;
@@ -648,31 +814,63 @@ table_element : table_column {
 
 
 table_column :
-IDENTIFIER column_type {
-    std::shared_ptr<infinity::TypeInfo> type_info_ptr{nullptr};
-    switch($2.logical_type_) {
-        case infinity::LogicalType::kDecimal: {
-            type_info_ptr = infinity::DecimalInfo::Make($2.precision, $2.scale);
-            if(type_info_ptr == nullptr) {
-                yyerror(&yyloc, scanner, result, "Fail to create decimal info.");
-                delete $1;
-                YYERROR;
-            }
-            break;
-        }
-//        case infinity::LogicalType::kBitmap: {
-//            type_info_ptr = infinity::BitmapInfo::Make($2.width);
-//            break;
-//        }
-        case infinity::LogicalType::kEmbedding: {
-            type_info_ptr = infinity::EmbeddingInfo::Make($2.embedding_type_, $2.width);
-            break;
-        }
-        default: {
-            break;
-        }
+//   1          2              3                  4
+IDENTIFIER column_type with_index_param_list default_expr {
+    std::shared_ptr<infinity::ParsedExpr> default_expr($4);
+    std::vector<std::unique_ptr<infinity::InitParameter>> index_param_list = infinity::InitParameter::MakeInitParameterList($3);
+    auto [data_type_result, fail_reason] = infinity::ColumnType::GetDataTypeFromColumnType(*($2), index_param_list);
+    delete $2;
+    if (!data_type_result) {
+        yyerror(&yyloc, scanner, result, fail_reason.c_str());
+        free($1);
+        YYERROR;
     }
-    $$ = new infinity::ColumnDef($2.logical_type_, type_info_ptr);
+    $$ = new infinity::ColumnDef(std::move(data_type_result), "", std::move(default_expr));
+    ParserHelper::ToLower($1);
+    $$->name_ = $1;
+    free($1);
+    /*
+    if (!$$->trySetNullableExplicit()) {
+        yyerror(&yyloc, result, scanner, ("Conflicting nullability constraints for " + std::string{$1}).c_str());
+    }
+    */
+}
+| IDENTIFIER column_type column_constraints default_expr {
+    std::shared_ptr<infinity::ParsedExpr> default_expr($4);
+    auto [data_type_result, fail_reason] = infinity::ColumnType::GetDataTypeFromColumnType(*($2), std::vector<std::unique_ptr<infinity::InitParameter>>{});
+    delete $2;
+    if (!data_type_result) {
+        yyerror(&yyloc, scanner, result, fail_reason.c_str());
+        free($1);
+        delete $3;
+        YYERROR;
+    }
+    $$ = new infinity::ColumnDef(std::move(data_type_result), "", std::move(default_expr));
+    ParserHelper::ToLower($1);
+    $$->name_ = $1;
+    free($1);
+    $$->constraints_ = std::move(*$3);
+    delete $3;
+    /*
+    if (!$$->trySetNullableExplicit()) {
+        yyerror(&yyloc, result, scanner, ("Conflicting nullability constraints for " + std::string{$1}).c_str());
+    }
+    */
+}
+| IDENTIFIER column_type with_index_param_list default_expr COMMENT STRING {
+    std::shared_ptr<infinity::ParsedExpr> default_expr($4);
+    std::vector<std::unique_ptr<infinity::InitParameter>> index_param_list = infinity::InitParameter::MakeInitParameterList($3);
+    auto [data_type_result, fail_reason] = infinity::ColumnType::GetDataTypeFromColumnType(*($2), index_param_list);
+    delete $2;
+    if (!data_type_result) {
+        yyerror(&yyloc, scanner, result, fail_reason.c_str());
+        free($1);
+        free($6);
+        YYERROR;
+    }
+
+    $$ = new infinity::ColumnDef(std::move(data_type_result), $6, std::move(default_expr));
+    free($6);
 
     ParserHelper::ToLower($1);
     $$->name_ = $1;
@@ -682,31 +880,24 @@ IDENTIFIER column_type {
         yyerror(&yyloc, result, scanner, ("Conflicting nullability constraints for " + std::string{$1}).c_str());
     }
     */
-};
-| IDENTIFIER column_type column_constraints {
-    std::shared_ptr<infinity::TypeInfo> type_info_ptr{nullptr};
-    switch($2.logical_type_) {
-        case infinity::LogicalType::kDecimal: {
-            type_info_ptr = infinity::DecimalInfo::Make($2.precision, $2.scale);
-            break;
-        }
-//        case infinity::LogicalType::kBitmap: {
-//            type_info_ptr = infinity::BitmapInfo::Make($2.width);
-//            break;
-//        }
-        case infinity::LogicalType::kEmbedding: {
-            type_info_ptr = infinity::EmbeddingInfo::Make($2.embedding_type_, $2.width);
-            break;
-        }
-        default: {
-            break;
-        }
+}
+| IDENTIFIER column_type column_constraints default_expr COMMENT STRING {
+    std::shared_ptr<infinity::ParsedExpr> default_expr($4);
+    auto [data_type_result, fail_reason] = infinity::ColumnType::GetDataTypeFromColumnType(*($2), std::vector<std::unique_ptr<infinity::InitParameter>>{});
+    delete $2;
+    if (!data_type_result) {
+        yyerror(&yyloc, scanner, result, fail_reason.c_str());
+        free($1);
+        free($6);
+        delete $3;
+        YYERROR;
     }
-    $$ = new infinity::ColumnDef($2.logical_type_, type_info_ptr);
+    $$ = new infinity::ColumnDef(std::move(data_type_result), $6, std::move(default_expr));
+    free($6);
 
     ParserHelper::ToLower($1);
     $$->name_ = $1;
-    $$->constraints_ = *$3;
+    $$->constraints_ = std::move(*$3);
     delete $3;
     free($1);
     /*
@@ -716,52 +907,122 @@ IDENTIFIER column_type {
     */
 };
 
+column_type_array : column_type {
+    $$ = new std::vector<std::unique_ptr<infinity::ColumnType>>();
+    $$->emplace_back($1);
+}
+| column_type_array ',' column_type {
+    $$ = $1;
+    $$->emplace_back($3);
+};
+
 column_type :
-BOOLEAN { $$ = infinity::ColumnType{infinity::LogicalType::kBoolean, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| TINYINT { $$ = infinity::ColumnType{infinity::LogicalType::kTinyInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| SMALLINT { $$ = infinity::ColumnType{infinity::LogicalType::kSmallInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| INTEGER { $$ = infinity::ColumnType{infinity::LogicalType::kInteger, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| INT { $$ = infinity::ColumnType{infinity::LogicalType::kInteger, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| BIGINT { $$ = infinity::ColumnType{infinity::LogicalType::kBigInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| HUGEINT { $$ = infinity::ColumnType{infinity::LogicalType::kHugeInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| FLOAT { $$ = infinity::ColumnType{infinity::LogicalType::kFloat, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| REAL  { $$ = infinity::ColumnType{infinity::LogicalType::kFloat, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| DOUBLE { $$ = infinity::ColumnType{infinity::LogicalType::kDouble, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| DATE { $$ = infinity::ColumnType{infinity::LogicalType::kDate, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| TIME { $$ = infinity::ColumnType{infinity::LogicalType::kTime, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| DATETIME { $$ = infinity::ColumnType{infinity::LogicalType::kDateTime, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| TIMESTAMP { $$ = infinity::ColumnType{infinity::LogicalType::kTimestamp, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| UUID { $$ = infinity::ColumnType{infinity::LogicalType::kUuid, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| POINT { $$ = infinity::ColumnType{infinity::LogicalType::kPoint, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| LINE { $$ = infinity::ColumnType{infinity::LogicalType::kLine, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| LSEG { $$ = infinity::ColumnType{infinity::LogicalType::kLineSeg, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| BOX { $$ = infinity::ColumnType{infinity::LogicalType::kBox, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-// | PATH { $$ = infinity::ColumnType{infinity::LogicalType::kPath, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-// | POLYGON { $$ = infinity::ColumnType{infinity::LogicalType::kPolygon, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| CIRCLE { $$ = infinity::ColumnType{infinity::LogicalType::kCircle, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+BOOLEAN { $$ = new infinity::ColumnType{infinity::LogicalType::kBoolean, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| TINYINT { $$ = new infinity::ColumnType{infinity::LogicalType::kTinyInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| SMALLINT { $$ = new infinity::ColumnType{infinity::LogicalType::kSmallInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| INTEGER { $$ = new infinity::ColumnType{infinity::LogicalType::kInteger, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| INT { $$ = new infinity::ColumnType{infinity::LogicalType::kInteger, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| BIGINT { $$ = new infinity::ColumnType{infinity::LogicalType::kBigInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| HUGEINT { $$ = new infinity::ColumnType{infinity::LogicalType::kHugeInt, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| FLOAT { $$ = new infinity::ColumnType{infinity::LogicalType::kFloat, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| REAL  { $$ = new infinity::ColumnType{infinity::LogicalType::kFloat, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| DOUBLE { $$ = new infinity::ColumnType{infinity::LogicalType::kDouble, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| FLOAT16 { $$ = new infinity::ColumnType{infinity::LogicalType::kFloat16, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| BFLOAT16 { $$ = new infinity::ColumnType{infinity::LogicalType::kBFloat16, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| DATE { $$ = new infinity::ColumnType{infinity::LogicalType::kDate, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| TIME { $$ = new infinity::ColumnType{infinity::LogicalType::kTime, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| DATETIME { $$ = new infinity::ColumnType{infinity::LogicalType::kDateTime, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| TIMESTAMP { $$ = new infinity::ColumnType{infinity::LogicalType::kTimestamp, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| UUID { $$ = new infinity::ColumnType{infinity::LogicalType::kUuid, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| POINT { $$ = new infinity::ColumnType{infinity::LogicalType::kPoint, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| LINE { $$ = new infinity::ColumnType{infinity::LogicalType::kLine, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| LSEG { $$ = new infinity::ColumnType{infinity::LogicalType::kLineSeg, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| BOX { $$ = new infinity::ColumnType{infinity::LogicalType::kBox, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+// | PATH { $$ = new infinity::ColumnType{infinity::LogicalType::kPath, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+// | POLYGON { $$ = new infinity::ColumnType{infinity::LogicalType::kPolygon, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| CIRCLE { $$ = new infinity::ColumnType{infinity::LogicalType::kCircle, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
 // Variable types
-| VARCHAR { $$ = infinity::ColumnType{infinity::LogicalType::kVarchar, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| DECIMAL '(' LONG_VALUE ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kDecimal, 0, $3, $5, infinity::EmbeddingDataType::kElemInvalid}; }
-| DECIMAL '(' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kDecimal, 0, $3, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-| DECIMAL { $$ = infinity::ColumnType{infinity::LogicalType::kDecimal, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
-// | BLOB '(' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kBlob, $3}; }
-// | BITMAP '(' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kBitmap, $3}; }
-| EMBEDDING '(' BIT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemBit}; }
-| EMBEDDING '(' TINYINT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt8}; }
-| EMBEDDING '(' SMALLINT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt16}; }
-| EMBEDDING '(' INTEGER ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt32}; }
-| EMBEDDING '(' INT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt32}; }
-| EMBEDDING '(' BIGINT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt64}; }
-| EMBEDDING '(' FLOAT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemFloat}; }
-| EMBEDDING '(' DOUBLE ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemDouble}; }
-| VECTOR '(' BIT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemBit}; }
-| VECTOR '(' TINYINT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt8}; }
-| VECTOR '(' SMALLINT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt16}; }
-| VECTOR '(' INTEGER ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt32}; }
-| VECTOR '(' INT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt32}; }
-| VECTOR '(' BIGINT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemInt64}; }
-| VECTOR '(' FLOAT ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemFloat}; }
-| VECTOR '(' DOUBLE ',' LONG_VALUE ')' { $$ = infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::kElemDouble}; }
+| VARCHAR { $$ = new infinity::ColumnType{infinity::LogicalType::kVarchar, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| DECIMAL '(' LONG_VALUE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kDecimal, 0, $3, $5, infinity::EmbeddingDataType::kElemInvalid}; }
+| DECIMAL '(' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kDecimal, 0, $3, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+| DECIMAL { $$ = new infinity::ColumnType{infinity::LogicalType::kDecimal, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid}; }
+// | BLOB '(' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kBlob, $3}; }
+// | BITMAP '(' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kBitmap, $3}; }
+| EMBEDDING '(' BIT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemBit}; }
+| EMBEDDING '(' TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt8}; }
+| EMBEDDING '(' SMALLINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt16}; }
+| EMBEDDING '(' INTEGER ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| EMBEDDING '(' INT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| EMBEDDING '(' BIGINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt64}; }
+| EMBEDDING '(' FLOAT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat}; }
+| EMBEDDING '(' DOUBLE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemDouble}; }
+| EMBEDDING '(' FLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat16}; }
+| EMBEDDING '(' BFLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemBFloat16}; }
+| EMBEDDING '(' UNSIGNED TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $6, 0, 0, infinity::EmbeddingDataType::kElemUInt8}; }
+| MULTIVECTOR '(' BIT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemBit}; }
+| MULTIVECTOR '(' TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemInt8}; }
+| MULTIVECTOR '(' SMALLINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemInt16}; }
+| MULTIVECTOR '(' INTEGER ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| MULTIVECTOR '(' INT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| MULTIVECTOR '(' BIGINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemInt64}; }
+| MULTIVECTOR '(' FLOAT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat}; }
+| MULTIVECTOR '(' DOUBLE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemDouble}; }
+| MULTIVECTOR '(' FLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat16}; }
+| MULTIVECTOR '(' BFLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $5, 0, 0, infinity::EmbeddingDataType::kElemBFloat16}; }
+| MULTIVECTOR '(' UNSIGNED TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kMultiVector, $6, 0, 0, infinity::EmbeddingDataType::kElemUInt8}; }
+| TENSOR '(' BIT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemBit}; }
+| TENSOR '(' TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemInt8}; }
+| TENSOR '(' SMALLINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemInt16}; }
+| TENSOR '(' INTEGER ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| TENSOR '(' INT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| TENSOR '(' BIGINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemInt64}; }
+| TENSOR '(' FLOAT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat}; }
+| TENSOR '(' DOUBLE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemDouble}; }
+| TENSOR '(' FLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat16}; }
+| TENSOR '(' BFLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $5, 0, 0, infinity::EmbeddingDataType::kElemBFloat16}; }
+| TENSOR '(' UNSIGNED TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensor, $6, 0, 0, infinity::EmbeddingDataType::kElemUInt8}; }
+| TENSORARRAY '(' BIT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemBit}; }
+| TENSORARRAY '(' TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemInt8}; }
+| TENSORARRAY '(' SMALLINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemInt16}; }
+| TENSORARRAY '(' INTEGER ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| TENSORARRAY '(' INT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| TENSORARRAY '(' BIGINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemInt64}; }
+| TENSORARRAY '(' FLOAT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat}; }
+| TENSORARRAY '(' DOUBLE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemDouble}; }
+| TENSORARRAY '(' FLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat16}; }
+| TENSORARRAY '(' BFLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $5, 0, 0, infinity::EmbeddingDataType::kElemBFloat16}; }
+| TENSORARRAY '(' UNSIGNED TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kTensorArray, $6, 0, 0, infinity::EmbeddingDataType::kElemUInt8}; }
+| VECTOR '(' BIT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemBit}; }
+| VECTOR '(' TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt8}; }
+| VECTOR '(' SMALLINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt16}; }
+| VECTOR '(' INTEGER ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| VECTOR '(' INT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| VECTOR '(' BIGINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemInt64}; }
+| VECTOR '(' FLOAT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat}; }
+| VECTOR '(' DOUBLE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemDouble}; }
+| VECTOR '(' FLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat16}; }
+| VECTOR '(' BFLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $5, 0, 0, infinity::EmbeddingDataType::kElemBFloat16}; }
+| VECTOR '(' UNSIGNED TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kEmbedding, $6, 0, 0, infinity::EmbeddingDataType::kElemUInt8}; }
+| SPARSE '(' BIT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemBit}; }
+| SPARSE '(' TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemInt8}; }
+| SPARSE '(' SMALLINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemInt16}; }
+| SPARSE '(' INTEGER ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| SPARSE '(' INT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemInt32}; }
+| SPARSE '(' BIGINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemInt64}; }
+| SPARSE '(' FLOAT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat}; }
+| SPARSE '(' DOUBLE ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemDouble}; }
+| SPARSE '(' FLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemFloat16}; }
+| SPARSE '(' BFLOAT16 ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $5, 0, 0, infinity::EmbeddingDataType::kElemBFloat16}; }
+| SPARSE '(' UNSIGNED TINYINT ',' LONG_VALUE ')' { $$ = new infinity::ColumnType{infinity::LogicalType::kSparse, $6, 0, 0, infinity::EmbeddingDataType::kElemUInt8}; }
+| ARRAY '(' column_type ')' {
+  $$ = new infinity::ColumnType{infinity::LogicalType::kArray, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid};
+  $$->element_types_.emplace_back($3);
+}
+| TUPLE '(' column_type_array ')' {
+  $$ = new infinity::ColumnType{infinity::LogicalType::kTuple, 0, 0, 0, infinity::EmbeddingDataType::kElemInvalid};
+  $$->element_types_ = std::move(*($3));
+  delete $3;
+}
 /*
 | DECIMAL opt_decimal_specification {
   $$ = infinity::ColumnType{DataType::DECIMAL, 0, $2->first, $2->second};
@@ -781,7 +1042,7 @@ opt_decimal_specification : '(' INTVAL ',' INTVAL ')' { $$ = new std::pair<int64
 */
 
 column_constraints : column_constraint {
-    $$ = new std::unordered_set<infinity::ConstraintType>();
+    $$ = new std::set<infinity::ConstraintType>();
     $$->insert($1);
 }
 | column_constraints column_constraint {
@@ -806,6 +1067,14 @@ column_constraint : PRIMARY KEY {
 | NOT NULLABLE {
     $$ = infinity::ConstraintType::kNotNull;
 };
+
+default_expr : DEFAULT constant_expr {
+    $$ = $2;
+}
+| /* empty default value */ {
+    $$ = nullptr;
+};
+
 
 table_constraint : PRIMARY KEY '(' identifier_array ')' {
     $$ = new infinity::TableConstraint();
@@ -851,10 +1120,10 @@ delete_statement : DELETE FROM table_name where_clause {
 /*
  * INSERT STATEMENT
  */
-insert_statement: INSERT INTO table_name optional_identifier_array VALUES expr_array_list {
+insert_statement: INSERT INTO table_name optional_identifier_array VALUES insert_row_list {
     bool is_error{false};
     for (auto expr_array : *$6) {
-        for (auto expr : *expr_array) {
+        for (const auto &expr : expr_array->values_) {
             if(expr->type_ != infinity::ParsedExprType::kConstant) {
                 yyerror(&yyloc, scanner, result, ("Value list has non-constant expression: " + expr->ToString()).c_str());
                 is_error = true;
@@ -863,9 +1132,6 @@ insert_statement: INSERT INTO table_name optional_identifier_array VALUES expr_a
     }
     if(is_error) {
         for (auto expr_array : *$6) {
-            for (auto expr : *expr_array) {
-                delete expr;
-            }
             delete (expr_array);
         }
         delete $6;
@@ -882,8 +1148,15 @@ insert_statement: INSERT INTO table_name optional_identifier_array VALUES expr_a
     $$->table_name_ = $3->table_name_ptr_;
     free($3->table_name_ptr_);
     delete $3;
-    $$->columns_ = $4;
-    $$->values_ = $6;
+    for (infinity::InsertRowExpr* &expr_ptr : *$6) {
+        if ($4) {
+            expr_ptr->columns_ = *($4);
+        }
+        $$->insert_rows_.emplace_back(expr_ptr);
+        expr_ptr = nullptr;
+    }
+    delete $4;
+    delete $6;
 }
 | INSERT INTO table_name optional_identifier_array select_without_paren {
     $$ = new infinity::InsertStatement();
@@ -894,8 +1167,11 @@ insert_statement: INSERT INTO table_name optional_identifier_array VALUES expr_a
     $$->table_name_ = $3->table_name_ptr_;
     free($3->table_name_ptr_);
     delete $3;
-    $$->columns_ = $4;
-    $$->select_ = $5;
+    if ($4) {
+        $$->columns_for_select_ = std::move(*($4));
+        delete $4;
+    }
+    $$->select_.reset($5);
 }
 
 optional_identifier_array: '(' identifier_array ')' {
@@ -908,35 +1184,27 @@ optional_identifier_array: '(' identifier_array ')' {
 /*
  * EXPLAIN STATEMENT
  */
-explain_statement : EXPLAIN explain_type explainable_statement {
+explain_statement : EXPLAIN IDENTIFIER explainable_statement {
     $$ = new infinity::ExplainStatement();
-    $$->type_ = $2;
+    ParserHelper::ToLower($2);
+    if(!strcmp($2, "analyze")) $$->type_ = infinity::ExplainType::kAnalyze;
+    else if(!strcmp($2, "ast")) $$->type_ =infinity::ExplainType::kAst;
+    else if(!strcmp($2, "raw")) $$->type_ =infinity::ExplainType::kUnOpt;
+    else if(!strcmp($2, "logical")) $$->type_ =infinity::ExplainType::kOpt;
+    else if(!strcmp($2, "physical")) $$->type_ =infinity::ExplainType::kPhysical;
+    else if(!strcmp($2, "pipeline")) $$->type_ =infinity::ExplainType::kPipeline;
+    else if(!strcmp($2, "fragment")) $$->type_ =infinity::ExplainType::kFragment;
+    else {
+        free $2;
+        yyerror(&yyloc, scanner, result, "invalid explain option");
+        YYERROR;
+    }
+    free($2);
     $$->statement_ = $3;
-}
-
-explain_type: ANALYZE {
-    $$ = infinity::ExplainType::kAnalyze;
-}
-| AST {
-    $$ = infinity::ExplainType::kAst;
-}
-| RAW {
-    $$ = infinity::ExplainType::kUnOpt;
-}
-| LOGICAL {
-    $$ = infinity::ExplainType::kOpt;
-}
-| PHYSICAL {
-    $$ = infinity::ExplainType::kPhysical;
-}
-| PIPELINE {
-    $$ = infinity::ExplainType::kPipeline;
-}
-| FRAGMENT {
-    $$ = infinity::ExplainType::kFragment;
-}
-| {
-    $$ = infinity::ExplainType::kPhysical;
+} | EXPLAIN explainable_statement {
+    $$ = new infinity::ExplainStatement();
+    $$->type_ =infinity::ExplainType::kPhysical;
+    $$->statement_ = $2;
 }
 
 /*
@@ -1057,7 +1325,7 @@ drop_statement: DROP DATABASE if_exists IDENTIFIER {
 /*
  * COPY STATEMENT
  */
-// COPY database.table TO file_path WITH (FORMAT csv, DELIMITER ',', HEADER TRUE)
+// COPY database.table TO file_path WITH (FORMAT csv, DELIMITER ',', HEADER)
 copy_statement: COPY table_name TO file_path WITH '(' copy_option_list ')' {
     $$ = new infinity::CopyStatement();
 
@@ -1094,10 +1362,77 @@ copy_statement: COPY table_name TO file_path WITH '(' copy_option_list ')' {
                 $$->header_ = option_ptr->header_;
                 break;
             }
+            case infinity::CopyOptionType::kOffset: {
+                $$->offset_ = option_ptr->offset_;
+                break;
+            }
+            case infinity::CopyOptionType::kLimit: {
+                $$->limit_ = option_ptr->limit_;
+                break;
+            }
+            case infinity::CopyOptionType::kRowLimit: {
+                $$->row_limit_ = option_ptr->row_limit_;
+                break;
+            }
         }
         delete option_ptr;
     }
     delete $7;
+}
+| COPY table_name '(' expr_array ')' TO file_path WITH '(' copy_option_list ')' {
+    $$ = new infinity::CopyStatement();
+
+    // Copy To
+    $$->copy_from_ = false;
+
+    // table_name
+    if($2->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $2->schema_name_ptr_;
+        free($2->schema_name_ptr_);
+    }
+    $$->table_name_ = $2->table_name_ptr_;
+    free($2->table_name_ptr_);
+    delete $2;
+
+    $$->expr_array_ = $4;
+
+    // file path
+    $$->file_path_ = $7;
+    free($7);
+
+    // copy options
+    size_t option_count = (*$10).size();
+    for(size_t idx = 0; idx < option_count; ++ idx) {
+        infinity::CopyOption* option_ptr = (*$10)[idx];
+        switch(option_ptr->option_type_) {
+            case infinity::CopyOptionType::kFormat: {
+                $$->copy_file_type_ = option_ptr->file_type_;
+                break;
+            }
+            case infinity::CopyOptionType::kDelimiter: {
+                $$->delimiter_ = option_ptr->delimiter_;
+                break;
+            }
+            case infinity::CopyOptionType::kHeader: {
+                $$->header_ = option_ptr->header_;
+                break;
+            }
+            case infinity::CopyOptionType::kOffset: {
+                $$->offset_ = option_ptr->offset_;
+                break;
+            }
+            case infinity::CopyOptionType::kLimit: {
+                $$->limit_ = option_ptr->limit_;
+                break;
+            }
+            case infinity::CopyOptionType::kRowLimit: {
+                $$->row_limit_ = option_ptr->row_limit_;
+                break;
+            }
+        }
+        delete option_ptr;
+    }
+    delete $10;
 }
 | COPY table_name FROM file_path WITH '(' copy_option_list ')' {
     $$ = new infinity::CopyStatement();
@@ -1134,6 +1469,12 @@ copy_statement: COPY table_name TO file_path WITH '(' copy_option_list ')' {
             case infinity::CopyOptionType::kHeader: {
                 $$->header_ = option_ptr->header_;
                 break;
+            }
+            default: {
+                delete option_ptr;
+                delete $7;
+                yyerror(&yyloc, scanner, result, "Invalid import option");
+                YYERROR;
             }
         }
         delete option_ptr;
@@ -1189,15 +1530,20 @@ select_clause_with_modifier: select_clause_without_modifier order_by_clause limi
         yyerror(&yyloc, scanner, result, "Offset expression isn't valid without Limit expression");
         YYERROR;
     }
-    if($1->search_expr_ != nullptr and ($2 != nullptr or $3 != nullptr or $4 != nullptr)) {
+    if($1->search_expr_ != nullptr and ($2 != nullptr /*or $3 != nullptr or $4 != nullptr*/)) {
         delete $1;
-        delete $2;
+        if ($2) {
+            for (auto ptr : *($2)) {
+                delete ptr;
+            }
+            delete $2;
+        }
         delete $3;
         delete $4;
-        yyerror(&yyloc, scanner, result, "Result modifier(ORDER BY, LIMIT, OFFSET) is conflict with SEARCH expression.");
+        yyerror(&yyloc, scanner, result, "Result modifier(ORDER BY) is conflict with SEARCH expression.");
         YYERROR;
     }
-    $1->order_by_list = $2;
+    $1->order_by_list_ = $2;
     $1->limit_expr_ = $3;
     $1->offset_expr_ = $4;
     $$ = $1;
@@ -1211,15 +1557,16 @@ select_clause_without_modifier_paren: '(' select_clause_without_modifier ')' {
 };
 
 select_clause_without_modifier:
-SELECT distinct expr_array from_clause search_clause where_clause group_by_clause having_clause {
+SELECT distinct expr_array highlight_clause from_clause search_clause where_clause group_by_clause having_clause {
     $$ = new infinity::SelectStatement();
-    $$->select_list_ = $3;
     $$->select_distinct_ = $2;
-    $$->table_ref_ = $4;
-    $$->search_expr_ = $5;
-    $$->where_expr_ = $6;
-    $$->group_by_list_ = $7;
-    $$->having_expr_ = $8;
+    $$->select_list_ = $3;
+    $$->highlight_list_ = $4;
+    $$->table_ref_ = $5;
+    $$->search_expr_ = $6;
+    $$->where_expr_ = $7;
+    $$->group_by_list_ = $8;
+    $$->having_expr_ = $9;
 
     if($$->group_by_list_ == nullptr && $$->having_expr_ != nullptr) {
         yyerror(&yyloc, scanner, result, "HAVING clause should follow after GROUP BY clause");
@@ -1278,6 +1625,13 @@ distinct : DISTINCT {
     $$ = false;
 }
 
+highlight_clause: HIGHLIGHT expr_array {
+    $$ = $2;
+}
+| {
+    $$ = nullptr;
+}
+
 from_clause: FROM table_reference {
     $$ = $2;
 }
@@ -1291,6 +1645,13 @@ search_clause: SEARCH sub_search_array {
     $$ = search_expr;
 }
 | /* no search clause */ {
+    $$ = nullptr;
+}
+
+optional_search_filter_expr: ',' WHERE expr {
+    $$ = $3;
+}
+| /* no where clause */ {
     $$ = nullptr;
 }
 
@@ -1500,66 +1861,158 @@ show_statement: SHOW DATABASES {
     $$ = new infinity::ShowStatement();
     $$->show_type_ = infinity::ShowStmtType::kConfigs;
 }
+| SHOW CONFIG IDENTIFIER {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kConfig;
+    ParserHelper::ToLower($3);
+    $$->var_name_ = std::string($3);
+    free($3);
+}
 | SHOW PROFILES {
     $$ = new infinity::ShowStatement();
     $$->show_type_ = infinity::ShowStmtType::kProfiles;
 }
-| SHOW SESSION STATUS {
+| SHOW BUFFER {
     $$ = new infinity::ShowStatement();
-    $$->show_type_ = infinity::ShowStmtType::kSessionStatus;
+    $$->show_type_ = infinity::ShowStmtType::kBuffer;
 }
-| SHOW GLOBAL STATUS {
+| SHOW MEMINDEX {
     $$ = new infinity::ShowStatement();
-    $$->show_type_ = infinity::ShowStmtType::kGlobalStatus;
+    $$->show_type_ = infinity::ShowStmtType::kMemIndex;
 }
-| DESCRIBE table_name {
+| SHOW QUERIES {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kQueries;
+}
+| SHOW QUERY LONG_VALUE {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kQuery;
+    $$->session_id_ = $3;
+}
+| SHOW TRANSACTIONS {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kTransactions;
+}
+| SHOW TRANSACTION LONG_VALUE {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kTransaction;
+    $$->txn_id_ = $3;
+}
+| SHOW TRANSACTION HISTORY {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kTransactionHistory;
+}
+| SHOW SESSION VARIABLES {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kSessionVariables;
+}
+| SHOW GLOBAL VARIABLES {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kGlobalVariables;
+}
+| SHOW SESSION VARIABLE IDENTIFIER {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kSessionVariable;
+    $$->var_name_ = std::string($4);
+    free($4);
+}
+| SHOW GLOBAL VARIABLE IDENTIFIER {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kGlobalVariable;
+    $$->var_name_ = std::string($4);
+    free($4);
+}
+| SHOW DATABASE IDENTIFIER {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kDatabase;
+    $$->schema_name_ = $3;
+    free($3);
+}
+| SHOW TABLE table_name {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kTable;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
+    }
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    delete $3;
+}
+| SHOW TABLE table_name COLUMNS {
     $$ = new infinity::ShowStatement();
     $$->show_type_ = infinity::ShowStmtType::kColumns;
-    if($2->schema_name_ptr_ != nullptr) {
-        $$->schema_name_ = $2->schema_name_ptr_;
-        free($2->schema_name_ptr_);
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
     }
-    $$->table_name_ = $2->table_name_ptr_;
-    free($2->table_name_ptr_);
-    delete $2;
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    delete $3;
 }
-| DESCRIBE table_name SEGMENTS {
+| SHOW TABLE table_name SEGMENTS {
     $$ = new infinity::ShowStatement();
     $$->show_type_ = infinity::ShowStmtType::kSegments;
-    if($2->schema_name_ptr_ != nullptr) {
-        $$->schema_name_ = $2->schema_name_ptr_;
-        free($2->schema_name_ptr_);
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
     }
-    $$->table_name_ = $2->table_name_ptr_;
-    free($2->table_name_ptr_);
-    delete $2;
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    delete $3;
 }
-| DESCRIBE table_name SEGMENT LONG_VALUE {
+| SHOW TABLE table_name SEGMENT LONG_VALUE {
     $$ = new infinity::ShowStatement();
-    $$->show_type_ = infinity::ShowStmtType::kSegments;
-    if($2->schema_name_ptr_ != nullptr) {
-        $$->schema_name_ = $2->schema_name_ptr_;
-        free($2->schema_name_ptr_);
+    $$->show_type_ = infinity::ShowStmtType::kSegment;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
     }
-    $$->table_name_ = $2->table_name_ptr_;
-    free($2->table_name_ptr_);
-    $$->segment_id_ = $4;
-    delete $2;
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    $$->segment_id_ = $5;
+    delete $3;
 }
-| DESCRIBE table_name SEGMENT LONG_VALUE BLOCK LONG_VALUE {
+| SHOW TABLE table_name SEGMENT LONG_VALUE BLOCKS {
     $$ = new infinity::ShowStatement();
-    $$->show_type_ = infinity::ShowStmtType::kSegments;
-    if($2->schema_name_ptr_ != nullptr) {
-        $$->schema_name_ = $2->schema_name_ptr_;
-        free($2->schema_name_ptr_);
+    $$->show_type_ = infinity::ShowStmtType::kBlocks;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
     }
-    $$->table_name_ = $2->table_name_ptr_;
-    free($2->table_name_ptr_);
-    $$->segment_id_ = $4;
-    $$->block_id_ = $6;
-    delete $2;
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    $$->segment_id_ = $5;
+    delete $3;
 }
-| DESCRIBE INDEX table_name {
+| SHOW TABLE table_name SEGMENT LONG_VALUE BLOCK LONG_VALUE {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kBlock;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
+    }
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    $$->segment_id_ = $5;
+    $$->block_id_ = $7;
+    delete $3;
+}
+| SHOW TABLE table_name SEGMENT LONG_VALUE BLOCK LONG_VALUE COLUMN LONG_VALUE {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kBlockColumn;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
+    }
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    $$->segment_id_ = $5;
+    $$->block_id_ = $7;
+    $$->column_id_ = $9;
+    delete $3;
+}
+| SHOW TABLE table_name INDEXES {
     $$ = new infinity::ShowStatement();
     $$->show_type_ = infinity::ShowStmtType::kIndexes;
     if($3->schema_name_ptr_ != nullptr) {
@@ -1569,7 +2022,108 @@ show_statement: SHOW DATABASES {
     $$->table_name_ = $3->table_name_ptr_;
     free($3->table_name_ptr_);
     delete $3;
-};
+}
+| SHOW TABLE table_name INDEX IDENTIFIER {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kIndex;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
+    }
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    delete $3;
+
+    $$->index_name_ = $5;
+    free($5);
+}
+| SHOW TABLE table_name INDEX IDENTIFIER SEGMENT LONG_VALUE {
+    $$ = new infinity::ShowStatement();
+    $$->show_type_ = infinity::ShowStmtType::kIndexSegment;
+    if($3->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $3->schema_name_ptr_;
+        free($3->schema_name_ptr_);
+    }
+    $$->table_name_ = $3->table_name_ptr_;
+    free($3->table_name_ptr_);
+    delete $3;
+
+    $$->index_name_ = $5;
+    free($5);
+
+    $$->segment_id_ = $7;
+}
+| SHOW TABLE table_name INDEX IDENTIFIER SEGMENT LONG_VALUE CHUNK LONG_VALUE {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kIndexChunk;
+      if($3->schema_name_ptr_ != nullptr) {
+          $$->schema_name_ = $3->schema_name_ptr_;
+          free($3->schema_name_ptr_);
+      }
+      $$->table_name_ = $3->table_name_ptr_;
+      free($3->table_name_ptr_);
+      delete $3;
+
+      $$->index_name_ = $5;
+      free($5);
+
+      $$->segment_id_ = $7;
+      $$->chunk_id_ = $9;
+}
+| SHOW LOGS {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kLogs;
+}
+| SHOW DELTA LOGS {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kDeltaLogs;
+}
+| SHOW CATALOGS {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kCatalogs;
+}
+| SHOW PERSISTENCE FILES {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kPersistenceFiles;
+}
+| SHOW PERSISTENCE OBJECTS {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kPersistenceObjects;
+}
+| SHOW PERSISTENCE OBJECT STRING {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kPersistenceObject;
+      $$->file_name_ = $4;
+      free($4);
+}
+| SHOW MEMORY {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kMemory;
+}
+| SHOW MEMORY OBJECTS {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kMemoryObjects;
+}
+| SHOW MEMORY ALLOCATION {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kMemoryAllocation;
+}
+| SHOW IDENTIFIER '(' ')' {
+      $$ = new infinity::ShowStatement();
+      $$->show_type_ = infinity::ShowStmtType::kFunction;
+      $$->function_name_ = $2;
+      free($2);
+}
+| SHOW SNAPSHOTS {
+     $$ = new infinity::ShowStatement();
+     $$->show_type_ = infinity::ShowStmtType::kListSnapshots;
+}
+| SHOW SNAPSHOT IDENTIFIER {
+     $$ = new infinity::ShowStatement();
+     $$->show_type_ = infinity::ShowStmtType::kShowSnapshot;
+     $$->snapshot_name_ = $3;
+     free($3);
+}
 
 /*
  * FLUSH STATEMENT
@@ -1592,7 +2146,6 @@ flush_statement: FLUSH DATA {
  */
 optimize_statement: OPTIMIZE table_name {
     $$ = new infinity::OptimizeStatement();
-    $$->type_ = infinity::OptimizeType::kIRS;
     if($2->schema_name_ptr_ != nullptr) {
         $$->schema_name_ = $2->schema_name_ptr_;
         free($2->schema_name_ptr_);
@@ -1600,6 +2153,26 @@ optimize_statement: OPTIMIZE table_name {
     $$->table_name_ = $2->table_name_ptr_;
     free($2->table_name_ptr_);
     delete $2;
+}
+//   1         2      3        4            5
+| OPTIMIZE IDENTIFIER ON table_name with_index_param_list{
+    $$ = new infinity::OptimizeStatement();
+    if($4->schema_name_ptr_ != nullptr) {
+        $$->schema_name_ = $4->schema_name_ptr_;
+        free($4->schema_name_ptr_);
+    }
+    $$->table_name_ = $4->table_name_ptr_;
+    free($4->table_name_ptr_);
+    delete $4;
+
+    $$->index_name_ = $2;
+    free($2);
+
+    for (auto *&index_param : *$5) {
+        $$->opt_params_.emplace_back(std::unique_ptr<infinity::InitParameter>(index_param));
+        index_param = nullptr;
+    }
+    delete $5;
 };
 
 /*
@@ -1611,7 +2184,7 @@ command_statement: USE IDENTIFIER {
     $$->command_info_ = std::make_shared<infinity::UseCmd>($2);
     free($2);
 }
-| EXPORT PROFILE LONG_VALUE file_path {
+| EXPORT PROFILES LONG_VALUE file_path {
     $$ = new infinity::CommandStatement();
     $$->command_info_ = std::make_shared<infinity::ExportCmd>($4, infinity::ExportType::kProfileRecord, $3);
     free($4);
@@ -1628,7 +2201,7 @@ command_statement: USE IDENTIFIER {
     $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kSession, infinity::SetVarType::kBool, $3, false);
     free($3);
 }
-| SET SESSION IDENTIFIER STRING {
+| SET SESSION IDENTIFIER IDENTIFIER {
     ParserHelper::ToLower($3);
     ParserHelper::ToLower($4);
     $$ = new infinity::CommandStatement();
@@ -1660,7 +2233,7 @@ command_statement: USE IDENTIFIER {
     $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kGlobal, infinity::SetVarType::kBool, $3, false);
     free($3);
 }
-| SET GLOBAL IDENTIFIER STRING {
+| SET GLOBAL IDENTIFIER IDENTIFIER {
     ParserHelper::ToLower($3);
     ParserHelper::ToLower($4);
     $$ = new infinity::CommandStatement();
@@ -1679,7 +2252,418 @@ command_statement: USE IDENTIFIER {
     $$ = new infinity::CommandStatement();
     $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kGlobal, infinity::SetVarType::kDouble, $3, $4);
     free($3);
-};
+}
+| SET CONFIG IDENTIFIER ON {
+    ParserHelper::ToLower($3);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kConfig, infinity::SetVarType::kBool, $3, true);
+    free($3);
+}
+| SET CONFIG IDENTIFIER OFF {
+    ParserHelper::ToLower($3);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kConfig, infinity::SetVarType::kBool, $3, false);
+    free($3);
+}
+| SET CONFIG IDENTIFIER IDENTIFIER {
+    ParserHelper::ToLower($3);
+    ParserHelper::ToLower($4);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kConfig, infinity::SetVarType::kString, $3, $4);
+    free($3);
+    free($4);
+}
+| SET CONFIG IDENTIFIER LONG_VALUE {
+    ParserHelper::ToLower($3);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kConfig, infinity::SetVarType::kInteger, $3, $4);
+    free($3);
+}
+| SET CONFIG IDENTIFIER DOUBLE_VALUE {
+    ParserHelper::ToLower($3);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SetCmd>(infinity::SetScope::kConfig, infinity::SetVarType::kDouble, $3, $4);
+    free($3);
+}
+| LOCK TABLE table_name {
+    $$ = new infinity::CommandStatement();
+    ParserHelper::ToLower($3->schema_name_ptr_);
+    ParserHelper::ToLower($3->table_name_ptr_);
+    $$->command_info_ = std::make_shared<infinity::LockCmd>($3->schema_name_ptr_, $3->table_name_ptr_);
+    free($3->schema_name_ptr_);
+    free($3->table_name_ptr_);
+    delete $3;
+}
+| UNLOCK TABLE table_name {
+    $$ = new infinity::CommandStatement();
+    ParserHelper::ToLower($3->schema_name_ptr_);
+    ParserHelper::ToLower($3->table_name_ptr_);
+    $$->command_info_ = std::make_shared<infinity::UnlockCmd>($3->schema_name_ptr_, $3->table_name_ptr_);
+    free($3->schema_name_ptr_);
+    free($3->table_name_ptr_);
+    delete $3;
+}
+| CREATE SNAPSHOT IDENTIFIER ON TABLE IDENTIFIER {
+    ParserHelper::ToLower($3);
+    ParserHelper::ToLower($6);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SnapshotCmd>($3, infinity::SnapshotOp::kCreate, infinity::SnapshotScope::kTable, $6);
+    free($3);
+    free($6);
+}
+| CREATE SNAPSHOT IDENTIFIER ON DATABASE IDENTIFIER {
+    ParserHelper::ToLower($3);
+    ParserHelper::ToLower($6);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SnapshotCmd>($3, infinity::SnapshotOp::kCreate, infinity::SnapshotScope::kDatabase, $6);
+    free($3);
+    free($6);
+}
+| CREATE SNAPSHOT IDENTIFIER ON SYSTEM {
+    ParserHelper::ToLower($3);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SnapshotCmd>($3, infinity::SnapshotOp::kCreate, infinity::SnapshotScope::kSystem);
+    free($3);
+}
+| DROP SNAPSHOT IDENTIFIER {
+    ParserHelper::ToLower($3);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SnapshotCmd>($3, infinity::SnapshotOp::kDrop, infinity::SnapshotScope::kIgnore);
+    free($3);
+}
+| RESTORE DATABASE SNAPSHOT IDENTIFIER {
+    ParserHelper::ToLower($4);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SnapshotCmd>($4, infinity::SnapshotOp::kRestore, infinity::SnapshotScope::kDatabase);
+    free($4);
+}
+| RESTORE TABLE SNAPSHOT IDENTIFIER {
+    ParserHelper::ToLower($4);
+    $$ = new infinity::CommandStatement();
+    $$->command_info_ = std::make_shared<infinity::SnapshotCmd>($4, infinity::SnapshotOp::kRestore, infinity::SnapshotScope::kTable);
+    free($4);
+}
+
+compact_statement: COMPACT TABLE table_name {
+    std::string schema_name;
+    if ($3->schema_name_ptr_ != nullptr) {
+        schema_name = std::string($3->schema_name_ptr_);
+        free($3->schema_name_ptr_);
+    }
+    std::string table_name = std::string($3->table_name_ptr_);
+    free($3->table_name_ptr_);
+
+    $$ = new infinity::ManualCompactStatement(std::move(schema_name), std::move(table_name));
+    delete $3;
+}
+
+admin_statement: ADMIN SHOW CATALOGS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListCatalogs;
+}
+| ADMIN SHOW CATALOG LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowCatalog;
+     $$->catalog_file_index_ = $4;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASES {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListDatabases;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowDatabase;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLES {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListTables;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowTable;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE COLUMNS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowColumn;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE SEGMENTS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListSegments;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE SEGMENT LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowSegment;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->segment_index_ = $13;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE SEGMENT LONG_VALUE BLOCKS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListBlocks;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->segment_index_ = $13;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE SEGMENT LONG_VALUE BLOCK LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowBlock;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->segment_index_ = $13;
+     $$->block_index_ = $15;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE SEGMENT LONG_VALUE BLOCK LONG_VALUE COLUMNS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListColumns;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->segment_index_ = $13;
+     $$->block_index_ = $15;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE INDEXES {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListIndexes;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE INDEX LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowIndex;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->index_meta_index_ = $13;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE INDEX LONG_VALUE LONG_VALUE SEGMENTS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListIndexSegments;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->index_meta_index_ = $13;
+     $$->index_entry_index_ = $14;
+}
+| ADMIN SHOW CATALOG LONG_VALUE LONG_VALUE DATABASE LONG_VALUE LONG_VALUE TABLE LONG_VALUE LONG_VALUE INDEX LONG_VALUE LONG_VALUE SEGMENT LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowIndexSegment;
+     $$->catalog_file_start_index_ = $4;
+     $$->catalog_file_end_index_ = $5;
+     $$->database_meta_index_ = $7;
+     $$->database_entry_index_ = $8;
+     $$->table_meta_index_ = $10;
+     $$->table_entry_index_ = $11;
+     $$->index_meta_index_ = $13;
+     $$->index_entry_index_ = $14;
+     $$->segment_index_ = $16;
+}
+| ADMIN SHOW LOGS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListLogFiles;
+}
+| ADMIN SHOW LOG LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowLogFile;
+     $$->log_file_index_ = $4;
+}
+| ADMIN SHOW LOG LONG_VALUE INDEXES {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListLogIndexes;
+     $$->log_file_index_ = $4;
+}
+| ADMIN SHOW LOG LONG_VALUE INDEX LONG_VALUE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowLogIndex;
+     $$->log_file_index_ = $4;
+     $$->log_index_in_file_ = $6;
+}
+| ADMIN SHOW CONFIGS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListConfigs;
+}
+| ADMIN SHOW VARIABLES {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListVariables;
+}
+| ADMIN SHOW VARIABLE IDENTIFIER {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowVariable;
+     $$->variable_name_ = $4;
+     free($4);
+}
+| ADMIN CREATE SNAPSHOT {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kCreateSnapshot;
+}
+| ADMIN SHOW SNAPSHOTS {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListSnapshots;
+}
+| ADMIN SHOW SNAPSHOT IDENTIFIER {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowSnapshot;
+     $$->snapshot_name_ = $4;
+     free($4);
+}
+| ADMIN DELETE SNAPSHOT STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kDeleteSnapshot;
+     $$->snapshot_name_ = $4;
+     free($4);
+}
+| ADMIN EXPORT SNAPSHOT STRING TO STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kExportSnapshot;
+     $$->snapshot_name_ = $4;
+     $$->export_path_ = $6;
+     free($4);
+     free($6);
+}
+| ADMIN RECOVER FROM SNAPSHOT STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kRecoverFromSnapshot;
+     $$->snapshot_name_ = $5;
+     free($5);
+}
+| ADMIN SHOW NODES {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kListNodes;
+}
+| ADMIN SHOW NODE STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowNode;
+     $$->node_name_ = $4;
+     free($4);
+}
+| ADMIN SHOW NODE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kShowCurrentNode;
+}
+| ADMIN REMOVE NODE STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kRemoveNode;
+     $$->node_name_ = $4;
+     free($4);
+}
+| ADMIN SET ADMIN {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kSetRole;
+     $$->node_role_ = infinity::NodeRole::kAdmin;
+}
+| ADMIN SET STANDALONE {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kSetRole;
+     $$->node_role_ = infinity::NodeRole::kStandalone;
+}
+| ADMIN SET LEADER USING STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kSetRole;
+     $$->node_role_ = infinity::NodeRole::kLeader;
+     $$->node_name_ = $5;
+     free($5);
+}
+| ADMIN CONNECT STRING AS FOLLOWER USING STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kSetRole;
+     $$->node_role_ = infinity::NodeRole::kFollower;
+     $$->leader_address_ = $3;
+     $$->node_name_ = $7;
+     free($3);
+     free($7);
+}
+| ADMIN CONNECT STRING AS LEARNER USING STRING {
+     $$ = new infinity::AdminStatement();
+     $$->admin_type_ = infinity::AdminStmtType::kSetRole;
+     $$->node_role_ = infinity::NodeRole::kLearner;
+     $$->leader_address_ = $3;
+     $$->node_name_ = $7;
+     free($3);
+     free($7);
+}
+
+alter_statement : ALTER TABLE table_name RENAME TO IDENTIFIER {
+    auto *ret = new infinity::RenameTableStatement($3->schema_name_ptr_, $3->table_name_ptr_);
+    $$ = ret;
+    ret->new_table_name_ = $6;
+    free($6);
+    free($3->schema_name_ptr_);
+    free($3->table_name_ptr_);
+    delete $3;
+}
+| ALTER TABLE table_name ADD COLUMN '(' column_def_array ')' {
+    auto *ret = new infinity::AddColumnsStatement($3->schema_name_ptr_, $3->table_name_ptr_);
+    $$ = ret;
+
+    for (infinity::ColumnDef*& column_def : *$7) {
+        ret->column_defs_.emplace_back(column_def);
+    }
+    delete $7;
+    free($3->schema_name_ptr_);
+    free($3->table_name_ptr_);
+    delete $3;
+}
+| ALTER TABLE table_name DROP COLUMN '(' identifier_array ')' {
+    auto *ret = new infinity::DropColumnsStatement($3->schema_name_ptr_, $3->table_name_ptr_);
+    $$ = ret;
+    for (std::string &column_name : *$7) {
+        ret->column_names_.emplace_back(std::move(column_name));
+    }
+    delete $7;
+    free($3->schema_name_ptr_);
+    free($3->table_name_ptr_);
+    delete $3;
+}
 
 /*
  * EXPRESSION
@@ -1694,24 +2678,25 @@ expr_array : expr_alias {
     $$ = $1;
 };
 
-expr_array_list : '(' expr_array ')' {
-    $$ = new std::vector<std::vector<infinity::ParsedExpr*>*>();
-    $$->push_back($2);
-}
-| expr_array_list ',' '(' expr_array ')' {
-    if(!$1->empty() && $1->back()->size() != $4->size()) {
-        yyerror(&yyloc, scanner, result, "The expr_array in list shall have the same size.");
-        for (auto arr_ptr : *$1) {
-            for (auto ptr : *arr_ptr) {
-                delete ptr;
-            }
-            delete (arr_ptr);
-        }
-        delete $1;
-        YYERROR;
+insert_row_list : '(' expr_array ')' {
+    auto res = std::make_unique<infinity::InsertRowExpr>();
+    for (auto* &expr : *$2) {
+        res->values_.emplace_back(expr);
+        expr = nullptr;
     }
-    $1->push_back($4);
+    delete $2;
+    $$ = new std::vector<infinity::InsertRowExpr*>();
+    $$->emplace_back(res.release());
+}
+| insert_row_list ',' '(' expr_array ')' {
     $$ = $1;
+    auto res = std::make_unique<infinity::InsertRowExpr>();
+    for (auto* &expr : *$4) {
+        res->values_.emplace_back(expr);
+        expr = nullptr;
+    }
+    delete $4;
+    $$->emplace_back(res.release());
 };
 
 /*
@@ -1742,7 +2727,7 @@ expr : operand
 | conjunction_expr;
 
 operand: '(' expr ')' {
-   $$ = $2;
+    $$ = $2;
 }
 | '(' select_without_paren ')' {
     infinity::SubqueryExpr* subquery_expr = new infinity::SubqueryExpr();
@@ -1757,210 +2742,390 @@ operand: '(' expr ')' {
 | function_expr
 | case_expr
 | cast_expr
-| knn_expr
-| match_expr
+| match_vector_expr
+| match_text_expr
+| match_tensor_expr
+| match_sparse_expr
 | query_expr
 | fusion_expr
 
-knn_expr : KNN '(' expr ',' array_expr ',' STRING ',' STRING ',' LONG_VALUE ')' with_index_param_list {
-    infinity::KnnExpr* knn_expr = new infinity::KnnExpr();
-    $$ = knn_expr;
+//                                       4                 6                 8          10         12                                          13
+//                  MATCH TENSOR  (  column_name, search_tensor, tensor_data_type, search_method, extra_match_tensor_option(including topn) optional_filter)
+match_tensor_expr : MATCH TENSOR '(' column_expr ',' common_array_expr ',' STRING ',' STRING ',' STRING optional_search_filter_expr ')' {
+    auto match_tensor_expr = std::make_unique<infinity::MatchTensorExpr>();
+    // search column
+    match_tensor_expr->SetSearchColumn($4);
+    // search tensor
+    ParserHelper::ToLower($8);
+    match_tensor_expr->SetQueryTensor($8, $6);
+    // search method
+    ParserHelper::ToLower($10);
+    match_tensor_expr->SetSearchMethod($10);
+    // search options
+    match_tensor_expr->SetExtraOptions($12);
+    match_tensor_expr->SetOptionalFilter($13);
+    $$ = match_tensor_expr.release();
+}
+| //1   2     3       4       5        6            7     8    9     10   11   12          13                   14    15   16   17     18
+MATCH TENSOR '(' column_expr ',' common_array_expr ',' STRING ',' STRING ',' STRING optional_search_filter_expr ')' USING INDEX '(' IDENTIFIER ')' {
+    auto match_tensor_expr = std::make_unique<infinity::MatchTensorExpr>();
+    // search column
+    match_tensor_expr->SetSearchColumn($4);
+    // search tensor
+    ParserHelper::ToLower($8);
+    match_tensor_expr->SetQueryTensor($8, $6);
+    // search method
+    ParserHelper::ToLower($10);
+    match_tensor_expr->SetSearchMethod($10);
+    // search options
+    match_tensor_expr->SetExtraOptions($12);
+    match_tensor_expr->SetOptionalFilter($13);
+    match_tensor_expr->index_name_ = $18;
+    $$ = match_tensor_expr.release();
+}
+| //1   2     3       4       5        6            7     8    9     10   11   12          13                   14
+MATCH TENSOR '(' column_expr ',' common_array_expr ',' STRING ',' STRING ',' STRING optional_search_filter_expr ')' IGNORE INDEX {
+    auto match_tensor_expr = std::make_unique<infinity::MatchTensorExpr>();
+    // search column
+    match_tensor_expr->SetSearchColumn($4);
+    // search tensor
+    ParserHelper::ToLower($8);
+    match_tensor_expr->SetQueryTensor($8, $6);
+    // search method
+    ParserHelper::ToLower($10);
+    match_tensor_expr->SetSearchMethod($10);
+    // search options
+    match_tensor_expr->ignore_index_ = true;
+    match_tensor_expr->SetExtraOptions($12);
+    match_tensor_expr->SetOptionalFilter($13);
+    $$ = match_tensor_expr.release();
+}
+//                  MATCH VECTOR (column_name, query_vec, data_type, metric_type, topn             optional_filter          ) USING INDEX ( index_name )  extra options
+//                   1      2         4         6              8          10           12                13                                        18             20
+match_vector_expr : MATCH VECTOR '(' expr ',' array_expr ',' STRING ',' STRING ',' LONG_VALUE optional_search_filter_expr ')' USING INDEX '(' IDENTIFIER ')' with_index_param_list {
+    infinity::KnnExpr* match_vector_expr = new infinity::KnnExpr();
+    $$ = match_vector_expr;
 
-    // KNN search column
-    knn_expr->column_expr_ = $3;
+    // vector search column
+    match_vector_expr->column_expr_ = $4;
 
-    // KNN distance type
-    ParserHelper::ToLower($9);
-    if(strcmp($9, "l2") == 0) {
-        knn_expr->distance_type_ = infinity::KnnDistanceType::kL2;
-    } else if(strcmp($9, "ip") == 0) {
-        knn_expr->distance_type_ = infinity::KnnDistanceType::kInnerProduct;
-    } else if(strcmp($9, "cosine") == 0) {
-        knn_expr->distance_type_ = infinity::KnnDistanceType::kCosine;
-    } else if(strcmp($9, "hamming") == 0) {
-        knn_expr->distance_type_ = infinity::KnnDistanceType::kHamming;
-    } else {
-        for (auto* param_ptr: *$13) {
-            delete param_ptr;
-        }
-        delete $13;
-        free($7);
-        free($9);
-        delete $5;
-        delete $$;
-        yyerror(&yyloc, scanner, result, "Invalid knn distance type");
-        YYERROR;
+    // vector distance type
+    ParserHelper::ToLower($10);
+    bool check = match_vector_expr->InitDistanceType($10);
+    if (!check) {
+        goto Error1;
     }
 
-    // KNN data type
-    ParserHelper::ToLower($7);
-    if(strcmp($7, "float") == 0 and knn_expr->distance_type_ != infinity::KnnDistanceType::kHamming) {
-        knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemFloat;
-        if(!($5->double_array_.empty())) {
-            knn_expr->dimension_ = $5->double_array_.size();
-            knn_expr->embedding_data_ptr_ = new float[knn_expr->dimension_];
-            for(long i = 0; i < knn_expr->dimension_; ++ i) {
-                ((float*)(knn_expr->embedding_data_ptr_))[i] = $5->double_array_[i];
-            }
-        }
-        if(!($5->long_array_.empty())) {
-            knn_expr->dimension_ = $5->long_array_.size();
-            knn_expr->embedding_data_ptr_ = new float[knn_expr->dimension_];
-            for(long i = 0; i < knn_expr->dimension_; ++ i) {
-                ((float*)(knn_expr->embedding_data_ptr_))[i] = $5->long_array_[i];
-            }
-        }
-        free($7);
-        free($9);
-        delete $5;
-    } else if(strcmp($7, "tinyint") == 0 and knn_expr->distance_type_ != infinity::KnnDistanceType::kHamming) {
-        knn_expr->dimension_ = $5->long_array_.size();
-        knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemInt8;
-        knn_expr->embedding_data_ptr_ = new char[knn_expr->dimension_]{};
-
-        for(long i = 0; i < knn_expr->dimension_; ++ i) {
-            ((char*)knn_expr->embedding_data_ptr_)[i] = $5->long_array_[i];
-        }
-        free($7);
-        free($9);
-        delete $5;
-    } else if(strcmp($7, "smallint") == 0 and knn_expr->distance_type_ != infinity::KnnDistanceType::kHamming) {
-        knn_expr->dimension_ = $5->long_array_.size();
-        knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemInt16;
-        knn_expr->embedding_data_ptr_ = new short int[knn_expr->dimension_];
-
-        for(long i = 0; i < knn_expr->dimension_; ++ i) {
-            ((short int*)knn_expr->embedding_data_ptr_)[i] = $5->long_array_[i];
-        }
-        free($7);
-        free($9);
-        delete $5;
-    } else if(strcmp($7, "integer") == 0 and knn_expr->distance_type_ != infinity::KnnDistanceType::kHamming) {
-        knn_expr->dimension_ = $5->long_array_.size();
-        knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemInt32;
-        knn_expr->embedding_data_ptr_ = new int[knn_expr->dimension_];
-
-        for(long i = 0; i < knn_expr->dimension_; ++ i) {
-            ((int*)knn_expr->embedding_data_ptr_)[i] = $5->long_array_[i];
-        }
-        free($7);
-        free($9);
-        delete $5;
-
-    } else if(strcmp($7, "bigint") == 0 and knn_expr->distance_type_ != infinity::KnnDistanceType::kHamming) {
-        knn_expr->dimension_ = $5->long_array_.size();
-        knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemInt64;
-        knn_expr->embedding_data_ptr_ = new long[knn_expr->dimension_];
-
-        memcpy(knn_expr->embedding_data_ptr_, (void*)$5->long_array_.data(), knn_expr->dimension_ * sizeof(long));
-        free($7);
-        free($9);
-        delete $5;
-
-    } else if(strcmp($7, "bit") == 0 and knn_expr->distance_type_ == infinity::KnnDistanceType::kHamming) {
-        knn_expr->dimension_ = $5->long_array_.size();
-        if(knn_expr->dimension_ % 8 == 0) {
-            knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemBit;
-            long embedding_size = knn_expr->dimension_ / 8;
-            knn_expr->embedding_data_ptr_ = new char[embedding_size]{};
-
-            for(long i = 0; i < embedding_size; ++ i) {
-                char embedding_unit = 0;
-                for(long bit_idx = 0; bit_idx < 8; ++ bit_idx) {
-                    if($5->long_array_[i * 8 + bit_idx] == 1) {
-                        char temp = embedding_unit << 1;
-                        temp &= 1;
-                        embedding_unit = temp;
-                    } else if($5->long_array_[i * 8 + bit_idx] == 0) {
-                        embedding_unit <<= 0;
-                    } else {
-                        for (auto* param_ptr: *$13) {
-                            delete param_ptr;
-                        }
-                        delete $13;
-                        free($7);
-                        free($9);
-                        delete $5;
-                        delete $$;
-                        yyerror(&yyloc, scanner, result, "Invalid bit embedding type data");
-                        YYERROR;
-                    }
-                }
-                ((char*)knn_expr->embedding_data_ptr_)[i] = embedding_unit;
-            }
-            free($7);
-            free($9);
-            delete $5;
-        } else {
-            for (auto* param_ptr: *$13) {
-                delete param_ptr;
-            }
-            delete $13;
-            free($7);
-            free($9);
-            delete $5;
-            delete $$;
-            yyerror(&yyloc, scanner, result, "KNN data type is bit which length should be aligned with 8");
-            YYERROR;
-        }
-
-    } else if(strcmp($7, "double") == 0 and knn_expr->distance_type_ != infinity::KnnDistanceType::kHamming) {
-        knn_expr->dimension_ = $5->double_array_.size();
-        knn_expr->embedding_data_type_ = infinity::EmbeddingDataType::kElemDouble;
-        knn_expr->embedding_data_ptr_ = new double[knn_expr->dimension_];
-
-        memcpy(knn_expr->embedding_data_ptr_, (void*)$5->double_array_.data(), knn_expr->dimension_ * sizeof(double));
-        free($7);
-        free($9);
-        delete $5;
-    } else {
-        for (auto* param_ptr: *$13) {
-            delete param_ptr;
-        }
-        delete $13;
-        free($7);
-        free($9);
-        delete $5;
-        delete $$;
-        yyerror(&yyloc, scanner, result, "Invalid knn data type");
-        YYERROR;
+    // vector data type
+    ParserHelper::ToLower($8);
+    check = match_vector_expr->InitEmbedding($8, $6);
+    if (!check) {
+        goto Error1;
     }
-    knn_expr->topn_ = $11;
-    knn_expr->opt_params_ = $13;
+    free($8);
+    free($10);
+    delete $6;
+
+    match_vector_expr->index_name_ = $18;
+    free($18);
+    match_vector_expr->topn_ = $12;
+    match_vector_expr->filter_expr_.reset($13);
+    match_vector_expr->opt_params_ = $20;
+    goto Return1;
+Error1:
+    for (auto* param_ptr: *$20) {
+        delete param_ptr;
+    }
+    delete $20;
+    free($8);
+    free($10);
+    free($18);
+    delete $6;
+    delete $$;
+    yyerror(&yyloc, scanner, result, "Invalid vector search distance type");
+    YYERROR;
+Return1:
+    ;
+}
+|
+MATCH VECTOR '(' expr ',' array_expr ',' STRING ',' STRING ',' LONG_VALUE optional_search_filter_expr ')' IGNORE INDEX {
+    infinity::KnnExpr* match_vector_expr = new infinity::KnnExpr();
+    $$ = match_vector_expr;
+
+    // vector search column
+    match_vector_expr->column_expr_ = $4;
+
+    // vector distance type
+    ParserHelper::ToLower($10);
+    bool check = match_vector_expr->InitDistanceType($10);
+    if (!check) {
+        goto Error2;
+    }
+
+    // vector data type
+    ParserHelper::ToLower($8);
+    check = match_vector_expr->InitEmbedding($8, $6);
+    if (!check) {
+        goto Error2;
+    }
+    free($8);
+    free($10);
+    delete $6;
+
+    match_vector_expr->topn_ = $12;
+    match_vector_expr->filter_expr_.reset($13);
+    match_vector_expr->ignore_index_ = true;
+    goto Return2;
+Error2:
+    free($8);
+    free($10);
+    delete $6;
+    delete $$;
+    yyerror(&yyloc, scanner, result, "Invalid vector search distance type");
+    YYERROR;
+Return2:
+    ;
+}
+|
+MATCH VECTOR '(' expr ',' array_expr ',' STRING ',' STRING ',' LONG_VALUE optional_search_filter_expr ')' with_index_param_list {
+    infinity::KnnExpr* match_vector_expr = new infinity::KnnExpr();
+    $$ = match_vector_expr;
+
+    // vector search column
+    match_vector_expr->column_expr_ = $4;
+
+    // vector distance type
+    ParserHelper::ToLower($10);
+    bool check = match_vector_expr->InitDistanceType($10);
+    if (!check) {
+        goto Error3;
+    }
+
+    // vector data type
+    ParserHelper::ToLower($8);
+    check = match_vector_expr->InitEmbedding($8, $6);
+    if (!check) {
+        goto Error3;
+    }
+    free($8);
+    free($10);
+    delete $6;
+
+    match_vector_expr->topn_ = $12;
+    match_vector_expr->filter_expr_.reset($13);
+    match_vector_expr->opt_params_ = $15;
+    goto Return3;
+Error3:
+    for (auto* param_ptr: *$15) {
+        delete param_ptr;
+    }
+    delete $15;
+    free($8);
+    free($10);
+    delete $6;
+    delete $$;
+    yyerror(&yyloc, scanner, result, "Invalid vector search distance type");
+    YYERROR;
+Return3:
+    ;
+}
+|
+MATCH VECTOR '(' expr ',' array_expr ',' STRING ',' STRING optional_search_filter_expr ')' with_index_param_list {
+    infinity::KnnExpr* match_vector_expr = new infinity::KnnExpr();
+    $$ = match_vector_expr;
+
+    // vector search search column
+    match_vector_expr->column_expr_ = $4;
+
+    // vector search distance type
+    ParserHelper::ToLower($10);
+    bool check = match_vector_expr->InitDistanceType($10);
+    if (!check) {
+        goto Error4;
+    }
+
+    // vector search data type
+    ParserHelper::ToLower($8);
+    check = match_vector_expr->InitEmbedding($8, $6);
+    if (!check) {
+        goto Error4;
+    }
+    free($8);
+    free($10);
+    delete $6;
+
+    match_vector_expr->topn_ = infinity::DEFAULT_MATCH_VECTOR_TOP_N;
+    match_vector_expr->filter_expr_.reset($11);
+    match_vector_expr->opt_params_ = $13;
+    goto Return4;
+
+Error4:
+    for (auto* param_ptr: *$13) {
+        delete param_ptr;
+    }
+    delete $13;
+    free($8);
+    free($10);
+    delete $6;
+    delete $$;
+    yyerror(&yyloc, scanner, result, "Invalid vector search distance type");
+    YYERROR;
+Return4:
+    ;
 }
 
-match_expr : MATCH '(' STRING ',' STRING ')' {
-    infinity::MatchExpr* match_expr = new infinity::MatchExpr();
-    match_expr->fields_ = std::string($3);
-    match_expr->matching_text_ = std::string($5);
-    free($3);
-    free($5);
-    $$ = match_expr;
+
+//                 MATCH SPARSE (column_name,       query_sparse,      metric_type,     topn,         optional_filter)                                             extra options
+//                   1      2         4                  6                   8           10                  11                                     16                  18
+match_sparse_expr: MATCH SPARSE '(' expr ',' common_sparse_array_expr ',' STRING ',' LONG_VALUE optional_search_filter_expr ')' USING INDEX '(' IDENTIFIER ')' with_index_param_list {
+    auto match_sparse_expr = new infinity::MatchSparseExpr();
+    $$ = match_sparse_expr;
+
+    // search column
+    match_sparse_expr->SetSearchColumn($4);
+
+    // search sparse and data type
+    match_sparse_expr->SetQuerySparse($6);
+
+    // metric type
+    ParserHelper::ToLower($8);
+    match_sparse_expr->SetMetricType($8);
+
+    // topn and options
+    match_sparse_expr->SetOptParams($10, $18);
+
+    // optional filter
+    match_sparse_expr->SetOptionalFilter($11);
+
+    match_sparse_expr->index_name_ = $16;
+    free($16);
 }
-| MATCH '(' STRING ',' STRING ',' STRING ')' {
-    infinity::MatchExpr* match_expr = new infinity::MatchExpr();
-    match_expr->fields_ = std::string($3);
-    match_expr->matching_text_ = std::string($5);
-    match_expr->options_text_ = std::string($7);
-    free($3);
-    free($5);
-    free($7);
-    $$ = match_expr;
+|
+MATCH SPARSE '(' expr ',' common_sparse_array_expr ',' STRING ',' LONG_VALUE optional_search_filter_expr ')' IGNORE INDEX {
+    auto match_sparse_expr = new infinity::MatchSparseExpr();
+    $$ = match_sparse_expr;
+
+    // search column
+    match_sparse_expr->SetSearchColumn($4);
+
+    // search sparse and data type
+    match_sparse_expr->SetQuerySparse($6);
+
+    // metric type
+    ParserHelper::ToLower($8);
+    match_sparse_expr->SetMetricType($8);
+
+    // topn and options
+    match_sparse_expr->topn_ = $10;
+
+    // optional filter
+    match_sparse_expr->SetOptionalFilter($11);
+
+    match_sparse_expr->ignore_index_ = true;
+}
+|
+MATCH SPARSE '(' expr ',' common_sparse_array_expr ',' STRING ',' LONG_VALUE optional_search_filter_expr ')' with_index_param_list {
+    auto match_sparse_expr = new infinity::MatchSparseExpr();
+    $$ = match_sparse_expr;
+
+    // search column
+    match_sparse_expr->SetSearchColumn($4);
+
+    // search sparse and data type
+    match_sparse_expr->SetQuerySparse($6);
+
+    // metric type
+    ParserHelper::ToLower($8);
+    match_sparse_expr->SetMetricType($8);
+
+    // optional filter
+    match_sparse_expr->SetOptionalFilter($11);
+
+    // topn and options
+    match_sparse_expr->SetOptParams($10, $13);
+}
+|
+MATCH SPARSE '(' expr ',' common_sparse_array_expr ',' STRING optional_search_filter_expr ')' with_index_param_list {
+    auto match_sparse_expr = new infinity::MatchSparseExpr();
+    $$ = match_sparse_expr;
+
+    // search column
+    match_sparse_expr->SetSearchColumn($4);
+
+    // search sparse and data type
+    match_sparse_expr->SetQuerySparse($6);
+
+    // metric type
+    ParserHelper::ToLower($8);
+    match_sparse_expr->SetMetricType($8);
+
+    // optional filter
+    match_sparse_expr->SetOptionalFilter($9);
+
+    // topn and options
+    match_sparse_expr->SetOptParams(infinity::DEFAULT_MATCH_SPARSE_TOP_N, $11);
 }
 
-query_expr : QUERY '(' STRING ')' {
-    infinity::MatchExpr* match_expr = new infinity::MatchExpr();
-    match_expr->matching_text_ = std::string($3);
-    free($3);
-    $$ = match_expr;
+match_text_expr : MATCH TEXT '(' STRING ',' STRING optional_search_filter_expr ')' {
+    infinity::MatchExpr* match_text_expr = new infinity::MatchExpr();
+    match_text_expr->fields_ = std::string($4);
+    match_text_expr->matching_text_ = std::string($6);
+    match_text_expr->filter_expr_.reset($7);
+    free($4);
+    free($6);
+    $$ = match_text_expr;
 }
-| QUERY '(' STRING ',' STRING ')' {
-    infinity::MatchExpr* match_expr = new infinity::MatchExpr();
-    match_expr->matching_text_ = std::string($3);
-    match_expr->options_text_ = std::string($5);
+| MATCH TEXT '(' STRING ',' STRING ',' STRING optional_search_filter_expr ')' {
+    infinity::MatchExpr* match_text_expr = new infinity::MatchExpr();
+    match_text_expr->fields_ = std::string($4);
+    match_text_expr->matching_text_ = std::string($6);
+    match_text_expr->options_text_ = std::string($8);
+    match_text_expr->filter_expr_.reset($9);
+    free($4);
+    free($6);
+    free($8);
+    $$ = match_text_expr;
+}
+| MATCH TEXT '(' STRING ',' STRING optional_search_filter_expr ')' USING INDEXES '(' STRING ')' {
+    infinity::MatchExpr* match_text_expr = new infinity::MatchExpr();
+    match_text_expr->fields_ = std::string($4);
+    match_text_expr->matching_text_ = std::string($6);
+    match_text_expr->filter_expr_.reset($7);
+    match_text_expr->index_names_ = std::string($12);
+    free($4);
+    free($6);
+    free($12);
+    $$ = match_text_expr;
+}
+| MATCH TEXT '(' STRING ',' STRING ',' STRING optional_search_filter_expr ')' USING INDEXES '(' STRING ')' {
+    infinity::MatchExpr* match_text_expr = new infinity::MatchExpr();
+    match_text_expr->fields_ = std::string($4);
+    match_text_expr->matching_text_ = std::string($6);
+    match_text_expr->options_text_ = std::string($8);
+    match_text_expr->filter_expr_.reset($9);
+    match_text_expr->index_names_ = std::string($14);
+    free($4);
+    free($6);
+    free($8);
+    free($14);
+    $$ = match_text_expr;
+}
+
+query_expr : QUERY '(' STRING optional_search_filter_expr ')' {
+    infinity::MatchExpr* match_text_expr = new infinity::MatchExpr();
+    match_text_expr->matching_text_ = std::string($3);
+    match_text_expr->filter_expr_.reset($4);
+    free($3);
+    $$ = match_text_expr;
+}
+| QUERY '(' STRING ',' STRING optional_search_filter_expr ')' {
+    infinity::MatchExpr* match_text_expr = new infinity::MatchExpr();
+    match_text_expr->matching_text_ = std::string($3);
+    match_text_expr->options_text_ = std::string($5);
+    match_text_expr->filter_expr_.reset($6);
     free($3);
     free($5);
-    $$ = match_expr;
+    $$ = match_text_expr;
 }
 
 fusion_expr : FUSION '(' STRING ')' {
@@ -1970,44 +3135,41 @@ fusion_expr : FUSION '(' STRING ')' {
     $$ = fusion_expr;
 }
 | FUSION '(' STRING ',' STRING ')' {
-    infinity::FusionExpr* fusion_expr = new infinity::FusionExpr();
+    auto fusion_expr = std::make_unique<infinity::FusionExpr>();
     fusion_expr->method_ = std::string($3);
     free($3);
+    $3 = nullptr;
     fusion_expr->SetOptions($5);
     free($5);
-    $$ = fusion_expr;
+    $5 = nullptr;
+    fusion_expr->JobAfterParser();
+    $$ = fusion_expr.release();
 }
 
-
-sub_search_array : knn_expr {
-    $$ = new std::vector<infinity::ParsedExpr*>();
-    $$->emplace_back($1);
+sub_search : match_vector_expr {
+    $$ = $1;
 }
-| match_expr {
-    $$ = new std::vector<infinity::ParsedExpr*>();
-    $$->emplace_back($1);
+| match_text_expr {
+    $$ = $1;
+}
+| match_tensor_expr {
+    $$ = $1;
+}
+| match_sparse_expr {
+    $$ = $1;
 }
 | query_expr {
-    $$ = new std::vector<infinity::ParsedExpr*>();
-    $$->emplace_back($1);
+    $$ = $1;
 }
 | fusion_expr {
+    $$ = $1;
+}
+
+sub_search_array : sub_search {
     $$ = new std::vector<infinity::ParsedExpr*>();
     $$->emplace_back($1);
 }
-| sub_search_array ',' knn_expr {
-    $1->emplace_back($3);
-    $$ = $1;
-}
-| sub_search_array ',' match_expr {
-    $1->emplace_back($3);
-    $$ = $1;
-}
-| sub_search_array ',' query_expr {
-    $1->emplace_back($3);
-    $$ = $1;
-}
-| sub_search_array ',' fusion_expr {
+| sub_search_array ',' sub_search {
     $1->emplace_back($3);
     $$ = $1;
 };
@@ -2035,6 +3197,48 @@ function_expr : IDENTIFIER '(' ')' {
     free($1);
     func_expr->arguments_ = $4;
     func_expr->distinct_ = true;
+    $$ = func_expr;
+}
+| YEAR '(' expr ')' {
+    infinity::FunctionExpr* func_expr = new infinity::FunctionExpr();
+    func_expr->func_name_ = "year";
+    func_expr->arguments_ = new std::vector<infinity::ParsedExpr*>();
+    func_expr->arguments_->emplace_back($3);
+    $$ = func_expr;
+}
+| MONTH '(' expr ')' {
+    infinity::FunctionExpr* func_expr = new infinity::FunctionExpr();
+    func_expr->func_name_ = "month";
+    func_expr->arguments_ = new std::vector<infinity::ParsedExpr*>();
+    func_expr->arguments_->emplace_back($3);
+    $$ = func_expr;
+}
+| DAY '(' expr ')' {
+    infinity::FunctionExpr* func_expr = new infinity::FunctionExpr();
+    func_expr->func_name_ = "day";
+    func_expr->arguments_ = new std::vector<infinity::ParsedExpr*>();
+    func_expr->arguments_->emplace_back($3);
+    $$ = func_expr;
+}
+| HOUR '(' expr ')' {
+    infinity::FunctionExpr* func_expr = new infinity::FunctionExpr();
+    func_expr->func_name_ = "hour";
+    func_expr->arguments_ = new std::vector<infinity::ParsedExpr*>();
+    func_expr->arguments_->emplace_back($3);
+    $$ = func_expr;
+}
+| MINUTE '(' expr ')' {
+    infinity::FunctionExpr* func_expr = new infinity::FunctionExpr();
+    func_expr->func_name_ = "minute";
+    func_expr->arguments_ = new std::vector<infinity::ParsedExpr*>();
+    func_expr->arguments_->emplace_back($3);
+    $$ = func_expr;
+}
+| SECOND '(' expr ')' {
+    infinity::FunctionExpr* func_expr = new infinity::FunctionExpr();
+    func_expr->func_name_ = "second";
+    func_expr->arguments_ = new std::vector<infinity::ParsedExpr*>();
+    func_expr->arguments_->emplace_back($3);
     $$ = func_expr;
 }
 | operand IS NOT NULLABLE {
@@ -2294,25 +3498,14 @@ case_check_array: WHEN expr THEN expr {
 };
 
 cast_expr: CAST '(' expr AS column_type ')' {
-    std::shared_ptr<infinity::TypeInfo> type_info_ptr{nullptr};
-    switch($5.logical_type_) {
-        case infinity::LogicalType::kDecimal: {
-            type_info_ptr = infinity::DecimalInfo::Make($5.precision, $5.scale);
-            break;
-        }
-//        case infinity::LogicalType::kBitmap: {
-//            type_info_ptr = infinity::BitmapInfo::Make($5.width);
-//            break;
-//        }
-        case infinity::LogicalType::kEmbedding: {
-            type_info_ptr = infinity::EmbeddingInfo::Make($5.embedding_type_, $5.width);
-            break;
-        }
-        default: {
-            break;
-        }
+    auto [data_type_result, fail_reason] = infinity::ColumnType::GetDataTypeFromColumnType(*($5), std::vector<std::unique_ptr<infinity::InitParameter>>{});
+    delete $5;
+    if (!data_type_result) {
+        yyerror(&yyloc, scanner, result, fail_reason.c_str());
+        delete $3;
+        YYERROR;
     }
-    infinity::CastExpr* cast_expr = new infinity::CastExpr($5.logical_type_, type_info_ptr);
+    infinity::CastExpr* cast_expr = new infinity::CastExpr(std::move(*data_type_result));
     cast_expr->expr_ = $3;
     $$ = cast_expr;
 };
@@ -2424,12 +3617,120 @@ constant_expr: STRING {
 | interval_expr {
     $$ = $1;
 }
-| long_array_expr {
+| common_array_expr {
     $$ = $1;
 }
-| double_array_expr {
+| curly_brackets_expr {
+    $$ = $1;
+}
+
+common_array_expr: array_expr {
+    $$ = $1;
+}
+| subarray_array_expr {
+    $$ = $1;
+}
+| sparse_array_expr {
+    $$ = $1;
+}
+| empty_array_expr {
+    $$ = $1;
+}
+
+common_sparse_array_expr: sparse_array_expr {
+    $$ = $1;
+}
+| array_expr {
+    $$ = $1;
+}
+| empty_array_expr {
+    $$ = $1;
+}
+
+subarray_array_expr: unclosed_subarray_array_expr ']' {
     $$ = $1;
 };
+
+unclosed_subarray_array_expr: '[' common_array_expr {
+    infinity::ConstantExpr* const_expr = new infinity::ConstantExpr(infinity::LiteralType::kSubArrayArray);
+    const_expr->sub_array_array_.emplace_back($2);
+    $$ = const_expr;
+}
+| unclosed_subarray_array_expr ',' common_array_expr {
+    $1->sub_array_array_.emplace_back($3);
+    $$ = $1;
+}
+
+sparse_array_expr: long_sparse_array_expr {
+    $$ = $1;
+}
+| double_sparse_array_expr {
+    $$ = $1;
+}
+
+long_sparse_array_expr: unclosed_long_sparse_array_expr ']' {
+    $$ = $1;
+}
+
+unclosed_long_sparse_array_expr: '[' int_sparse_ele {
+    infinity::ConstantExpr* const_expr = new infinity::ConstantExpr(infinity::LiteralType::kLongSparseArray);
+    const_expr->long_sparse_array_.first.emplace_back($2->first);
+    const_expr->long_sparse_array_.second.emplace_back($2->second);
+    delete $2;
+    $$ = const_expr;
+}
+| unclosed_long_sparse_array_expr ',' int_sparse_ele {
+    $1->long_sparse_array_.first.emplace_back($3->first);
+    $1->long_sparse_array_.second.emplace_back($3->second);
+    delete $3;
+    $$ = $1;
+}
+
+double_sparse_array_expr: unclosed_double_sparse_array_expr ']' {
+    $$ = $1;
+}
+
+unclosed_double_sparse_array_expr: '[' float_sparse_ele {
+    infinity::ConstantExpr* const_expr = new infinity::ConstantExpr(infinity::LiteralType::kDoubleSparseArray);
+    const_expr->double_sparse_array_.first.emplace_back($2->first);
+    const_expr->double_sparse_array_.second.emplace_back($2->second);
+    delete $2;
+    $$ = const_expr;
+}
+| unclosed_double_sparse_array_expr ',' float_sparse_ele {
+    $1->double_sparse_array_.first.emplace_back($3->first);
+    $1->double_sparse_array_.second.emplace_back($3->second);
+    delete $3;
+    $$ = $1;
+}
+
+empty_array_expr: '[' ']' {
+    $$ = new infinity::ConstantExpr(infinity::LiteralType::kEmptyArray);
+}
+
+curly_brackets_expr: unclosed_curly_brackets_expr '}' {
+    $$ = $1;
+}
+| '{' '}' {
+    $$ = new infinity::ConstantExpr(infinity::LiteralType::kCurlyBracketsArray);
+}
+
+unclosed_curly_brackets_expr: '{' constant_expr {
+    $$ = new infinity::ConstantExpr(infinity::LiteralType::kCurlyBracketsArray);
+    $$->curly_brackets_array_.emplace_back($2);
+}
+| unclosed_curly_brackets_expr ',' constant_expr {
+    $1->curly_brackets_array_.emplace_back($3);
+    $$ = $1;
+}
+
+int_sparse_ele: LONG_VALUE ':' LONG_VALUE {
+    $$ = new std::pair<int64_t, int64_t>{$1, $3};
+}
+
+float_sparse_ele: LONG_VALUE ':' DOUBLE_VALUE {
+    $$ = new std::pair<int64_t, double>{$1, $3};
+}
 
 array_expr: long_array_expr {
     $$ = $1;
@@ -2567,6 +3868,15 @@ copy_option : FORMAT IDENTIFIER {
     } else if (strcasecmp($2, "fvecs") == 0) {
         $$->file_type_ = infinity::CopyFileType::kFVECS;
         free($2);
+    } else if (strcasecmp($2, "csr") == 0) {
+        $$->file_type_ = infinity::CopyFileType::kCSR;
+        free($2);
+    } else if (strcasecmp($2, "bvecs") == 0) {
+        $$->file_type_ = infinity::CopyFileType::kBVECS;
+        free($2);
+    } else if (strcasecmp($2, "parquet") == 0) {
+        $$->file_type_ = infinity::CopyFileType::kPARQUET;
+        free($2);
     } else {
         free($2);
         delete $$;
@@ -2589,6 +3899,21 @@ copy_option : FORMAT IDENTIFIER {
     $$->option_type_ = infinity::CopyOptionType::kHeader;
     $$->header_ = true;
 };
+| OFFSET LONG_VALUE {
+    $$ = new infinity::CopyOption();
+    $$->option_type_ = infinity::CopyOptionType::kOffset;
+    $$->offset_ = $2;
+}
+| LIMIT LONG_VALUE {
+    $$ = new infinity::CopyOption();
+    $$->option_type_ = infinity::CopyOptionType::kLimit;
+    $$->limit_ = $2;
+}
+| ROWLIMIT LONG_VALUE {
+    $$ = new infinity::CopyOption();
+    $$->option_type_ = infinity::CopyOptionType::kRowLimit;
+    $$->row_limit_ = $2;
+}
 
 file_path : STRING {
     $$ = $1;
@@ -2626,10 +3951,17 @@ if_not_exists_info : if_not_exists IDENTIFIER {
 }
 
 with_index_param_list : WITH '(' index_param_list ')' {
-    $$ = std::move($3);
+    $$ = $3;
 }
 | {
     $$ = new std::vector<infinity::InitParameter*>();
+}
+
+optional_table_properties_list : PROPERTIES '(' index_param_list ')' {
+    $$ = $3;
+}
+| {
+    $$ = nullptr;
 }
 
 index_param_list : index_param {
@@ -2642,11 +3974,24 @@ index_param_list : index_param {
 };
 
 index_param : IDENTIFIER {
+    ParserHelper::ToLower($1);
     $$ = new infinity::InitParameter();
     $$->param_name_ = $1;
     free($1);
 }
 | IDENTIFIER '=' IDENTIFIER {
+    ParserHelper::ToLower($1);
+    ParserHelper::ToLower($3);
+    $$ = new infinity::InitParameter();
+    $$->param_name_ = $1;
+    free($1);
+
+    $$->param_value_ = $3;
+    free($3);
+}
+| IDENTIFIER '=' STRING {
+    ParserHelper::ToLower($1);
+    ParserHelper::ToLower($3);
     $$ = new infinity::InitParameter();
     $$->param_name_ = $1;
     free($1);
@@ -2655,6 +4000,7 @@ index_param : IDENTIFIER {
     free($3);
 }
 | IDENTIFIER '=' LONG_VALUE {
+    ParserHelper::ToLower($1);
     $$ = new infinity::InitParameter();
     $$->param_name_ = $1;
     free($1);
@@ -2662,6 +4008,7 @@ index_param : IDENTIFIER {
     $$->param_value_ = std::to_string($3);
 }
 | IDENTIFIER '=' DOUBLE_VALUE {
+    ParserHelper::ToLower($1);
     $$ = new infinity::InitParameter();
     $$->param_name_ = $1;
     free($1);
@@ -2671,103 +4018,42 @@ index_param : IDENTIFIER {
 
 /* CREATE INDEX [[IF NOT EXISTS] index_name] ON table_name
 (column1[, ...column2]) USING method [WITH (param[, ...param])] (column1[, ...column2]) USING method [WITH (param[, ...param])]; */
-
-index_info_list : '(' identifier_array ')' USING IDENTIFIER with_index_param_list {
+index_info : '(' IDENTIFIER ')' USING IDENTIFIER with_index_param_list {
     ParserHelper::ToLower($5);
     infinity::IndexType index_type = infinity::IndexType::kInvalid;
     if(strcmp($5, "fulltext") == 0) {
-        index_type = infinity::IndexType::kIRSFullText;
+        index_type = infinity::IndexType::kFullText;
     } else if (strcmp($5, "hnsw") == 0) {
         index_type = infinity::IndexType::kHnsw;
-    } else if (strcmp($5, "ivfflat") == 0) {
-        index_type = infinity::IndexType::kIVFFlat;
+    } else if (strcmp($5, "bmp") == 0) {
+        index_type = infinity::IndexType::kBMP;
+    } else if (strcmp($5, "ivf") == 0) {
+        index_type = infinity::IndexType::kIVF;
+    } else if (strcmp($5, "emvb") == 0) {
+        index_type = infinity::IndexType::kEMVB;
+    } else if(strcmp($5, "diskann") == 0){
+        index_type = infinity::IndexType::kDiskAnn;
     } else {
         free($5);
-        delete $2;
+        free($2);
         delete $6;
         yyerror(&yyloc, scanner, result, "Unknown index type");
         YYERROR;
     }
     free($5);
 
-    size_t index_count = $2->size();
-    if(index_count == 0) {
-        delete $2;
-        delete $6;
-    }
-    $$ = new std::vector<infinity::IndexInfo*>();
-    $$->reserve(index_count);
+    $$ = new infinity::IndexInfo();
 
-    infinity::IndexInfo* index_info = new infinity::IndexInfo();
-    index_info->index_type_ = index_type;
-    index_info->column_name_ = (*$2)[0];
-    index_info->index_param_list_ = $6;
-    $$->emplace_back(index_info);
-
-    for(size_t idx = 1; idx < index_count; ++ idx) {
-        infinity::IndexInfo* index_info = new infinity::IndexInfo();
-        index_info->index_type_ = index_type;
-        index_info->column_name_ = (*$2)[idx];
-
-        size_t param_count = $6->size();
-        index_info->index_param_list_ = new std::vector<infinity::InitParameter*>();
-        index_info->index_param_list_->resize(param_count);
-        for(size_t param_idx = 0; param_idx < param_count; ++ param_idx) {
-            (*(index_info->index_param_list_))[param_idx] = new infinity::InitParameter();
-            *(*(index_info->index_param_list_))[param_idx] = *(*$6)[param_idx];
-        }
-        $$->emplace_back(index_info);
-    }
-    delete $2;
+    $$->index_type_ = index_type;
+    $$->column_name_ = $2;
+    $$->index_param_list_ = $6;
+    free($2);
 }
-| index_info_list '(' identifier_array ')' USING IDENTIFIER with_index_param_list {
-    ParserHelper::ToLower($6);
-    infinity::IndexType index_type = infinity::IndexType::kInvalid;
-    if(strcmp($6, "fulltext") == 0) {
-        index_type = infinity::IndexType::kIRSFullText;
-    } else if (strcmp($6, "hnsw") == 0) {
-        index_type = infinity::IndexType::kHnsw;
-    } else if (strcmp($6, "ivfflat") == 0) {
-        index_type = infinity::IndexType::kIVFFlat;
-    } else {
-        free($6);
-        delete $3;
-        delete $7;
-        yyerror(&yyloc, scanner, result, "Unknown index type");
-        YYERROR;
-    }
-    free($6);
-
-    size_t index_count = $3->size();
-    if(index_count == 0) {
-        delete $1;
-        delete $3;
-        delete $7;
-    }
-    $$ = $1;
-    $$->reserve($$->size() + index_count);
-
-    infinity::IndexInfo* index_info = new infinity::IndexInfo();
-    index_info->index_type_ = index_type;
-    index_info->column_name_ = (*$3)[0];
-    index_info->index_param_list_ = $7;
-    $$->emplace_back(index_info);
-
-    for(size_t idx = 1; idx < index_count; ++ idx) {
-        infinity::IndexInfo* index_info = new infinity::IndexInfo();
-        index_info->index_type_ = index_type;
-        index_info->column_name_ = (*$3)[idx];
-
-        size_t param_count = $7->size();
-        index_info->index_param_list_ = new std::vector<infinity::InitParameter*>();
-        index_info->index_param_list_->resize(param_count);
-        for(size_t param_idx = 0; param_idx < param_count; ++ param_idx) {
-            (*(index_info->index_param_list_))[param_idx] = new infinity::InitParameter();
-            *(*(index_info->index_param_list_))[param_idx] = *(*$7)[param_idx];
-        }
-        $$->emplace_back(index_info);
-    }
-    delete $3;
+| '(' IDENTIFIER ')' {
+    $$ = new infinity::IndexInfo();
+    $$->index_type_ = infinity::IndexType::kSecondary;
+    $$->column_name_ = $2;
+    free($2);
 }
 
 %%

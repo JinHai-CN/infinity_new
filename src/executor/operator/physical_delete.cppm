@@ -14,41 +14,39 @@
 
 module;
 
+export module physical_delete;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
-import catalog;
+import meta_info;
 import load_meta;
 import infinity_exception;
-
-export module physical_delete;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 export class PhysicalDelete final : public PhysicalOperator {
 public:
-    explicit PhysicalDelete(u64 id, UniquePtr<PhysicalOperator> left, TableEntry *table_entry_ptr, SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kDelete, Move(left), nullptr, id, load_metas), table_entry_ptr_(table_entry_ptr) {}
+    explicit PhysicalDelete(u64 id, UniquePtr<PhysicalOperator> left, SharedPtr<TableInfo> table_info, SharedPtr<Vector<LoadMeta>> load_metas)
+        : PhysicalOperator(PhysicalOperatorType::kDelete, std::move(left), nullptr, id, load_metas), table_info_(std::move(table_info)) {}
 
     ~PhysicalDelete() override = default;
 
-    void Init() override;
+    void Init(QueryContext *query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
 
-    TableEntry *table_entry_ptr_{};
+    SharedPtr<TableInfo> table_info_{};
 
 private:
     SharedPtr<Vector<String>> output_names_{};

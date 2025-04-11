@@ -14,11 +14,12 @@
 
 module;
 
-import stl;
-
-import infinity_exception;
-
 module physical_operator_type;
+
+import stl;
+import status;
+import infinity_exception;
+import logger;
 
 namespace infinity {
 String PhysicalOperatorToString(PhysicalOperatorType type) {
@@ -84,8 +85,6 @@ String PhysicalOperatorToString(PhysicalOperatorType type) {
             return "Alter";
         case PhysicalOperatorType::kCreateTable:
             return "CreateTable";
-        case PhysicalOperatorType::kCreateIndex:
-            return "CreateIndex";
         case PhysicalOperatorType::kCreateCollection:
             return "CreateCollection";
         case PhysicalOperatorType::kCreateDatabase:
@@ -126,14 +125,43 @@ String PhysicalOperatorToString(PhysicalOperatorType type) {
             return "MergeKnn";
         case PhysicalOperatorType::kCommand:
             return "Command";
+        case PhysicalOperatorType::kCompact:
+            return "Compact";
+        case PhysicalOperatorType::kCompactIndexPrepare:
+            return "CompactIndexPrepare";
+        case PhysicalOperatorType::kCompactIndexDo:
+            return "CompactIndexDo";
+        case PhysicalOperatorType::kCompactFinish:
+            return "CompactFinish";
         case PhysicalOperatorType::kMatch:
             return "Match";
+        case PhysicalOperatorType::kMatchTensorScan:
+            return "MatchTensorScan";
+        case PhysicalOperatorType::kMergeMatchTensor:
+            return "MergeMatchTensor";
+        case PhysicalOperatorType::kMatchSparseScan:
+            return "MatchSparseScan";
+        case PhysicalOperatorType::kMergeMatchSparse:
+            return "MergeMatchSparse";
         case PhysicalOperatorType::kFusion:
             return "Fusion";
         case PhysicalOperatorType::kMergeAggregate:
             return "MergeAggregate";
+        case PhysicalOperatorType::kCreateIndexPrepare:
+            return "CreateIndexPrepare";
+        case PhysicalOperatorType::kCreateIndexDo:
+            return "CreateIndexDo";
+        case PhysicalOperatorType::kCreateIndexFinish:
+            return "CreateIndexFinish";
+        case PhysicalOperatorType::kReadCache:
+            return "ReadCache";
+        case PhysicalOperatorType::kUnnest:
+            return "Unnest";
+        case PhysicalOperatorType::kUnnestAggregate:
+            return "UnnestAggregate";
     }
 
-    Error<NotImplementException>("Unknown physical operator type");
+    Status status = Status::NotSupport("Unknown physical operator type");
+    RecoverableError(status);
 }
 } // namespace infinity

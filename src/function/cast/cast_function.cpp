@@ -14,6 +14,9 @@
 
 module;
 
+module cast_function;
+
+import third_party;
 import infinity_exception;
 import bound_cast_func;
 import bool_cast;
@@ -21,144 +24,100 @@ import integer_cast;
 import float_cast;
 import embedding_cast;
 import varchar_cast;
-import parser;
+import tensor_cast;
+import tensor_array_cast;
+import multi_vector_cast;
+import empty_array_cast;
+import array_cast;
+import logger;
+import stl;
+import sparse_cast;
 import third_party;
-
-module cast_function;
+import logical_type;
 
 namespace infinity {
 
-template <typename SourceType>
-static BoundCastFunc NumericCast(const DataType &target) {
-    switch (target.type()) {
-        case kTinyInt: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        case kSmallInt: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        case kInteger: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        case kBigInt: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        case kHugeInt: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        case kFloat: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        case kDouble: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-        default: {
-            Error<NotImplementException>(Format("Can't cast to {}", target.ToString()));
-        }
-    }
-}
-
 BoundCastFunc CastFunction::GetBoundFunc(const DataType &source, const DataType &target) {
     if (source == target) {
-        Error<TypeException>(Format("Attempt to cast from {} to {}", source.ToString(), target.ToString()));
+        UnrecoverableError(fmt::format("Attempt to cast from {} to {}", source.ToString(), target.ToString()));
     }
 
     switch (source.type()) {
-        case kBoolean: {
+        case LogicalType::kBoolean: {
             return BindBoolCast(source, target);
         }
-        case kTinyInt: {
+        case LogicalType::kTinyInt: {
             return BindIntegerCast<TinyIntT>(source, target);
         }
-        case kSmallInt: {
+        case LogicalType::kSmallInt: {
             return BindIntegerCast<SmallIntT>(source, target);
         }
-        case kInteger: {
+        case LogicalType::kInteger: {
             return BindIntegerCast<IntegerT>(source, target);
         }
-        case kBigInt: {
+        case LogicalType::kBigInt: {
             return BindIntegerCast<BigIntT>(source, target);
         }
-        case kHugeInt: {
+        case LogicalType::kHugeInt: {
             return BindIntegerCast<HugeIntT>(source, target);
         }
-        case kFloat: {
+        case LogicalType::kFloat16: {
+            return BindFloatCast<Float16T>(source, target);
+        }
+        case LogicalType::kBFloat16: {
+            return BindFloatCast<BFloat16T>(source, target);
+        }
+        case LogicalType::kFloat: {
             return BindFloatCast<FloatT>(source, target);
         }
-        case kDouble: {
+        case LogicalType::kDouble: {
             return BindFloatCast<DoubleT>(source, target);
         }
-        case kDecimal: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kVarchar: {
+        case LogicalType::kVarchar: {
             return BindVarcharCast(source, target);
         }
-        case kDate: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kTime: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kDateTime: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kTimestamp: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kInterval: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kArray: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kTuple: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kPoint: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kLine: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kLineSeg: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-        case kBox: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-//        case kPath: {
-//            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-//        }
-//        case kPolygon: {
-//            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-//        }
-        case kCircle: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-//        case kBitmap: {
-//            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-//        }
-        case kUuid: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-        }
-//        case kBlob: {
-//            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
-//        }
-        case kEmbedding: {
+        case LogicalType::kEmbedding: {
             return BindEmbeddingCast(source, target);
         }
-        case kRowID: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
+        case LogicalType::kMultiVector: {
+            return BindMultiVectorCast(source, target);
         }
-        case kMixed: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
+        case LogicalType::kTensor: {
+            return BindTensorCast(source, target);
         }
-        case kNull: {
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
+        case LogicalType::kTensorArray: {
+            return BindTensorArrayCast(source, target);
         }
-        default:
-            Error<NotImplementException>(Format("Can't cast from {} to {}", source.ToString(), target.ToString()));
+        case LogicalType::kSparse: {
+            return BindSparseCast(source, target);
+        }
+        case LogicalType::kEmptyArray: {
+            return BindEmptyArrayCast(source, target);
+        }
+        case LogicalType::kArray: {
+            return BindArrayCast(source, target);
+        }
+        case LogicalType::kDecimal:
+        case LogicalType::kDate:
+        case LogicalType::kTime:
+        case LogicalType::kDateTime:
+        case LogicalType::kTimestamp:
+        case LogicalType::kInterval:
+        case LogicalType::kTuple:
+        case LogicalType::kPoint:
+        case LogicalType::kLine:
+        case LogicalType::kLineSeg:
+        case LogicalType::kBox:
+        case LogicalType::kCircle:
+        case LogicalType::kUuid:
+        case LogicalType::kRowID:
+        case LogicalType::kMixed:
+        case LogicalType::kNull:
+        case LogicalType::kMissing:
+        case LogicalType::kInvalid: {
+            UnrecoverableError(fmt::format("Can't cast from {} to {}", source.ToString(), target.ToString()));
+            break;
+        }
     }
     return BoundCastFunc(nullptr);
 }

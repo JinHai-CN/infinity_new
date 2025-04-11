@@ -14,19 +14,22 @@
 
 module;
 
-#include <memory>
+module subquery_unnest;
 
 import stl;
-import parser;
-import base_expression;
-import query_context;
+import column_binding;
 import logical_node;
+import base_expression;
+import subquery_expression;
+import column_expression;
+import status;
+
+import query_context;
 import bind_context;
 import expression_type;
 import value;
 import dependent_join_flattener;
-
-import subquery_expression;
+import internal_types;
 import value_expression;
 import function_expression;
 import aggregate_expression;
@@ -48,12 +51,12 @@ import bound_cast_func;
 import cast_table;
 
 import catalog;
-import column_binding;
 import third_party;
-
+import subquery_expr;
 import infinity_exception;
-
-module subquery_unnest;
+import join_reference;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -73,12 +76,12 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestSubquery(SharedPtr<BaseExpressio
                                                          QueryContext *query_context,
                                                          const SharedPtr<BindContext> &bind_context) {
     // 1. Check the subquery type: uncorrelated subquery or correlated subquery.
-    auto subquery_expr = static_pointer_cast<SubqueryExpression>(expr_ptr);
+    auto subquery_expr_ptr = static_cast<SubqueryExpression *>(expr_ptr.get());
 
-    auto right = subquery_expr->bound_select_statement_ptr_->BuildPlan(query_context);
+    auto right = subquery_expr_ptr->bound_select_statement_ptr_->BuildPlan(query_context);
     // TODO: if the correlated information of the subquery should be stored in bind context.
     // Check the correlated information
-    auto result = UnnestUncorrelated(subquery_expr.get(), root, right, query_context, bind_context);
+    auto result = UnnestUncorrelated(subquery_expr_ptr, root, right, query_context, bind_context);
     // If it isn't a correlated subquery
 
     // 2. Call different function to resolve uncorrelated subquery and correlated subquery.
@@ -98,12 +101,13 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestUncorrelated(SubqueryExpression 
             // Step1 Generate limit operator on the subquery
             SharedPtr<ValueExpression> limit_expression = MakeShared<ValueExpression>(Value::MakeBigInt(1));
             SharedPtr<ValueExpression> offset_expression = MakeShared<ValueExpression>(Value::MakeBigInt(0));
-            SharedPtr<LogicalLimit> limit_node = MakeShared<LogicalLimit>(bind_context->GetNewLogicalNodeId(), limit_expression, offset_expression);
+            SharedPtr<LogicalLimit> limit_node =
+                MakeShared<LogicalLimit>(bind_context->GetNewLogicalNodeId(), nullptr, limit_expression, offset_expression, false);
 
             limit_node->set_left_node(subquery_plan);
             // Step2 Generate aggregate first operator on the limit operator
-            NewCatalog *catalog = query_context->storage()->catalog();
-            SharedPtr<FunctionSet> function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "first");
+            Catalog *catalog = query_context->storage()->catalog();
+            SharedPtr<FunctionSet> function_set_ptr = Catalog::GetFunctionSetByName(catalog, "first");
             ColumnBinding limit_column_binding = limit_node->GetColumnBindings()[0];
 
             SharedPtr<ColumnExpression> argument = ColumnExpression::Make(expr_ptr->Type(),
@@ -132,7 +136,7 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestUncorrelated(SubqueryExpression 
 
             // Step3 Generate cross product on the root and subquery plan
             u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-            String alias = "cross_product" + ToStr(logical_node_id);
+            String alias = fmt::format("cross_product{}", logical_node_id);
             SharedPtr<LogicalCrossProduct> cross_product_node = MakeShared<LogicalCrossProduct>(logical_node_id, alias, root, aggregate_node);
 
             root = cross_product_node;
@@ -149,11 +153,13 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestUncorrelated(SubqueryExpression 
             //     |-> Aggregate( count(*) as count_start)
             //         |-> Limit (1)
             //             |-> right plan tree
-            Error<PlannerException>("Plan EXISTS uncorrelated subquery");
+            Status status = Status::SyntaxError("Plan EXISTS uncorrelated subquery");
+            RecoverableError(status);
             break;
         }
         case SubqueryType::kNotExists: {
-            Error<PlannerException>("Plan not EXISTS uncorrelated subquery");
+            Status status = Status::SyntaxError("Plan not EXISTS uncorrelated subquery");
+            RecoverableError(status);
             break;
         }
         case SubqueryType::kNotIn:
@@ -174,13 +180,13 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestUncorrelated(SubqueryExpression 
             SharedPtr<BaseExpression> right_expr = CastExpression::AddCastToType(right_column, expr_ptr->left_->Type());
             function_arguments.emplace_back(right_expr);
 
-            NewCatalog *catalog = query_context->storage()->catalog();
-            SharedPtr<FunctionSet> function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "first");
+            Catalog *catalog = query_context->storage()->catalog();
+            SharedPtr<FunctionSet> function_set_ptr = Catalog::GetFunctionSetByName(catalog, "first");
 
             if (expr_ptr->subquery_type_ == SubqueryType::kIn) {
-                function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "=");
+                function_set_ptr = Catalog::GetFunctionSetByName(catalog, "=");
             } else {
-                function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "<>");
+                function_set_ptr = Catalog::GetFunctionSetByName(catalog, "<>");
             }
             auto scalar_function_set_ptr = static_pointer_cast<ScalarFunctionSet>(function_set_ptr);
             ScalarFunction equi_function = scalar_function_set_ptr->GetMostMatchFunction(function_arguments);
@@ -192,7 +198,7 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestUncorrelated(SubqueryExpression 
 
             // 3. Generate mark join
             u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-            String alias = "logical_join" + ToStr(logical_node_id);
+            String alias = fmt::format("logical_join{}", logical_node_id);
             SharedPtr<LogicalJoin> join_node = MakeShared<LogicalJoin>(logical_node_id, JoinType::kMark, alias, conditions, root, subquery_plan);
             join_node->mark_index_ = bind_context->GenerateTableIndex();
             root = join_node;
@@ -203,14 +209,18 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestUncorrelated(SubqueryExpression 
 
             return result;
         }
-        case SubqueryType::kAny:
-            Error<PlannerException>("Plan ANY uncorrelated subquery");
+        case SubqueryType::kAny: {
+            Status status = Status::SyntaxError("Plan ANY uncorrelated subquery");
+            RecoverableError(status);
             break;
+        }
         default: {
-            Error<PlannerException>("Unknown subquery type.");
+            String error_message = "Unknown subquery type.";
+            UnrecoverableError(error_message);
         }
     }
-    Error<PlannerException>("Not implement to unnest uncorrelated subquery.");
+    String error_message = "Not implement to unnest uncorrelated subquery.";
+    UnrecoverableError(error_message);
     return nullptr;
 }
 
@@ -222,7 +232,8 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
     auto &correlated_columns = bind_context->correlated_column_exprs_;
 
     if (correlated_columns.empty()) {
-        Error<PlannerException>("No correlated column");
+        Status status = Status::SyntaxError("No correlated column");
+        RecoverableError(status);
     }
 
     // Valid the correlated columns are from one table.
@@ -230,7 +241,8 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
     SizeT table_index = correlated_columns[0]->binding().table_idx;
     for (SizeT idx = 1; idx < column_count; ++idx) {
         if (table_index != correlated_columns[idx]->binding().table_idx) {
-            Error<PlannerException>("Correlated columns can be only from one table, now.");
+            Status status = Status::SyntaxError("Correlated columns can be only from one table, now.");
+            RecoverableError(status);
         }
     }
 
@@ -252,7 +264,7 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
             GenerateJoinConditions(query_context, join_conditions, correlated_columns, subplan_column_bindings, correlated_base_index);
 
             u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-            String alias = "logical_join" + ToStr(logical_node_id);
+            String alias = fmt::format("logical_join{}", logical_node_id);
             SharedPtr<LogicalJoin> logical_join =
                 MakeShared<LogicalJoin>(logical_node_id, JoinType::kMark, alias, join_conditions, root, dependent_join);
             logical_join->mark_index_ = bind_context->GenerateTableIndex();
@@ -279,7 +291,7 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
             GenerateJoinConditions(query_context, join_conditions, correlated_columns, subplan_column_bindings, correlated_base_index);
 
             u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-            String alias = "logical_join" + ToStr(logical_node_id);
+            String alias = fmt::format("logical_join{}", logical_node_id);
             SharedPtr<LogicalJoin> logical_join =
                 MakeShared<LogicalJoin>(logical_node_id, JoinType::kMark, alias, join_conditions, root, dependent_join);
             logical_join->mark_index_ = bind_context->GenerateTableIndex();
@@ -291,8 +303,8 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
                 ColumnExpression::Make(expr_ptr->Type(), alias, logical_join->mark_index_, right_names->at(0), 0, 0);
 
             // Add NOT function on the mark column
-            NewCatalog *catalog = query_context->storage()->catalog();
-            SharedPtr<FunctionSet> function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "not");
+            Catalog *catalog = query_context->storage()->catalog();
+            SharedPtr<FunctionSet> function_set_ptr = Catalog::GetFunctionSetByName(catalog, "not");
             Vector<SharedPtr<BaseExpression>> function_arguments;
             function_arguments.reserve(1);
             function_arguments.emplace_back(mark_column);
@@ -345,7 +357,7 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
             join_conditions.emplace_back(in_expression_ptr);
 
             u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-            String alias = "logical_join" + ToStr(logical_node_id);
+            String alias = fmt::format("logical_join{}", logical_node_id);
             SharedPtr<LogicalJoin> logical_join =
                 MakeShared<LogicalJoin>(logical_node_id, JoinType::kMark, alias, join_conditions, root, dependent_join);
             logical_join->mark_index_ = bind_context->GenerateTableIndex();
@@ -372,7 +384,7 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
             GenerateJoinConditions(query_context, join_conditions, correlated_columns, subplan_column_bindings, correlated_base_index);
 
             u64 logical_node_id = bind_context->GetNewLogicalNodeId();
-            String alias = "logical_join" + ToStr(logical_node_id);
+            String alias = fmt::format("logical_join{}", logical_node_id);
             SharedPtr<LogicalJoin> logical_join =
                 MakeShared<LogicalJoin>(logical_node_id, JoinType::kInner, alias, join_conditions, root, dependent_join);
             root = logical_join;
@@ -388,10 +400,12 @@ SharedPtr<BaseExpression> SubqueryUnnest::UnnestCorrelated(SubqueryExpression *e
             return result;
         }
         case SubqueryType::kAny: {
-            Error<PlannerException>("Unnest correlated any subquery.");
+            Status status = Status::SyntaxError("Unnest correlated any subquery.");
+            RecoverableError(status);
         }
     }
-    Error<PlannerException>("Unreachable");
+    String error_message = "Unreachable";
+    UnrecoverableError(error_message);
     return nullptr;
 }
 
@@ -401,14 +415,16 @@ void SubqueryUnnest::GenerateJoinConditions(QueryContext *query_context,
                                             const Vector<ColumnBinding> &subplan_column_bindings,
                                             SizeT correlated_base_index) {
 
-    NewCatalog *catalog = query_context->storage()->catalog();
-    SharedPtr<FunctionSet> function_set_ptr = NewCatalog::GetFunctionSetByName(catalog, "=");
+    Catalog *catalog = query_context->storage()->catalog();
+    SharedPtr<FunctionSet> function_set_ptr = Catalog::GetFunctionSetByName(catalog, "=");
     SizeT column_count = correlated_columns.size();
     for (SizeT idx = 0; idx < column_count; ++idx) {
         auto &left_column_expr = correlated_columns[idx];
         SizeT correlated_column_index = correlated_base_index + idx;
         if (correlated_column_index >= subplan_column_bindings.size()) {
-            Error<PlannerException>(Format("Column index is out of range.{}/{}", correlated_column_index, subplan_column_bindings.size()));
+            Status status =
+                Status::SyntaxError(fmt::format("Column index is out of range.{}/{}", correlated_column_index, subplan_column_bindings.size()));
+            RecoverableError(status);
         }
 
         // Generate new correlated column expression

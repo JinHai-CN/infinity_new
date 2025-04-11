@@ -16,12 +16,16 @@ module;
 
 #include <sstream>
 
-import stl;
-import column_binding;
-import base_expression;
-import parser;
-
 module logical_project;
+
+import stl;
+import logical_node_type;
+import column_binding;
+import logical_node;
+
+import third_party;
+import base_expression;
+import internal_types;
 
 namespace infinity {
 

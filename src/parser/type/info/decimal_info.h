@@ -15,6 +15,7 @@
 #pragma once
 
 #include "parser_assert.h"
+#include "stats/global_resource_usage.h"
 #include "type/type_info.h"
 #include <memory>
 

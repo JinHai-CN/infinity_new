@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
@@ -20,17 +21,30 @@ import stl;
 import global_resource_usage;
 import third_party;
 import logger;
-import parser;
+
 import table_def;
 import data_block;
 import default_values;
 import profiler;
 import value;
 import infinity_context;
+import internal_types;
+import logical_type;
+import decimal_info;
+import embedding_info;
+import array_info;
+import knn_expr;
+import data_type;
 
-class DataBlockTest : public BaseTest {};
+using namespace infinity;
 
-TEST_F(DataBlockTest, test1) {
+class DataBlockTest : public BaseTestParamStr {};
+
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams,
+                         DataBlockTest,
+                         ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH, BaseTestParamStr::VFS_OFF_CONFIG_PATH));
+
+TEST_P(DataBlockTest, test1) {
     using namespace infinity;
 
     DataBlock data_block;
@@ -73,14 +87,14 @@ TEST_F(DataBlockTest, test1) {
     column_types.emplace_back(MakeShared<DataType>(LogicalType::kLine));
     column_types.emplace_back(MakeShared<DataType>(LogicalType::kLineSeg));
     column_types.emplace_back(MakeShared<DataType>(LogicalType::kBox));
-//    column_types.emplace_back(MakeShared<DataType>(LogicalType::kPath));
-//    column_types.emplace_back(MakeShared<DataType>(LogicalType::kPolygon));
+    //    column_types.emplace_back(MakeShared<DataType>(LogicalType::kPath));
+    //    column_types.emplace_back(MakeShared<DataType>(LogicalType::kPolygon));
     column_types.emplace_back(MakeShared<DataType>(LogicalType::kCircle));
 
     // Other * 4
-//    column_types.emplace_back(MakeShared<DataType>(LogicalType::kBitmap));
+    //    column_types.emplace_back(MakeShared<DataType>(LogicalType::kBitmap));
     column_types.emplace_back(MakeShared<DataType>(LogicalType::kUuid));
-//    column_types.emplace_back(MakeShared<DataType>(LogicalType::kBlob));
+    //    column_types.emplace_back(MakeShared<DataType>(LogicalType::kBlob));
 
     // 32 dimension * float vector
     column_types.emplace_back(MakeShared<DataType>(LogicalType::kEmbedding, EmbeddingInfo::Make(EmbeddingDataType::kElemFloat, 32)));
@@ -131,7 +145,7 @@ TEST_F(DataBlockTest, test1) {
     }
 }
 
-TEST_F(DataBlockTest, test2) {
+TEST_P(DataBlockTest, test2) {
     using namespace infinity;
 
     DataBlock data_block;
@@ -146,8 +160,8 @@ TEST_F(DataBlockTest, test2) {
     for (u16 i = 0; i < row_count; ++i) {
         data_block.AppendValue(0, Value::MakeBool(i % 2 == 0));
     }
-    EXPECT_THROW(data_block.AppendValue(1, Value::MakeBool(true)), StorageException);
-    EXPECT_THROW(data_block.AppendValue(0, Value::MakeBool(true)), StorageException);
+    EXPECT_THROW(data_block.AppendValue(1, Value::MakeBool(true)), UnrecoverableException);
+    EXPECT_THROW(data_block.AppendValue(0, Value::MakeBool(true)), UnrecoverableException);
 
     EXPECT_FALSE(data_block.Finalized());
     data_block.Finalize();
@@ -164,7 +178,7 @@ TEST_F(DataBlockTest, test2) {
     }
 }
 
-TEST_F(DataBlockTest, test3) {
+TEST_P(DataBlockTest, test3) {
     using namespace infinity;
 
     infinity::BaseProfiler profiler;
@@ -183,10 +197,10 @@ TEST_F(DataBlockTest, test3) {
     std::cout << "Initialize data block cost: " << profiler.ElapsedToString() << std::endl;
 
     // Test to store value into invalid column
-    EXPECT_THROW(data_block.SetValue(1, 0, Value::MakeTinyInt(static_cast<i8>(1))), StorageException);
+    EXPECT_THROW(data_block.SetValue(1, 0, Value::MakeTinyInt(static_cast<i8>(1))), UnrecoverableException);
 
     // Test to store value into valid column but invalid row
-    EXPECT_THROW(data_block.SetValue(0, 1, Value::MakeTinyInt(static_cast<i8>(1))), StorageException);
+    EXPECT_THROW(data_block.SetValue(0, 1, Value::MakeTinyInt(static_cast<i8>(1))), UnrecoverableException);
 
     // Test DataBlock::AppendValue
     profiler.Begin();
@@ -207,7 +221,7 @@ TEST_F(DataBlockTest, test3) {
     }
 }
 
-TEST_F(DataBlockTest, ReadWrite) {
+TEST_P(DataBlockTest, ReadWrite) {
     using namespace infinity;
 
     DataBlock data_block;
@@ -280,9 +294,9 @@ TEST_F(DataBlockTest, ReadWrite) {
     data_block.WriteAdv(ptr);
     EXPECT_EQ(ptr - buf.data(), exp_size);
 
-    ptr = buf.data();
-    SharedPtr<DataBlock> data_block2 = DataBlock::ReadAdv(ptr, exp_size);
-    EXPECT_EQ(ptr - buf.data(), exp_size);
+    const char *ptr_r = buf.data();
+    SharedPtr<DataBlock> data_block2 = DataBlock::ReadAdv(ptr_r, exp_size);
+    EXPECT_EQ(ptr_r - buf.data(), exp_size);
     EXPECT_NE(data_block2, nullptr);
     EXPECT_EQ(data_block == *data_block2, true);
 }

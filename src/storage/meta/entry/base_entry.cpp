@@ -14,49 +14,43 @@
 
 module;
 
-module catalog;
+module base_entry;
 
-import stl;
-
-import infinity_exception;
+import txn_manager;
 
 namespace infinity {
 
-// Merge two reverse-ordered list inplace.
-void MergeLists(List<UniquePtr<BaseEntry>> &list1, List<UniquePtr<BaseEntry>> &list2) {
-    auto it1 = list1.begin();
-    auto it2 = list2.begin();
+BaseEntry::BaseEntry(const BaseEntry &other) : deleted_(other.deleted_), entry_type_(other.entry_type_), encode_(other.encode_) {
+    txn_id_ = other.txn_id_;
+    begin_ts_ = other.begin_ts_;
+    commit_ts_ = other.commit_ts_.load();
 
-    while (it1 != list1.end() && it2 != list2.end()) {
-        if ((*it1)->entry_type_ == EntryType::kDummy) {
-            ++it1;
-        } else if ((*it2)->entry_type_ == EntryType::kDummy) {
-            ++it2;
-        } else {
-            if (!(*it1)->Committed() || !(*it2)->Committed()) {
-                Error<StorageException>("MergeLists requires entries be committed");
-            }
-            if ((*it1)->commit_ts_ > (*it2)->commit_ts_) {
-                ++it1;
-            } else if ((*it1)->commit_ts_ < (*it2)->commit_ts_) {
-                list1.insert(it1, Move(*it2));
-                ++it2;
-            } else {
-                (*it1)->MergeFrom(**it2);
-                ++it1;
-                ++it2;
-            }
-        }
+#ifdef INFINITY_DEBUG
+    GlobalResourceUsage::IncrObjectCount("BaseEntry");
+#endif
+}
+
+bool BaseEntry::CheckVisible(Txn *txn) const {
+    TxnTimeStamp begin_ts = txn->BeginTS();
+    if (txn_id_ == 0) {
+        // could not check if the entry is visible accurately. log a warning and return true
+        LOG_WARN(fmt::format("Entry {} txn id is not set, commit_ts: {}", *encode_, commit_ts_));
+        return begin_ts >= commit_ts_;
     }
-
-    while(it2 != list2.end()) {
-        if ((*it2)->entry_type_ != EntryType::kDummy) {
-            list1.insert(it1, Move(*it2));
-        }
-        ++it2;
+    if (begin_ts >= commit_ts_ || txn_id_ == txn->TxnID()) {
+        return true;
     }
-
-    list2.clear();
+    TxnManager *txn_mgr = txn->txn_mgr();
+    if (txn_mgr == nullptr) { // when replay
+        String error_message = fmt::format("Replay should not reach here. begin_ts: {}, commit_ts_: {} txn_id: {}, txn_id_: {}",
+                                           begin_ts,
+                                           commit_ts_,
+                                           txn->TxnID(),
+                                           txn_id_);
+        UnrecoverableError(error_message);
+    }
+    // Check if the entry is in committing process, because commit_ts of the base_entry is set in the Txn::CommitBottom
+    return txn_mgr->CheckIfCommitting(txn_id_, begin_ts);
 }
 
 } // namespace infinity

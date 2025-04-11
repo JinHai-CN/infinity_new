@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,7 +36,10 @@ import cast_table;
 import column_vector;
 import blob_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
 #if 0
+using namespace infinity;
 class BlobCastTest : public BaseTest {};
 
 TEST_F(BlobCastTest, blob_cast0) {
@@ -55,7 +58,7 @@ TEST_F(BlobCastTest, blob_cast0) {
         BlobT source(blob_ptr, blob_len);
 
         TinyIntT target;
-        EXPECT_THROW(BlobTryCastToVarlen::Run(source, target, nullptr), FunctionException);
+        EXPECT_THROW(BlobTryCastToVarlen::Run(source, target, nullptr), UnrecoverableException);
     }
     {
         i64 blob_len = 128;
@@ -73,7 +76,7 @@ TEST_F(BlobCastTest, blob_cast0) {
         SharedPtr<ColumnVector> col_varchar_ptr = MakeShared<ColumnVector>(data_type);
         col_varchar_ptr->Initialize();
 
-        EXPECT_TRUE(BlobTryCastToVarlen::Run(source, target, col_varchar_ptr));
+        EXPECT_TRUE(BlobTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
         target.Reset(false);
     }
 }
@@ -84,7 +87,7 @@ TEST_F(BlobCastTest, blob_cast1) {
     // Call BindBlobCast with wrong type of parameters
     {
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindBlobCast(target_type), TypeException);
+        EXPECT_THROW(BindBlobCast(target_type), UnrecoverableException);
     }
 
     SharedPtr<DataType> source_type = MakeShared<DataType>(LogicalType::kBlob);

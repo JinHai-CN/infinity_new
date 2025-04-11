@@ -14,17 +14,21 @@
 
 module;
 
-import stl;
+export module physical_command;
 
+import stl;
+import internal_types;
 import physical_operator;
 import physical_operator_type;
 import query_context;
-import parser;
+
 import operator_state;
 import load_meta;
 import infinity_exception;
-
-export module physical_command;
+import table_entry;
+import command_statement;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -35,19 +39,14 @@ public:
                              SharedPtr<Vector<String>> output_names,
                              SharedPtr<Vector<SharedPtr<DataType>>> output_types,
                              SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kCommand, nullptr, nullptr, id, load_metas), command_info_(Move(command_info)),
-          output_names_(Move(output_names)), output_types_(Move(output_types)) {}
+        : PhysicalOperator(PhysicalOperatorType::kCommand, nullptr, nullptr, id, load_metas), command_info_(std::move(command_info)),
+          output_names_(std::move(output_names)), output_types_(std::move(output_types)) {}
 
     ~PhysicalCommand() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) override;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline SharedPtr<Vector<String>> GetOutputNames() const override { return output_names_; }
 

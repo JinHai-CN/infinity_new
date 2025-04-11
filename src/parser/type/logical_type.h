@@ -32,13 +32,15 @@
 #include "type/geo/point_type.h"
 #include "type/geo/polygon_type.h"
 #include "type/heterogenous/mixed_type.h"
+#include "type/number/bfloat16.h"
 #include "type/number/decimal_type.h"
+#include "type/number/float16.h"
 #include "type/number/huge_int.h"
 
 namespace infinity {
 
 // 40 types in total now.
-enum LogicalType : int8_t {
+enum class LogicalType : int8_t {
     // Bool * 1
     kBoolean = 0,
 
@@ -75,14 +77,14 @@ enum LogicalType : int8_t {
     kLine,
     kLineSeg,
     kBox,
-//    kPath,
-//    kPolygon,
+    //    kPath,
+    //    kPolygon,
     kCircle,
 
     // Other * 4
-//    kBitmap,
+    //    kBitmap,
     kUuid,
-//    kBlob,
+    //    kBlob,
     kEmbedding,
     kRowID,
 
@@ -93,11 +95,43 @@ enum LogicalType : int8_t {
     // only used in heterogeneous type
     kMissing,
 
+    // tensor type * 1
+    // now only support 2D tensor
+    // dynamic dim * fixed dim (column property) * data type
+    kTensor,
+
+    // tensor-array type * 1
+    // dynamic array of tensor with common tensor type (unit embedding dim, data type)
+    // dynamic dim * dynamic dim * fixed dim (column property) * data type
+    kTensorArray,
+
+    // sparse vector
+    // composed of two embedding, one for index, one for value
+    kSparse,
+
+    kEmptyArray,
+
+    // extended floating-point types * 2
+    // FP16 (IEEE 754-2008)
+    // std::float16_t will be supported in C++23
+    kFloat16,
+    // BF16
+    // std::bfloat16_t will be supported in C++23
+    kBFloat16,
+
+    // multi-vector type * 1
+    kMultiVector,
+
     kInvalid,
 };
 
+constexpr auto to_underlying_val(LogicalType type) { return static_cast<std::underlying_type_t<LogicalType>>(type); }
+
 extern const char *LogicalType2Str(LogicalType logical_type);
+extern LogicalType Str2LogicalType(const std::string &string);
 
 extern int64_t LogicalTypeWidth(LogicalType logical_type);
+
+extern LogicalType GetCommonLogicalType(const EmbeddingDataType type1, const EmbeddingDataType type2);
 
 } // namespace infinity

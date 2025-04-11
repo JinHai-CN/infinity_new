@@ -14,20 +14,24 @@
 
 module;
 
+export module logical_optimize;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
-
-export module logical_optimize;
+import data_type;
+import internal_types;
+import optimize_statement;
+import statement_common;
 
 namespace infinity {
 
 export class LogicalOptimize : public LogicalNode {
 public:
-    explicit LogicalOptimize(u64 node_id, String schema_name, String object_name)
-        : LogicalNode(node_id, LogicalNodeType::kOptimize), schema_name_(Move(schema_name)), object_name_(Move(object_name)) {}
+    explicit LogicalOptimize(u64 node_id, String schema_name, String table_name, String index_name, Vector<UniquePtr<InitParameter>> opt_params)
+        : LogicalNode(node_id, LogicalNodeType::kOptimize), schema_name_(std::move(schema_name)), table_name_(std::move(table_name)),
+          index_name_(std::move(index_name)), opt_params_(std::move(opt_params)) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 
@@ -39,16 +43,17 @@ public:
 
     inline String name() final { return "LogicalOptimize"; }
 
-    [[nodiscard]] OptimizeType optimize_type() const { return optimize_type_; }
-
     [[nodiscard]] inline const String &schema_name() const { return schema_name_; }
 
-    [[nodiscard]] inline const String &object_name() const { return object_name_; }
+    [[nodiscard]] inline const String &object_name() const { return table_name_; }
 
 private:
-    OptimizeType optimize_type_{OptimizeType::kIRS};
     String schema_name_;
-    String object_name_; // It could be table/collection/view name
+    String table_name_;
+
+public:
+    String index_name_;
+    Vector<UniquePtr<InitParameter>> opt_params_;
 };
 
 } // namespace infinity

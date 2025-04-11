@@ -12,17 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+import sql_parser;
 import logger;
 import stl;
 import infinity_context;
+import internal_types;
+import logical_type;
+import type_info;
+import decimal_info;
+import embedding_info;
+import base_statement;
+import create_statement;
+import extra_ddl_info;
+import create_table_info;
+import create_index_info;
+import column_def;
+import parser_result;
+import data_type;
 
+using namespace infinity;
 class SQLParserTest : public BaseTest {};
 
 TEST_F(SQLParserTest, good_test1) {
@@ -96,7 +111,7 @@ TEST_F(SQLParserTest, good_test1) {
 
     for (const String &input : inputs) {
         parser->Parse(input, result.get());
-        std::cout << result->ToString() << std::endl;
+        //        std::cout << result->ToString() << std::endl;
         result->Reset();
     }
 }
@@ -125,15 +140,15 @@ TEST_F(SQLParserTest, good_test2) {
                            "                 p line, "
                            "                 q lseg, "
                            "                 r box, "
-//                           "                 s path, "
-//                           "                 t polygon, "
+                           //                           "                 s path, "
+                           //                           "                 t polygon, "
                            "                 u circle, "
                            "                 w varchar, "
                            "                 x decimal, "
                            "                 y decimal(10), "
                            "                 z decimal(14, 12), "
-//                           "                 aa blob(10), "
-//                           "                 ab bitmap(16), "
+                           //                           "                 aa blob(10), "
+                           //                           "                 ab bitmap(16), "
                            "                 ac embedding(bit, 256), "
                            "                 ad vector(float, 512), "
                            "                 primary key (a, b), "
@@ -151,9 +166,9 @@ TEST_F(SQLParserTest, good_test2) {
             EXPECT_EQ(create_statement->create_info_->conflict_type_, ConflictType::kError);
 
             auto *create_table_info = (CreateTableInfo *)(create_statement->create_info_.get());
-            EXPECT_EQ(create_table_info->schema_name_, String("default"));
+            EXPECT_EQ(create_table_info->schema_name_, String(""));
             EXPECT_EQ(create_table_info->table_name_, String("t1"));
-            EXPECT_EQ(create_table_info->column_defs_.size(), 27);
+            EXPECT_EQ(create_table_info->column_defs_.size(), 27u);
 
             u64 column_id = 0;
             {
@@ -161,7 +176,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "a");
                 DataType column_type(LogicalType::kBoolean, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 4);
+                EXPECT_EQ(column_def->constraints_.size(), 4u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
@@ -173,7 +188,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "b");
                 DataType column_type(LogicalType::kTinyInt, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 3);
+                EXPECT_EQ(column_def->constraints_.size(), 3u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kUnique), true);
@@ -184,7 +199,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "c");
                 DataType column_type(LogicalType::kSmallInt, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 2);
+                EXPECT_EQ(column_def->constraints_.size(), 2u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
             }
@@ -194,7 +209,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "d");
                 DataType column_type(LogicalType::kInteger, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 1);
+                EXPECT_EQ(column_def->constraints_.size(), 1u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
             }
 
@@ -203,7 +218,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "e");
                 DataType column_type(LogicalType::kBigInt, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 1);
+                EXPECT_EQ(column_def->constraints_.size(), 1u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
             }
 
@@ -212,7 +227,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "f");
                 DataType column_type(LogicalType::kHugeInt, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 1);
+                EXPECT_EQ(column_def->constraints_.size(), 1u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kUnique), true);
             }
 
@@ -221,7 +236,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "g");
                 DataType column_type(LogicalType::kFloat, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 1);
+                EXPECT_EQ(column_def->constraints_.size(), 1u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
             }
 
@@ -230,7 +245,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "h");
                 DataType column_type(LogicalType::kDouble, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 2);
+                EXPECT_EQ(column_def->constraints_.size(), 2u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
             }
@@ -240,7 +255,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "i");
                 DataType column_type(LogicalType::kFloat, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 2);
+                EXPECT_EQ(column_def->constraints_.size(), 2u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
             }
@@ -250,7 +265,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "j");
                 DataType column_type(LogicalType::kDate, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 2);
+                EXPECT_EQ(column_def->constraints_.size(), 2u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kUnique), true);
             }
@@ -260,7 +275,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "k");
                 DataType column_type(LogicalType::kTime, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 3);
+                EXPECT_EQ(column_def->constraints_.size(), 3u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
@@ -271,7 +286,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "l");
                 DataType column_type(LogicalType::kDateTime, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 3);
+                EXPECT_EQ(column_def->constraints_.size(), 3u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kPrimaryKey), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kUnique), true);
@@ -282,7 +297,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "m");
                 DataType column_type(LogicalType::kTimestamp, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 2);
+                EXPECT_EQ(column_def->constraints_.size(), 2u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kUnique), true);
             }
@@ -292,7 +307,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "n");
                 DataType column_type(LogicalType::kUuid, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 2);
+                EXPECT_EQ(column_def->constraints_.size(), 2u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNull), true);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kUnique), true);
             }
@@ -302,7 +317,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "o");
                 DataType column_type(LogicalType::kPoint, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -310,7 +325,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "p");
                 DataType column_type(LogicalType::kLine, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -318,7 +333,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "q");
                 DataType column_type(LogicalType::kLineSeg, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -326,31 +341,31 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "r");
                 DataType column_type(LogicalType::kBox, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
-//            {
-//                auto &column_def = create_table_info->column_defs_[column_id++];
-//                EXPECT_EQ(column_def->name_, "s");
-//                DataType column_type(LogicalType::kPath, nullptr);
-//                EXPECT_EQ(*column_def->column_type_, column_type);
-//                EXPECT_EQ(column_def->constraints_.size(), 0);
-//            }
-//
-//            {
-//                auto &column_def = create_table_info->column_defs_[column_id++];
-//                EXPECT_EQ(column_def->name_, "t");
-//                DataType column_type(LogicalType::kPolygon, nullptr);
-//                EXPECT_EQ(*column_def->column_type_, column_type);
-//                EXPECT_EQ(column_def->constraints_.size(), 0);
-//            }
+            //            {
+            //                auto &column_def = create_table_info->column_defs_[column_id++];
+            //                EXPECT_EQ(column_def->name_, "s");
+            //                DataType column_type(LogicalType::kPath, nullptr);
+            //                EXPECT_EQ(*column_def->column_type_, column_type);
+            //                EXPECT_EQ(column_def->constraints_.size(), 0);
+            //            }
+            //
+            //            {
+            //                auto &column_def = create_table_info->column_defs_[column_id++];
+            //                EXPECT_EQ(column_def->name_, "t");
+            //                DataType column_type(LogicalType::kPolygon, nullptr);
+            //                EXPECT_EQ(*column_def->column_type_, column_type);
+            //                EXPECT_EQ(column_def->constraints_.size(), 0);
+            //            }
 
             {
                 auto &column_def = create_table_info->column_defs_[column_id++];
                 EXPECT_EQ(column_def->name_, "u");
                 DataType column_type(LogicalType::kCircle, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -358,7 +373,7 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "w");
                 DataType column_type(LogicalType::kVarchar);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -367,7 +382,7 @@ TEST_F(SQLParserTest, good_test2) {
                 SharedPtr<TypeInfo> type_info = DecimalInfo::Make(0, 0);
                 DataType column_type(LogicalType::kDecimal, type_info);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -376,7 +391,7 @@ TEST_F(SQLParserTest, good_test2) {
                 SharedPtr<TypeInfo> type_info = DecimalInfo::Make(10, 0);
                 DataType column_type(LogicalType::kDecimal, type_info);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
@@ -385,45 +400,45 @@ TEST_F(SQLParserTest, good_test2) {
                 SharedPtr<TypeInfo> type_info = DecimalInfo::Make(14, 12);
                 DataType column_type(LogicalType::kDecimal, type_info);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
-//            {
-//                auto &column_def = create_table_info->column_defs_[column_id++];
-//                EXPECT_EQ(column_def->name_, "aa");
-//                DataType column_type(LogicalType::kBlob);
-//                EXPECT_EQ(*column_def->column_type_, column_type);
-//                EXPECT_EQ(column_def->constraints_.size(), 0);
-//            }
-//
-//            {
-//                auto &column_def = create_table_info->column_defs_[column_id++];
-//                EXPECT_EQ(column_def->name_, "ab");
-//                SharedPtr<TypeInfo> type_info = BitmapInfo::Make(16);
-//                DataType column_type(LogicalType::kBitmap, type_info);
-//                EXPECT_EQ(*column_def->column_type_, column_type);
-//                EXPECT_EQ(column_def->constraints_.size(), 0);
-//            }
+            //            {
+            //                auto &column_def = create_table_info->column_defs_[column_id++];
+            //                EXPECT_EQ(column_def->name_, "aa");
+            //                DataType column_type(LogicalType::kBlob);
+            //                EXPECT_EQ(*column_def->column_type_, column_type);
+            //                EXPECT_EQ(column_def->constraints_.size(), 0);
+            //            }
+            //
+            //            {
+            //                auto &column_def = create_table_info->column_defs_[column_id++];
+            //                EXPECT_EQ(column_def->name_, "ab");
+            //                SharedPtr<TypeInfo> type_info = BitmapInfo::Make(16);
+            //                DataType column_type(LogicalType::kBitmap, type_info);
+            //                EXPECT_EQ(*column_def->column_type_, column_type);
+            //                EXPECT_EQ(column_def->constraints_.size(), 0);
+            //            }
 
             {
                 auto &column_def = create_table_info->column_defs_[column_id++];
                 EXPECT_EQ(column_def->name_, "ac");
-                SharedPtr<TypeInfo> type_info = EmbeddingInfo::Make(kElemBit, 256);
+                SharedPtr<TypeInfo> type_info = EmbeddingInfo::Make(EmbeddingDataType::kElemBit, 256);
                 DataType column_type(LogicalType::kEmbedding, type_info);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
             {
                 auto &column_def = create_table_info->column_defs_[column_id++];
                 EXPECT_EQ(column_def->name_, "ad");
-                SharedPtr<TypeInfo> type_info = EmbeddingInfo::Make(kElemFloat, 512);
+                SharedPtr<TypeInfo> type_info = EmbeddingInfo::Make(EmbeddingDataType::kElemFloat, 512);
                 DataType column_type(LogicalType::kEmbedding, type_info);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
 
-            EXPECT_EQ(create_table_info->constraints_.size(), 2);
+            EXPECT_EQ(create_table_info->constraints_.size(), 2u);
             {
                 EXPECT_EQ(create_table_info->constraints_[0]->constraint_, ConstraintType::kPrimaryKey);
                 const String &column1 = (*(create_table_info->constraints_[0]->names_ptr_))[0];
@@ -445,17 +460,17 @@ TEST_F(SQLParserTest, good_test2) {
                 EXPECT_EQ(column_def->name_, "ae");
                 DataType column_type(LogicalType::kInteger, nullptr);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 1);
+                EXPECT_EQ(column_def->constraints_.size(), 1u);
                 EXPECT_EQ(column_def->constraints_.contains(ConstraintType::kNotNull), true);
             }
 
             {
                 auto &column_def = create_table_info->column_defs_[column_id++];
                 EXPECT_EQ(column_def->name_, "af");
-                SharedPtr<TypeInfo> type_info = EmbeddingInfo::Make(kElemInt32, 32);
+                SharedPtr<TypeInfo> type_info = EmbeddingInfo::Make(EmbeddingDataType::kElemInt32, 32);
                 DataType column_type(LogicalType::kEmbedding, type_info);
                 EXPECT_EQ(*column_def->column_type_, column_type);
-                EXPECT_EQ(column_def->constraints_.size(), 0);
+                EXPECT_EQ(column_def->constraints_.size(), 0u);
             }
         }
 
@@ -508,36 +523,36 @@ TEST_F(SQLParserTest, good_create_index_1) {
     auto result = MakeShared<ParserResult>();
 
     {
-        String input_sql = "CREATE INDEX ON t1 (a) USING IVFFlat;";
+        String input_sql = "CREATE INDEX ON t1 (a) USING IVF;";
         parser->Parse(input_sql, result.get());
 
         EXPECT_FALSE(result->error_message_.empty());
-//        BaseStatement *statement = (*result->statements_ptr_)[0];
-//
-//        EXPECT_EQ(statement->type_, StatementType::kCreate);
-//        auto create_statement = static_cast<CreateStatement *>(statement);
-//        EXPECT_EQ(create_statement->create_info_->type_, DDLType::kIndex);
-//        EXPECT_EQ(create_statement->create_info_->conflict_type_, ConflictType::kIgnore);
-//
-//        auto create_index_info = static_cast<CreateIndexInfo *>(create_statement->create_info_.get());
-//        EXPECT_EQ(create_index_info->index_name_, "");
-//        EXPECT_EQ(create_index_info->schema_name_, "default");
-//        EXPECT_EQ(create_index_info->table_name_, "t1");
-//
-//        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
-//        EXPECT_EQ(index_info_list.size(), 1);
-//        IndexInfo * index_info = index_info_list[0];
-//        EXPECT_EQ(index_info->index_type_, IndexType::kIVFFlat);
-//        EXPECT_EQ(index_info->column_name_, "a");
-//        EXPECT_TRUE(index_info->index_param_list_->empty());
-//        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVFFlat");
-//        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
+        //        BaseStatement *statement = (*result->statements_ptr_)[0];
+        //
+        //        EXPECT_EQ(statement->type_, StatementType::kCreate);
+        //        auto create_statement = static_cast<CreateStatement *>(statement);
+        //        EXPECT_EQ(create_statement->create_info_->type_, DDLType::kIndex);
+        //        EXPECT_EQ(create_statement->create_info_->conflict_type_, ConflictType::kIgnore);
+        //
+        //        auto create_index_info = static_cast<CreateIndexInfo *>(create_statement->create_info_.get());
+        //        EXPECT_EQ(create_index_info->index_name_, "");
+        //        EXPECT_EQ(create_index_info->schema_name_, "default_db");
+        //        EXPECT_EQ(create_index_info->table_name_, "t1");
+        //
+        //        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
+        //        EXPECT_EQ(index_info_list.size(), 1);
+        //        IndexInfo * index_info = index_info_list[0];
+        //        EXPECT_EQ(index_info->index_type_, IndexType::kIVFFlat);
+        //        EXPECT_EQ(index_info->column_name_, "a");
+        //        EXPECT_TRUE(index_info->index_param_list_->empty());
+        //        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVFFlat");
+        //        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
 
         result->Reset();
     }
 
     {
-        String input_sql = "CREATE INDEX idx1 ON t1 (a) USING IVFFlat;";
+        String input_sql = "CREATE INDEX idx1 ON t1 (a) USING IVF;";
         parser->Parse(input_sql, result.get());
 
         EXPECT_TRUE(result->error_message_.empty());
@@ -550,23 +565,21 @@ TEST_F(SQLParserTest, good_create_index_1) {
 
         auto create_index_info = static_cast<CreateIndexInfo *>(create_statement->create_info_.get());
         EXPECT_EQ(create_index_info->index_name_, "idx1");
-        EXPECT_EQ(create_index_info->schema_name_, "default");
+        EXPECT_EQ(create_index_info->schema_name_, "");
         EXPECT_EQ(create_index_info->table_name_, "t1");
 
-        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
-        EXPECT_EQ(index_info_list.size(), 1);
-        IndexInfo * index_info = index_info_list[0];
-        EXPECT_EQ(index_info->index_type_, IndexType::kIVFFlat);
+        IndexInfo *index_info = create_index_info->index_info_;
+        EXPECT_EQ(index_info->index_type_, IndexType::kIVF);
         EXPECT_EQ(index_info->column_name_, "a");
         EXPECT_TRUE(index_info->index_param_list_->empty());
-        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVFFlat");
-        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
+        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVF");
+        EXPECT_EQ(IndexInfo::StringToIndexType("IVF"), IndexType::kIVF);
 
         result->Reset();
     }
 
     {
-        String input_sql = "CREATE INDEX IF NOT EXISTS idx1 ON t1 (a) USING IVFFlat;";
+        String input_sql = "CREATE INDEX IF NOT EXISTS idx1 ON t1 (a) USING IVF;";
         parser->Parse(input_sql, result.get());
 
         EXPECT_TRUE(result->error_message_.empty());
@@ -579,23 +592,21 @@ TEST_F(SQLParserTest, good_create_index_1) {
 
         auto create_index_info = static_cast<CreateIndexInfo *>(create_statement->create_info_.get());
         EXPECT_EQ(create_index_info->index_name_, "idx1");
-        EXPECT_EQ(create_index_info->schema_name_, "default");
+        EXPECT_EQ(create_index_info->schema_name_, "");
         EXPECT_EQ(create_index_info->table_name_, "t1");
 
-        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
-        EXPECT_EQ(index_info_list.size(), 1);
-        IndexInfo * index_info = index_info_list[0];
-        EXPECT_EQ(index_info->index_type_, IndexType::kIVFFlat);
+        IndexInfo *index_info = create_index_info->index_info_;
+        EXPECT_EQ(index_info->index_type_, IndexType::kIVF);
         EXPECT_EQ(index_info->column_name_, "a");
         EXPECT_TRUE(index_info->index_param_list_->empty());
-        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVFFlat");
-        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
+        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVF");
+        EXPECT_EQ(IndexInfo::StringToIndexType("IVF"), IndexType::kIVF);
 
         result->Reset();
     }
 
     {
-        String input_sql = "CREATE INDEX idx1 ON db1.t1 (a) USING IVFFlat;";
+        String input_sql = "CREATE INDEX idx1 ON db1.t1 (a) USING IVF;";
         parser->Parse(input_sql, result.get());
 
         EXPECT_TRUE(result->error_message_.empty());
@@ -611,55 +622,18 @@ TEST_F(SQLParserTest, good_create_index_1) {
         EXPECT_EQ(create_index_info->schema_name_, "db1");
         EXPECT_EQ(create_index_info->table_name_, "t1");
 
-        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
-        EXPECT_EQ(index_info_list.size(), 1);
-        IndexInfo * index_info = index_info_list[0];
-        EXPECT_EQ(index_info->index_type_, IndexType::kIVFFlat);
+        IndexInfo *index_info = create_index_info->index_info_;
+        EXPECT_EQ(index_info->index_type_, IndexType::kIVF);
         EXPECT_EQ(index_info->column_name_, "a");
         EXPECT_TRUE(index_info->index_param_list_->empty());
-        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVFFlat");
-        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
+        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVF");
+        EXPECT_EQ(IndexInfo::StringToIndexType("IVF"), IndexType::kIVF);
 
         result->Reset();
     }
 
     {
-        String input_sql = "CREATE INDEX idx2 ON t1 (a, b) USING IVFFlat;";
-        parser->Parse(input_sql, result.get());
-
-        EXPECT_TRUE(result->error_message_.empty());
-        BaseStatement *statement = (*result->statements_ptr_)[0];
-
-        EXPECT_EQ(statement->type_, StatementType::kCreate);
-        auto create_statement = static_cast<CreateStatement *>(statement);
-        EXPECT_EQ(create_statement->create_info_->type_, DDLType::kIndex);
-        EXPECT_EQ(create_statement->create_info_->conflict_type_, ConflictType::kError);
-
-        auto create_index_info = static_cast<CreateIndexInfo *>(create_statement->create_info_.get());
-        EXPECT_EQ(create_index_info->index_name_, "idx2");
-        EXPECT_EQ(create_index_info->schema_name_, "default");
-        EXPECT_EQ(create_index_info->table_name_, "t1");
-
-        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
-        EXPECT_EQ(index_info_list.size(), 2);
-        IndexInfo * index_info1 = index_info_list[0];
-        EXPECT_EQ(index_info1->index_type_, IndexType::kIVFFlat);
-        EXPECT_EQ(index_info1->column_name_, "a");
-        EXPECT_TRUE(index_info1->index_param_list_->empty());
-        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info1->index_type_), "IVFFlat");
-        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
-
-        IndexInfo * index_info2 = index_info_list[1];
-        EXPECT_EQ(index_info2->index_type_, IndexType::kIVFFlat);
-        EXPECT_EQ(index_info2->column_name_, "b");
-        EXPECT_TRUE(index_info2->index_param_list_->empty());
-        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info2->index_type_), "IVFFlat");
-
-        result->Reset();
-    }
-
-    {
-        String input_sql = "CREATE INDEX idx3 ON t1 (a) USING IVFFlat WITH (metric = l2);";
+        String input_sql = "CREATE INDEX idx3 ON t1 (a) USING IVF WITH (metric = l2);";
         parser->Parse(input_sql, result.get());
 
         EXPECT_TRUE(result->error_message_.empty());
@@ -672,20 +646,18 @@ TEST_F(SQLParserTest, good_create_index_1) {
 
         auto create_index_info = static_cast<CreateIndexInfo *>(create_statement->create_info_.get());
         EXPECT_EQ(create_index_info->index_name_, "idx3");
-        EXPECT_EQ(create_index_info->schema_name_, "default");
+        EXPECT_EQ(create_index_info->schema_name_, "");
         EXPECT_EQ(create_index_info->table_name_, "t1");
 
-        Vector<IndexInfo *>& index_info_list = *(create_index_info->index_info_list_);
-        EXPECT_EQ(index_info_list.size(), 1);
-        IndexInfo * index_info = index_info_list[0];
-        EXPECT_EQ(index_info->index_type_, IndexType::kIVFFlat);
+        IndexInfo *index_info = create_index_info->index_info_;
+        EXPECT_EQ(index_info->index_type_, IndexType::kIVF);
         EXPECT_EQ(index_info->column_name_, "a");
-        EXPECT_EQ(index_info->index_param_list_->size(), 1);
+        EXPECT_EQ(index_info->index_param_list_->size(), 1u);
         EXPECT_EQ((*index_info->index_param_list_)[0]->param_name_, "metric");
         EXPECT_EQ((*index_info->index_param_list_)[0]->param_value_, "l2");
 
-        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVFFlat");
-        EXPECT_EQ(IndexInfo::StringToIndexType("IVFFlat"), IndexType::kIVFFlat);
+        EXPECT_EQ(IndexInfo::IndexTypeToString(index_info->index_type_), "IVF");
+        EXPECT_EQ(IndexInfo::StringToIndexType("IVF"), IndexType::kIVF);
 
         result->Reset();
     }
@@ -697,7 +669,7 @@ TEST_F(SQLParserTest, bad_create_index_1) {
     SharedPtr<ParserResult> result = MakeShared<ParserResult>();
 
     {
-        String input_sql = "CREATE INDEX IF NOT EXISTS ON t1 (a) USING IVFFlat;";
+        String input_sql = "CREATE INDEX IF NOT EXISTS ON t1 (a) USING IVF;";
         parser->Parse(input_sql, result.get());
 
         EXPECT_FALSE(result->error_message_.empty());

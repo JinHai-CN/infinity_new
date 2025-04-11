@@ -14,35 +14,33 @@
 
 module;
 
+export module function_set;
+
 import stl;
 
-import parser;
 import function;
 import base_expression;
-//import catalog;
-
-export module function_set;
+import function_expr;
+//
 
 namespace infinity {
 
-struct NewCatalog;
+struct Catalog;
 
 export class FunctionSet {
 public:
-    static SharedPtr<FunctionSet> GetFunctionSet(NewCatalog *catalog, const FunctionExpr &expr);
+    static SharedPtr<FunctionSet> GetFunctionSet(Catalog *catalog, const FunctionExpr &expr);
 
     static String ToString(const String &name, const Vector<SharedPtr<BaseExpression>> &arguments);
 
 public:
-    explicit FunctionSet(String name, FunctionType type) : name_(Move(name)), type_(type) {}
+    explicit FunctionSet(String name, FunctionType type) : name_(std::move(name)), type_(type) {}
 
     virtual ~FunctionSet() = default;
 
     [[nodiscard]] const String &name() const { return name_; }
 
-    FunctionType type() const  {
-        return type_;
-    }
+    FunctionType type() const { return type_; }
 
     String name_;
     FunctionType type_;

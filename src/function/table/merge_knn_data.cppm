@@ -14,13 +14,15 @@
 
 module;
 
+export module merge_knn_data;
+
 import stl;
 import table_function;
-import parser;
+
 import base_table_ref;
 import merge_knn;
-
-export module merge_knn_data;
+import knn_expr;
+import internal_types;
 
 namespace infinity {
 
@@ -40,7 +42,7 @@ public:
                                   SharedPtr<BaseTableRef> table_ref);
 
 private:
-    template <typename DistType>
+    template <typename DatType, typename DistType>
     void InitMergeKnn(KnnDistanceType knn_distance_type);
 
 public:

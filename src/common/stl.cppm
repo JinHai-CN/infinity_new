@@ -17,39 +17,324 @@ module;
 #include "ctpl_stl.h"
 #include <algorithm>
 #include <atomic>
+#include <bit>
+#include <bitset>
+#include <cassert>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
-#include <experimental/source_location>
 #include <filesystem>
 #include <forward_list>
+#include <functional>
+#include <iomanip>
+#include <ios>
 #include <iostream>
+#include <iterator>
 #include <list>
 #include <map>
 #include <memory>
 #include <optional>
+#include <random>
+#include <ranges>
+#include <semaphore>
 #include <set>
 #include <shared_mutex>
+#include <source_location>
+#include <span>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <type_traits>
 #include <typeinfo>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 export module stl;
 
 export namespace std {
 
-using std::experimental::source_location;
-// using std::stringstream;
+using std::source_location;
 
+using std::monostate;
+using std::nullptr_t;
+
+// using std::stringstream;
+using std::exchange;
+using std::forward;
+using std::move;
+using std::swap;
+
+using std::max;
+using std::min;
+
+using std::errc;
+using std::error_code;
+using std::from_chars;
+using std::to_string;
+
+using std::stoi;
+using std::stol;
+using std::stoll;
+using std::strtod;
+using std::strtof;
+using std::strtol;
+
+using std::bit_cast;
+using std::memcmp;
+using std::memcpy;
+using std::memset;
+using std::strcmp;
+using std::strlen;
+
+using std::fprintf;
+using std::printf;
+using std::sprintf;
+using std::time;
+
+using std::fill;
+using std::is_same;
+using std::lower_bound;
+using std::upper_bound;
+
+using std::atomic_flag;
+using std::binary_semaphore;
+using std::condition_variable;
+using std::counting_semaphore;
+using std::lock_guard;
+using std::memory_order;
+using std::memory_order_acq_rel;
+using std::memory_order_acquire;
+using std::memory_order_consume;
+using std::memory_order_relaxed;
+using std::memory_order_release;
+using std::memory_order_seq_cst;
+using std::mutex;
+using std::scoped_lock;
+using std::shared_lock;
+using std::shared_mutex;
+using std::unique_lock;
+
+using std::adopt_lock;
+using std::defer_lock;
+using std::try_to_lock;
+
+using std::accumulate;
+using std::binary_search;
+using std::bitset;
+using std::ceil;
+using std::copy_n;
+using std::fabs;
+using std::fill_n;
+using std::find;
+using std::floor;
+using std::fmod;
+using std::forward_list;
+using std::isalnum;
+using std::isalpha;
+using std::isinf;
+using std::isnan;
+using std::log2;
+using std::make_heap;
+using std::max_element;
+using std::min_element;
+using std::nearbyint;
+using std::partial_sort;
+using std::pop_heap;
+using std::pow;
+using std::push_heap;
+using std::reduce;
+using std::remove_if;
+using std::reverse;
+using std::sort;
+using std::sqrt;
+using std::stable_sort;
+using std::tie;
+using std::transform;
+using std::unique;
+using std::setprecision;
+using std::fixed;
+
+using std::string;
+using std::stringstream;
+
+namespace ranges {
+
+using std::ranges::equal;
+using std::ranges::for_each;
+
+} // namespace ranges
+
+using std::decay_t;
+using std::function;
+using std::numeric_limits;
+
+namespace chrono {
+using std::chrono::duration;
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
+using std::chrono::nanoseconds;
+using std::chrono::seconds;
+using std::chrono::system_clock;
+
+using std::chrono::operator>;
+using std::chrono::operator>=;
+using std::chrono::operator<;
+using std::chrono::operator<=;
+using std::chrono::operator==;
+
+using std::chrono::operator+;
+using std::chrono::operator-;
+
+using std::chrono::minutes;
+using std::chrono::weeks;
+using std::chrono::years;
+
+using std::chrono::steady_clock;
+using std::chrono::time_point;
+
+using std::chrono::ceil;
+using std::chrono::days;
+
+using std::chrono::day;
+using std::chrono::month;
+using std::chrono::year;
+
+using std::chrono::sys_days;
+using std::chrono::system_clock;
+using std::chrono::year_month_day;
+
+using std::chrono::high_resolution_clock;
+} // namespace chrono
+
+using std::cerr;
+using std::cout;
+using std::endl;
+using std::format;
+
+using std::setfill;
+using std::setw;
+
+using std::fstream;
+using std::ifstream;
+using std::ios;
+using std::ofstream;
+using std::ostream;
+
+using std::endian;
+
+using std::align;
+
+using std::ptrdiff_t;
+
+using std::dynamic_pointer_cast;
+using std::static_pointer_cast;
+
+namespace filesystem {
+using std::filesystem::absolute;
+using std::filesystem::canonical;
+using std::filesystem::copy;
+using std::filesystem::copy_file;
+using std::filesystem::copy_options;
+using std::filesystem::create_directories;
+using std::filesystem::directory_iterator;
+using std::filesystem::directory_options;
+using std::filesystem::exists;
+using std::filesystem::file_size;
+using std::filesystem::filesystem_error;
+using std::filesystem::path;
+using std::filesystem::read_symlink;
+using std::filesystem::remove;
+using std::filesystem::remove_all;
+using std::filesystem::rename;
+using std::filesystem::resize_file;
+
+using std::filesystem::is_directory;
+using std::filesystem::is_regular_file;
+using std::filesystem::is_symlink;
+using std::filesystem::recursive_directory_iterator;
+} // namespace filesystem
+
+namespace this_thread {
+using std::this_thread::sleep_for;
+}
+
+using std::iota;
+using std::mt19937;
+using std::random_device;
+using std::uniform_int_distribution;
+using std::uniform_real_distribution;
+
+using std::array;
+using std::exception;
+using std::unordered_set;
+
+using std::back_inserter;
+using std::distance;
+using std::hash;
+
+using std::streamsize;
+using std::string_view;
+
+using std::get;
+using std::holds_alternative;
+using std::variant;
+using std::variant_size_v;
+using std::visit;
+
+using std::common_type_t;
+using std::conditional_t;
+using std::derived_from;
+using std::invocable;
+using std::is_floating_point_v;
+using std::is_integral_v;
+using std::remove_pointer_t;
+using std::remove_reference_t;
+using std::underlying_type_t;
+using std::unsigned_integral;
+
+using std::function;
+using std::monostate;
+using std::thread;
+
+using std::is_same_v;
+using std::priority_queue;
+
+using std::begin;
+using std::end;
+
+using std::asctime;
+using std::localtime;
+using std::time_t;
+
+using std::stod;
+using std::stof;
+using std::strtoull;
+
+using std::construct_at;
+
+using std::set;
+
+using std::all_of;
+using std::any_of;
+using std::none_of;
+
+using std::memset;
+using std::strncmp;
+
+// using std::literals;
+using std::localtime;
+using std::put_time;
 } // namespace std
 
 namespace infinity {
@@ -67,8 +352,11 @@ export {
     template <typename T, std::size_t N>
     using Array = std::array<T, N>;
 
+    template <typename T, typename Allocator = std::allocator<T>>
+    using Vector = std::vector<T, Allocator>;
+
     template <typename T>
-    using Vector = std::vector<T>;
+    using Span = std::span<T>;
 
     template <typename T>
     using Deque = std::deque<T>;
@@ -82,19 +370,28 @@ export {
     template <typename S, typename T>
     using Map = std::map<S, T>;
 
+    template <typename S, typename T>
+    using MultiMap = std::multimap<S, T>;
+
     template <typename T>
     using Set = std::set<T>;
 
     template <typename T>
-    inline size_t Hash(T t) {
-        return std::hash<T>()(t);
-    }
+    using Hash = std::hash<T>;
+
+    template <typename T>
+    struct EqualTo {
+        bool operator()(const T &left, const T &right) const { return left == right; }
+    };
+
+    template <typename S, typename T, typename H = std::hash<S>, typename Eq = EqualTo<S>>
+    using HashMap = std::unordered_map<S, T, H, Eq>;
 
     template <typename S, typename T, typename H = std::hash<S>>
-    using HashMap = std::unordered_map<S, T, H>;
+    using MultiHashMap = std::unordered_multimap<S, T, H>;
 
-    template <typename S>
-    using HashSet = std::unordered_set<S>;
+    template <typename S, typename T = std::hash<S>, typename Eq = std::equal_to<S>>
+    using HashSet = std::unordered_set<S, T, Eq>;
 
     template <typename T>
     using MaxHeap = std::priority_queue<T>;
@@ -106,13 +403,11 @@ export {
     using Optional = std::optional<T>;
     constexpr std::nullopt_t None = std::nullopt;
 
-    using StdOfStream = std::ofstream;
+    using NoneType = std::nullopt_t;
 
     // String
 
     using String = std::basic_string<char>;
-
-    using StringView = std::string_view;
 
     inline bool IsEqual(const String &s1, const String &s2) { return s1 == s2; }
 
@@ -125,53 +420,62 @@ export {
         return path.substr(pos + 1);
     }
 
+    inline String TrimString(const String &s) {
+        int len = s.length();
+        int i = 0;
+
+        while (i < len && isspace(s[i])) {
+            i++;
+        }
+
+        while (len > i && isspace(s[len - 1])) {
+            len--;
+        }
+
+        if (i == len) {
+            return "";
+        }
+
+        String ss = s.substr(i, len - i);
+        return ss;
+    }
+
+    std::vector<std::string> SplitStrByComma(String str) {
+        std::vector<std::string> tokens;
+        for (const auto &token : str | std::views::split(',')) {
+            tokens.emplace_back(token.begin(), token.end());
+        }
+
+        for (auto &s : tokens) {
+            s = TrimString(s);
+        }
+
+        return tokens;
+    }
+
     void ToUpper(String & str) { std::transform(str.begin(), str.end(), str.begin(), ::toupper); }
+
     int ToUpper(int c) { return ::toupper(c); }
 
     void ToLower(String & str) { std::transform(str.begin(), str.end(), str.begin(), ::tolower); }
+
     int ToLower(int c) { return ::tolower(c); }
 
     inline void StringToLower(String & str) {
         std::transform(str.begin(), str.end(), str.begin(), [](const auto c) { return std::tolower(c); });
     }
 
-    const char *FromChars(const char *first, const char *last, unsigned long &value) {
-        auto res = std::from_chars(first, last, value);
-        if (res.ec == std::errc()) {
-            return res.ptr;
-        } else {
-            return nullptr;
-        }
+    template <class BidirIteratorType>
+    BidirIteratorType Prev(BidirIteratorType it, typename std::iterator_traits<BidirIteratorType>::difference_type n = 1) {
+        std::advance(it, -n);
+        return it;
     }
 
-    template <typename T>
-    inline const T &Min(const T &a, const T &b) {
-        return std::min(a, b);
+    template <class BidirIteratorType>
+    BidirIteratorType Next(BidirIteratorType it, typename std::iterator_traits<BidirIteratorType>::difference_type n = 1) {
+        std::advance(it, n);
+        return it;
     }
-
-    template <typename T>
-    inline const T &Max(const T &a, const T &b) {
-        return std::max(a, b);
-    }
-
-    // ToStr()
-
-    template <typename T>
-    inline String ToStr(T value) {
-        return std::to_string(value);
-    }
-
-    // stoi
-    inline int StrToInt(const std::string &str, size_t *idx = 0, int base = 10) { return std::stoi(str, idx, base); }
-
-    // StrToL
-    inline long StrToL(const char *__restrict nptr, char **__restrict endptr, int base) { return std::strtol(nptr, endptr, base); }
-
-    // StrToF
-    inline float StrToF(const char *__restrict nptr, char **__restrict endptr) { return std::strtof(nptr, endptr); }
-
-    // StrToD
-    inline double StrToD(const char *__restrict nptr, char **__restrict endptr) { return std::strtod(nptr, endptr); }
 
     // Primitives
 
@@ -196,14 +500,23 @@ export {
     using const_ptr_t = const char *;
     using char_t = char;
     using SizeT = u64;
+    using uintptr_t = std::uintptr_t;
 
-    using StreamSize = std::streamsize;
+    // Transactions
+    using TxnTimeStamp = uint64_t;
+    using TransactionID = uint64_t;
 
-    using TxnTimeStamp = u64;
+    // Entry
+    using SegmentID = uint32_t;
+    using ChunkID = uint32_t;
+    using BlockID = uint16_t;
+    using ColumnID = uint64_t;
+
+    // Related to entry
+    using BlockOffset = uint16_t;
+    using SegmentOffset = uint32_t;
 
     // Concurrency
-
-    using RWMutex = std::shared_mutex;
     using ThreadPool = ctpl::thread_pool;
 
     using Thread = std::thread;
@@ -214,65 +527,18 @@ export {
     using aptr = std::atomic_uintptr_t;
     using atomic_bool = std::atomic_bool;
 
-    constexpr u64 u64_min = std::numeric_limits<u64>::min();
-    constexpr i64 i64_min = std::numeric_limits<i64>::min();
-    constexpr u32 u32_min = std::numeric_limits<u32>::min();
-    constexpr i32 i32_min = std::numeric_limits<i32>::min();
-    constexpr i16 i16_min = std::numeric_limits<i16>::min();
-    constexpr u16 u16_min = std::numeric_limits<u16>::min();
-    constexpr i8 i8_min = std::numeric_limits<i8>::min();
-    constexpr u8 u8_min = std::numeric_limits<u8>::min();
-
-    constexpr u64 u64_max = std::numeric_limits<u64>::max();
-    constexpr i64 i64_max = std::numeric_limits<i64>::max();
-    constexpr u32 u32_max = std::numeric_limits<u32>::max();
-    constexpr i32 i32_max = std::numeric_limits<i32>::max();
-    constexpr i16 i16_max = std::numeric_limits<i16>::max();
-    constexpr u16 u16_max = std::numeric_limits<u16>::max();
-    constexpr i8 i8_max = std::numeric_limits<i8>::max();
-    constexpr u8 u8_max = std::numeric_limits<u8>::max();
-
-    constexpr f32 f32_inf = std::numeric_limits<f32>::infinity();
-    constexpr f32 f32_min = std::numeric_limits<f32>::min();
-    constexpr f32 f32_max = std::numeric_limits<f32>::max();
-    constexpr f64 f64_inf = std::numeric_limits<f64>::infinity();
-    constexpr f64 f64_min = std::numeric_limits<f64>::min();
-    constexpr f64 f64_max = std::numeric_limits<f64>::max();
-
-    constexpr u64 u64_inf = std::numeric_limits<u64>::infinity();
-    constexpr i64 i64_inf = std::numeric_limits<i64>::infinity();
-    constexpr u32 u32_inf = std::numeric_limits<u32>::infinity();
-    constexpr i32 i32_inf = std::numeric_limits<i32>::infinity();
-    constexpr i16 i16_inf = std::numeric_limits<i16>::infinity();
-    constexpr u16 u16_inf = std::numeric_limits<u16>::infinity();
-    constexpr i8 i8_inf = std::numeric_limits<i8>::infinity();
-    constexpr u8 u8_inf = std::numeric_limits<u8>::infinity();
-
-    constexpr ptr_t ptr_inf = std::numeric_limits<ptr_t>::infinity();
-    constexpr u64 *u64_ptr_inf = std::numeric_limits<u64 *>::infinity();
-
-    template <typename T>
-    constexpr T LimitMax() {
-        return std::numeric_limits<T>::max();
-    }
-
-    template <typename T>
-    constexpr T LimitMin() {
-        return std::numeric_limits<T>::min();
-    }
-
-    template <typename T>
-    constexpr T LimitLowest() {
-        return std::numeric_limits<T>::lowest();
-    }
-
     template <typename T>
     using Atomic = std::atomic<T>;
 
-    // Smart ptr
+    using std::atomic_compare_exchange_strong;
+    using std::atomic_store;
 
+    // Smart ptr
     template <typename T>
     using SharedPtr = std::shared_ptr<T>;
+
+    template <typename T>
+    using WeakPtr = std::weak_ptr<T>;
 
     template <typename T, typename... Args>
     inline SharedPtr<T> MakeShared(Args && ...args) {
@@ -297,24 +563,9 @@ export {
         return std::make_pair<T, U>(std::forward<T>(first), std::forward<U>(second));
     }
 
-    // DB Type
-
-    using ColumnID = u32;
-
-    // Exception
-
-    using StdException = std::exception;
-
-    // Move
     template <typename T>
-    [[nodiscard]] constexpr typename std::remove_reference<T>::type &&Move(T && value) noexcept {
-        return static_cast<typename std::remove_reference<T>::type &&>(value);
-    }
-
-    // Forward
-    template <typename T>
-    [[nodiscard]] constexpr T &&Forward(typename std::remove_reference<T>::type & value) noexcept {
-        return static_cast<T &&>(value);
+    inline constexpr Optional<T> MakeOptional(T && value) {
+        return std::make_optional<T>(std::forward<T>(value));
     }
 
     // Chrono
@@ -335,41 +586,11 @@ export {
         return std::chrono::duration_cast<T>(nano_seconds);
     }
 
-    // Memcpy
-    void *Memcpy(void *__restrict dest, const void *__restrict src, size_t n) { return memcpy(dest, src, n); }
-    void *Memset(void *__restrict dest, int value, size_t n) { return memset(dest, value, n); }
-
-    // Memcmp
-    int Memcmp(const void *__restrict s1, const void *__restrict s2, size_t n) { return memcmp(s1, s2, n); }
-
     // IsStandLayout
     template <typename T>
     concept IsStandLayout = std::is_standard_layout_v<T>;
 
-    template <typename T>
-    concept IsTrivial = std::is_trivial_v<T>;
-
-    // Mutex
-    template <typename T>
-    using SharedLock = std::shared_lock<T>;
-
-    template <typename T>
-    using UniqueLock = std::unique_lock<T>;
-
-    template <typename T>
-    using LockGuard = std::lock_guard<T>;
-
-    constexpr std::memory_order MemoryOrderRelax = std::memory_order::relaxed;
-    constexpr std::memory_order MemoryOrderConsume = std::memory_order::consume;
-    constexpr std::memory_order MemoryOrderRelease = std::memory_order::release;
-    constexpr std::memory_order MemoryOrderAcquire = std::memory_order::acquire;
-    constexpr std::memory_order MemoryOrderAcqrel = std::memory_order::acq_rel;
-    constexpr std::memory_order MemoryOrderSeqcst = std::memory_order::seq_cst;
-
-    using CondVar = std::condition_variable;
-
     // Stringstream
-    using StringStream = std::basic_stringstream<char>;
     using IStringStream = std::istringstream;
     using OStringStream = std::ostringstream;
 
@@ -389,53 +610,30 @@ export {
     //    using TypeID = std::typeid();
 
     // std::function
-    template <typename T>
-    using StdFunction = std::function<T>;
+    //    template<typename R, typename... Ts>
+    //    using std::function = std::function<R, Ts>;
 
     // SharedPtr
     template <typename T>
     using EnableSharedFromThis = std::enable_shared_from_this<T>;
 
-    using Mutex = std::mutex;
-
-    float HugeValf() { return HUGE_VALF; }
-
-    template <typename T, typename Allocator = std::allocator<T>>
-    using ForwardList = std::forward_list<T, Allocator>;
-
-    inline bool IsAlpha(const char &c) { return std::isalpha(c); }
-
-    inline bool IsAlNum(const char &c) { return std::isalnum(c); }
-
-    SizeT Pow(SizeT x, SizeT y) { return std::pow(x, y); }
-
-    u64 Log2(u64 num) { return std::log2(num); }
-
     template <typename II, typename OI>
     OI Copy(II first, II last, OI d_first) {
         return std::copy(first, last, d_first);
-    }
-
-    template <typename FI, typename T>
-    void Fill(FI first, FI last, const T &value) {
-        std::fill(first, last, value);
-    }
-
-    template <typename T1, typename T2>
-    constexpr bool IsSame() {
-        return std::is_same<T1, T2>();
     }
 }
 
 export template <typename T1, typename T2>
 struct CompareByFirst {
     using P = std::pair<T1, T2>;
+
     bool operator()(const P &lhs, const P &rhs) const { return lhs.first < rhs.first; }
 };
 
 export template <typename T1, typename T2>
 struct CompareByFirstReverse {
     using P = std::pair<T1, T2>;
+
     bool operator()(const P &lhs, const P &rhs) const { return lhs.first > rhs.first; }
 };
 

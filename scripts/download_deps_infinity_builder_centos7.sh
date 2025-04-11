@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
 
-# This script will download the following files:
-# bison-3.8.2.tar.xz
-# binutils-2.41.tar.xz
-# gcc-13.2.0.tar.xz
-# cmake-3.28.1-linux-x86_64.tar.gz
-# ninja-linux.zip
-# llvm-project-17.0.6.src.tar.xz
-# boost_1_81_0.tar.bz2
-# flex-2.6.4.tar.gz
-# liburing-2.5.tar.gz
-# libevent-2.1.12-stable.tar.gz
-# lz4-1.9.4.tar.gz
-
 download()
 {
     echo "download $1"
@@ -27,14 +14,29 @@ download()
 names="https://ftp.gnu.org/gnu/bison/bison-3.8.2.tar.xz
 https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz
 https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz
-https://github.com/Kitware/CMake/releases/download/v3.28.1/cmake-3.28.1-linux-x86_64.tar.gz
-https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-linux.zip
-https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/llvm-project-17.0.6.src.tar.xz
-https://boostorg.jfrog.io/artifactory/main/release/1.81.0/source/boost_1_81_0.tar.bz2
+https://github.com/Kitware/CMake/releases/download/v3.30.1/cmake-3.30.1-linux-x86_64.tar.gz
+https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz
+https://boostorg.jfrog.io/artifactory/main/release/1.86.0/source/boost_1_86_0.tar.bz2
 https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
-https://github.com/axboe/liburing/archive/refs/tags/liburing-2.5.tar.gz
 https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
-https://github.com/lz4/lz4/releases/download/v1.9.4/lz4-1.9.4.tar.gz"
+https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz
+https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-1.5.5.tar.gz
+https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+https://github.com/google/brotli/archive/refs/tags/v1.1.0.tar.gz
+https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2
+https://github.com/gperftools/gperftools/releases/download/gperftools-2.15/gperftools-2.15.tar.gz
+https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1w/openssl-1.1.1w.tar.gz
+https://github.com/openssl/openssl/releases/download/openssl-3.0.15/openssl-3.0.15.tar.gz
+https://dlcdn.apache.org/thrift/0.20.0/thrift-0.20.0.tar.gz
+https://www.python.org/ftp/python/3.10.15/Python-3.10.15.tar.xz
+https://www.python.org/ftp/python/3.11.10/Python-3.11.10.tar.xz
+https://www.python.org/ftp/python/3.12.7/Python-3.12.7.tar.xz
+https://www.python.org/ftp/python/3.13.0/Python-3.13.0.tar.xz
+https://github.com/risinglightdb/sqllogictest-rs/releases/download/v0.20.2/sqllogictest-bin-v0.20.2-x86_64-unknown-linux-musl.tar.gz
+https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/iproute2-6.9.0.tar.gz"
+https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz
 
 SAVEIFS=$IFS   # Save current IFS (Internal Field Separator)
 IFS=$'\n'      # Change IFS to newline char

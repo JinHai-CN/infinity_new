@@ -15,7 +15,7 @@
 #pragma once
 
 #include "base_statement.h"
-#include "expr/expr.h"
+#include "expr/parsed_expr.h"
 #include <vector>
 
 namespace infinity {
@@ -40,7 +40,7 @@ public:
 
     [[nodiscard]] std::string ToString() const final;
 
-    std::string schema_name_{"default"};
+    std::string schema_name_{};
     std::string table_name_{};
 
     ParsedExpr *where_expr_{nullptr};

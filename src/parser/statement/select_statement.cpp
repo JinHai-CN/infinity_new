@@ -31,6 +31,14 @@ SelectStatement::~SelectStatement() {
         select_list_ = nullptr;
     }
 
+    if (highlight_list_ != nullptr) {
+        for (auto &expr_ptr : *highlight_list_) {
+            delete expr_ptr;
+        }
+        delete highlight_list_;
+        highlight_list_ = nullptr;
+    }
+
     if (search_expr_ != nullptr) {
         delete search_expr_;
         search_expr_ = nullptr;
@@ -54,12 +62,12 @@ SelectStatement::~SelectStatement() {
         having_expr_ = nullptr;
     }
 
-    if (order_by_list != nullptr) {
-        for (auto &expr_ptr : *order_by_list) {
+    if (order_by_list_ != nullptr) {
+        for (auto &expr_ptr : *order_by_list_) {
             delete expr_ptr;
         }
-        delete order_by_list;
-        order_by_list = nullptr;
+        delete order_by_list_;
+        order_by_list_ = nullptr;
     }
 
     if (limit_expr_ != nullptr) {
@@ -88,7 +96,7 @@ SelectStatement::~SelectStatement() {
 
 std::string SelectStatement::ToString() const { return "Select Statement"; }
 
-std::string ToString(OrderType type) {
+std::string SelectStatement::ToString(OrderType type) {
     switch (type) {
         case OrderType::kAsc:
             return "ASC";

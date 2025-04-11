@@ -18,13 +18,12 @@ module;
 import stl;
 import query_context;
 import operator_state;
-import parser;
 
 module physical_index_join;
 
 namespace infinity {
 
-void PhysicalIndexJoin::Init() {}
+void PhysicalIndexJoin::Init(QueryContext* query_context) {}
 
 bool PhysicalIndexJoin::Execute(QueryContext *, OperatorState *) { return true; }
 

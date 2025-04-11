@@ -17,15 +17,25 @@ module;
 import stl;
 import physical_operator;
 import logical_node;
+import query_context;
+import global_resource_usage;
 
 export module physical_planner;
 namespace infinity {
 
-class QueryContext;
-
 export class PhysicalPlanner {
 public:
-    explicit PhysicalPlanner(QueryContext *query_context_ptr) : query_context_ptr_(query_context_ptr) {}
+    explicit PhysicalPlanner(QueryContext *query_context_ptr) : query_context_ptr_(query_context_ptr) {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("PhysicalPlanner");
+#endif
+    }
+
+    ~PhysicalPlanner() {
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::DecrObjectCount("PhysicalPlanner");
+#endif
+    }
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildPhysicalOperator(const SharedPtr<LogicalNode> &logical_operator) const;
 
@@ -39,7 +49,7 @@ private:
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildCreateCollection(const SharedPtr<LogicalNode> &logical_operator) const;
 
-    [[nodiscard]] UniquePtr<PhysicalOperator> BuildCreateSchema(const SharedPtr<LogicalNode> &logical_operator) const;
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildCreateDatabase(const SharedPtr<LogicalNode> &logical_operator) const;
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildPreparedPlan(const SharedPtr<LogicalNode> &logical_operator) const;
 
@@ -86,6 +96,8 @@ private:
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildLimit(const SharedPtr<LogicalNode> &logical_operator) const;
 
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildTop(const SharedPtr<LogicalNode> &logical_operator) const;
+
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildProjection(const SharedPtr<LogicalNode> &logical_operator) const;
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildFilter(const SharedPtr<LogicalNode> &logical_operator) const;
@@ -101,6 +113,8 @@ private:
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildTableScan(const SharedPtr<LogicalNode> &logical_operator) const;
 
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildIndexScan(const SharedPtr<LogicalNode> &logical_operator) const;
+
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildViewScan(const SharedPtr<LogicalNode> &logical_operator) const;
 
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildDummyScan(const SharedPtr<LogicalNode> &logical_operator) const;
@@ -113,12 +127,28 @@ private:
 
     // Knn
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildKnn(const SharedPtr<LogicalNode> &logical_operator) const;
-
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildMatchTensorScan(const SharedPtr<LogicalNode> &logical_operator) const;
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildMatchSparseScan(const SharedPtr<LogicalNode> &logical_operator) const;
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildMatch(const SharedPtr<LogicalNode> &logical_operator) const;
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildFusion(const SharedPtr<LogicalNode> &logical_operator) const;
 
     // Command
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildCommand(const SharedPtr<LogicalNode> &logical_operator) const;
+
+    // Compact
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildCompact(const SharedPtr<LogicalNode> &logical_operator) const;
+
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildCompactIndex(const SharedPtr<LogicalNode> &logical_operator) const;
+
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildCompactFinish(const SharedPtr<LogicalNode> &logical_operator) const;
+
+    // Read cache
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildReadCache(const SharedPtr<LogicalNode> &logical_operator) const;
+
+    // Unnest
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildUnnest(const SharedPtr<LogicalNode> &logical_operator) const;
+
+    [[nodiscard]] UniquePtr<PhysicalOperator> BuildUnnestAggregate(const SharedPtr<LogicalNode> &logical_operator) const;
 
     // Explain
     [[nodiscard]] UniquePtr<PhysicalOperator> BuildExplain(const SharedPtr<LogicalNode> &logical_operator) const;

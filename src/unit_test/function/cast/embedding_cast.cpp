@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -35,8 +35,18 @@ import data_block;
 import embedding_cast;
 import column_vector;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import embedding_info;
+import knn_expr;
+import data_type;
 
-class EmbeddingCastTest : public BaseTest {};
+using namespace infinity;
+class EmbeddingCastTest : public BaseTest {
+    void SetUp() override { BaseTest::SetUp(); }
+
+    void TearDown() override { BaseTest::TearDown(); }
+};
 
 TEST_F(EmbeddingCastTest, embedding_cast1) {
     using namespace infinity;
@@ -45,7 +55,7 @@ TEST_F(EmbeddingCastTest, embedding_cast1) {
     {
         DataType source_type(LogicalType::kDecimal);
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindEmbeddingCast(source_type, target_type), TypeException);
+        EXPECT_THROW(BindEmbeddingCast(source_type, target_type), RecoverableException);
     }
 
     auto embedding_info = EmbeddingInfo::Make(EmbeddingDataType::kElemFloat, 16);

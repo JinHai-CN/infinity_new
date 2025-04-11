@@ -14,527 +14,1323 @@
 
 module;
 
+#include <cassert>
+#include <filesystem>
+#include <fstream>
+#include <thread>
 #include <vector>
 
 module catalog;
 
 import stl;
-import parser;
+import defer_op;
+import data_type;
 import txn_manager;
 import logger;
 import third_party;
 import status;
 import infinity_exception;
 import function_set;
+import scalar_function_set;
 import table_function;
 import special_function;
 import buffer_manager;
-
-import local_file_system;
-import file_system_type;
-import file_system;
+import column_def;
+import virtual_store;
 import table_def;
 import table_entry_type;
-import table_detail;
-import index_def;
+import meta_info;
+import index_base;
 import txn_store;
 import data_access_state;
+import catalog_delta_entry;
+import file_writer;
+import extra_ddl_info;
+import index_defines;
+import infinity_context;
+import create_index_info;
+import persistence_manager;
+
+import table_meta;
+import table_index_meta;
+import base_entry;
+import block_entry;
+import block_column_entry;
+import segment_index_entry;
+import chunk_index_entry;
+import log_file;
+import persist_result_handler;
+import local_file_handle;
+import admin_statement;
+import global_resource_usage;
+import snapshot_info;
+
+import new_txn_manager;
+import new_catalog;
+import kv_store;
+import config;
 
 namespace infinity {
 
-NewCatalog::NewCatalog(SharedPtr<String> dir, bool create_default_db) : current_dir_(Move(dir)) {
-    if (create_default_db) {
-        // db current dir is same level as catalog
-        Path catalog_path(*this->current_dir_);
-        Path parent_path = catalog_path.parent_path();
-        auto data_dir = MakeShared<String>(parent_path.string());
-        UniquePtr<DBMeta> db_meta = MakeUnique<DBMeta>(data_dir, MakeShared<String>("default"));
-        UniquePtr<DBEntry> db_entry = MakeUnique<DBEntry>(db_meta->data_dir(), db_meta->db_name(), 0, 0);
-        db_entry->commit_ts_ = 0;
-        DBMeta::AddEntry(db_meta.get(), Move(db_entry));
-
-        this->rw_locker_.lock();
-        this->databases_["default"] = Move(db_meta);
-        this->rw_locker_.unlock();
+// TODO Consider letting it commit as a transaction.
+Catalog::Catalog() : catalog_dir_(MakeShared<String>(CATALOG_FILE_DIR)), running_(true) {
+    String abs_catalog_dir = Path(InfinityContext::instance().config()->DataDir()) / String(CATALOG_FILE_DIR);
+    if (!VirtualStore::Exists(abs_catalog_dir)) {
+        VirtualStore::MakeDirectory(abs_catalog_dir);
     }
+
+    ResizeProfileHistory(DEFAULT_PROFILER_HISTORY_SIZE);
+
+#ifdef INFINITY_DEBUG
+    GlobalResourceUsage::IncrObjectCount("Catalog");
+#endif
+}
+
+Catalog::~Catalog() {
+    bool expected = true;
+    bool changed = running_.compare_exchange_strong(expected, false);
+    if (!changed) {
+        LOG_INFO("Catalog MemIndexCommitLoop was stopped...");
+        return;
+    }
+
+    if (mem_index_commit_thread_.get() != nullptr) {
+        mem_index_commit_thread_->join();
+        mem_index_commit_thread_.reset();
+    }
+
+#ifdef INFINITY_DEBUG
+    GlobalResourceUsage::DecrObjectCount("Catalog");
+#endif
 }
 
 // do not only use this method to create database
 // it will not record database in transaction, so when you commit transaction
 // it will lose operation
 // use Txn::CreateDatabase instead
-Tuple<DBEntry *, Status>
-NewCatalog::CreateDatabase(const String &db_name, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflict_type) {
-
-    // Check if there is db_meta with the db_name
-    DBMeta *db_meta{nullptr};
-
-    this->rw_locker_.lock_shared();
-    auto db_iter = this->databases_.find(db_name);
-    if (db_iter != this->databases_.end()) {
-        // Find the db
-        db_meta = db_iter->second.get();
-        this->rw_locker_.unlock_shared();
-    } else {
-        this->rw_locker_.unlock_shared();
-
-        LOG_TRACE(Format("Create new database: {}", db_name));
-        // Not find the db and create new db meta
-        Path catalog_path(*this->current_dir_);
-        Path parent_path = catalog_path.parent_path();
-        auto db_dir = MakeShared<String>(parent_path.string());
-        UniquePtr<DBMeta> new_db_meta = MakeUnique<DBMeta>(db_dir, MakeShared<String>(db_name));
-        db_meta = new_db_meta.get();
-
-        this->rw_locker_.lock();
-        auto db_iter2 = this->databases_.find(db_name);
-        if (db_iter2 == this->databases_.end()) {
-            this->databases_[db_name] = Move(new_db_meta);
-        } else {
-            db_meta = db_iter2->second.get();
-        }
-        this->rw_locker_.unlock();
-    }
-
-    LOG_TRACE(Format("Add new database entry: {}", db_name));
-    return db_meta->CreateNewEntry(txn_id, begin_ts, txn_mgr, conflict_type);
+Tuple<DBEntry *, Status> Catalog::CreateDatabase(const SharedPtr<String> &db_name,
+                                                 const SharedPtr<String> &comment,
+                                                 TransactionID txn_id,
+                                                 TxnTimeStamp begin_ts,
+                                                 TxnManager *txn_mgr,
+                                                 ConflictType conflict_type) {
+    auto init_db_meta = [&]() { return DBMeta::NewDBMeta(db_name); };
+    LOG_TRACE(fmt::format("Adding new database entry: {}", *db_name));
+    auto [db_meta, r_lock] = this->db_meta_map_.GetMeta(*db_name, std::move(init_db_meta));
+    return db_meta->CreateNewEntry(std::move(r_lock), comment, txn_id, begin_ts, txn_mgr, conflict_type);
 }
 
 // do not only use this method to drop database
 // it will not record database in transaction, so when you commit transaction
 // it will lose operation
 // use Txn::DropDatabase instead
-Tuple<DBEntry *, Status> NewCatalog::DropDatabase(const String &db_name, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr) {
-
-    this->rw_locker_.lock_shared();
-
-    DBMeta *db_meta{nullptr};
-    if (this->databases_.find(db_name) != this->databases_.end()) {
-        db_meta = this->databases_[db_name].get();
-    }
-    this->rw_locker_.unlock_shared();
+Tuple<SharedPtr<DBEntry>, Status>
+Catalog::DropDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, ConflictType conflict_type) {
+    auto [db_meta, status, r_lock] = db_meta_map_.GetExistMeta(db_name, conflict_type);
     if (db_meta == nullptr) {
-        UniquePtr<String> err_msg = MakeUnique<String>(Format("Attempt to drop not existed database entry {}", db_name));
-        LOG_ERROR(*err_msg);
-        return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
+        return {nullptr, status};
     }
-
-    LOG_TRACE(Format("Drop a database entry {}", db_name));
-    return db_meta->DropNewEntry(txn_id, begin_ts, txn_mgr);
+    return db_meta->DropNewEntry(std::move(r_lock), txn_id, begin_ts, txn_mgr, conflict_type);
 }
 
-Tuple<DBEntry *, Status> NewCatalog::GetDatabase(const String &db_name, u64 txn_id, TxnTimeStamp begin_ts) {
-
-    DBMeta *db_meta{nullptr};
-    this->rw_locker_.lock_shared();
-    auto iter = this->databases_.find(db_name);
-    if (iter != this->databases_.end()) {
-        db_meta = iter->second.get();
-    }
-    this->rw_locker_.unlock_shared();
+Tuple<DBEntry *, Status> Catalog::GetDatabase(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    auto [db_meta, status, r_lock] = db_meta_map_.GetExistMeta(db_name, ConflictType::kError);
     if (db_meta == nullptr) {
-        UniquePtr<String> err_msg = MakeUnique<String>(Format("Attempt to get not existed database {}", db_name));
-        LOG_ERROR(*err_msg);
-        return {nullptr, Status(ErrorCode::kNotFound, Move(err_msg))};
+        return {nullptr, status};
     }
-    return db_meta->GetEntry(txn_id, begin_ts);
+    return db_meta->GetEntry(std::move(r_lock), txn_id, begin_ts);
 }
 
-void NewCatalog::RemoveDBEntry(const String &db_name, u64 txn_id, TxnManager *txn_mgr) {
-    this->rw_locker_.lock_shared();
-
-    DBMeta *db_meta{nullptr};
-    if (this->databases_.find(db_name) != this->databases_.end()) {
-        db_meta = this->databases_[db_name].get();
-    }
-    this->rw_locker_.unlock_shared();
-
-    LOG_TRACE(Format("Remove a database entry {}", db_name));
-    db_meta->DeleteNewEntry(txn_id, txn_mgr);
-}
-
-Vector<DBEntry *> NewCatalog::Databases(u64 txn_id, TxnTimeStamp begin_ts) {
-    this->rw_locker_.lock_shared();
-
-    Vector<DBEntry *> res;
-    res.reserve(this->databases_.size());
-    for (const auto &db_meta_pair : this->databases_) {
-        DBMeta *db_meta = db_meta_pair.second.get();
-        auto [db_entry, status] = db_meta->GetEntry(txn_id, begin_ts);
-        if (status.ok()) {
-            res.emplace_back(db_entry);
-        }
-    }
-    this->rw_locker_.unlock_shared();
-    return res;
-}
-
-Tuple<TableEntry *, Status> NewCatalog::CreateTable(const String &db_name,
-                                                    u64 txn_id,
-                                                    TxnTimeStamp begin_ts,
-                                                    const SharedPtr<TableDef> &table_def,
-                                                    ConflictType conflict_type,
-                                                    TxnManager *txn_mgr) {
-    auto [db_entry, status] = this->GetDatabase(db_name, txn_id, begin_ts);
-    if (!status.ok()) {
-        // Error
-        LOG_ERROR(Format("Database: {} is invalid.", db_name));
+Tuple<SharedPtr<DatabaseInfo>, Status> Catalog::GetDatabaseInfo(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    auto [db_meta, status, r_lock] = db_meta_map_.GetExistMeta(db_name, ConflictType::kError);
+    if (db_meta == nullptr) {
         return {nullptr, status};
     }
 
-    return db_entry->CreateTable(TableEntryType::kTableEntry, table_def->table_name(), table_def->columns(), txn_id, begin_ts, txn_mgr);
+    return db_meta->GetDatabaseInfo(std::move(r_lock), txn_id, begin_ts);
 }
 
-Tuple<TableEntry *, Status> NewCatalog::DropTableByName(const String &db_name,
-                                                        const String &table_name,
-                                                        ConflictType conflict_type,
-                                                        u64 txn_id,
-                                                        TxnTimeStamp begin_ts,
-                                                        TxnManager *txn_mgr) {
+void Catalog::CreateDatabaseReplay(
+    const SharedPtr<String> &db_name,
+    const SharedPtr<String> &comment,
+    std::function<SharedPtr<DBEntry>(DBMeta *, SharedPtr<String>, SharedPtr<String>, TransactionID, TxnTimeStamp)> &&init_entry,
+    TransactionID txn_id,
+    TxnTimeStamp begin_ts) {
+
+    auto init_db_meta = [&]() { return DBMeta::NewDBMeta(db_name); };
+    LOG_TRACE(fmt::format("Adding new database entry: {}", *db_name));
+    auto *db_meta = db_meta_map_.GetMetaNoLock(*db_name, std::move(init_db_meta));
+    db_meta->CreateEntryReplay([&](TransactionID txn_id, TxnTimeStamp begin_ts) { return init_entry(db_meta, db_name, comment, txn_id, begin_ts); },
+                               txn_id,
+                               begin_ts);
+}
+
+void Catalog::DropDatabaseReplay(const String &db_name,
+                                 std::function<SharedPtr<DBEntry>(DBMeta *, SharedPtr<String>, TransactionID, TxnTimeStamp)> &&init_entry,
+                                 TransactionID txn_id,
+                                 TxnTimeStamp begin_ts) {
+    auto [db_meta, status] = db_meta_map_.GetExistMetaNoLock(db_name, ConflictType::kError);
+    if (!status.ok()) {
+        UnrecoverableError(status.message());
+    }
+    db_meta->DropEntryReplay([&](TransactionID txn_id, TxnTimeStamp begin_ts) { return init_entry(db_meta, db_meta->db_name(), txn_id, begin_ts); },
+                             txn_id,
+                             begin_ts);
+}
+
+DBEntry *Catalog::GetDatabaseReplay(const String &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    auto [db_meta, status] = db_meta_map_.GetExistMetaNoLock(db_name, ConflictType::kError);
+    if (!status.ok()) {
+        UnrecoverableError(status.message());
+    }
+    return db_meta->GetEntryReplay(txn_id, begin_ts);
+}
+
+void Catalog::RemoveDBEntry(DBEntry *db_entry, TransactionID txn_id) {
+    const auto &db_name = *db_entry->db_meta_->db_name();
+    LOG_TRACE(fmt::format("Remove a database entry {}", db_name));
+    db_entry->db_meta_->DeleteNewEntry(txn_id);
+}
+
+Vector<DBEntry *> Catalog::Databases(TransactionID txn_id, TxnTimeStamp begin_ts) {
+    Vector<DBEntry *> res;
+    res.reserve(db_meta_map_.Size());
+
+    {
+        auto [_, db_meta_ptrs, meta_lock] = db_meta_map_.GetAllMetaGuard();
+        for (const auto &db_meta_ptr : db_meta_ptrs) {
+            auto [db_entry, status] = db_meta_ptr->GetEntryNolock(txn_id, begin_ts);
+            if (status.ok()) {
+                res.emplace_back(db_entry);
+            }
+        }
+    }
+    return res;
+}
+
+Tuple<TableEntry *, Status> Catalog::CreateTable(const String &db_name,
+                                                 TransactionID txn_id,
+                                                 TxnTimeStamp begin_ts,
+                                                 const SharedPtr<TableDef> &table_def,
+                                                 ConflictType conflict_type,
+                                                 TxnManager *txn_mgr) {
     auto [db_entry, status] = this->GetDatabase(db_name, txn_id, begin_ts);
     if (!status.ok()) {
         // Error
-        LOG_ERROR(Format("Database: {} is invalid.", db_name));
+        LOG_ERROR(fmt::format("Database: {} is invalid.", db_name));
+        return {nullptr, status};
+    }
+
+    return db_entry->CreateTable(TableEntryType::kTableEntry,
+                                 table_def->table_name(),
+                                 table_def->table_comment(),
+                                 table_def->columns(),
+                                 txn_id,
+                                 begin_ts,
+                                 txn_mgr,
+                                 conflict_type);
+}
+
+Tuple<SharedPtr<TableEntry>, Status> Catalog::DropTableByName(const String &db_name,
+                                                              const String &table_name,
+                                                              ConflictType conflict_type,
+                                                              TransactionID txn_id,
+                                                              TxnTimeStamp begin_ts,
+                                                              TxnManager *txn_mgr) {
+    auto [db_entry, status] = this->GetDatabase(db_name, txn_id, begin_ts);
+    if (!status.ok()) {
+        // Error
+        LOG_ERROR(fmt::format("Database: {} is invalid.", db_name));
         return {nullptr, status};
     }
     return db_entry->DropTable(table_name, conflict_type, txn_id, begin_ts, txn_mgr);
 }
 
-Status NewCatalog::GetTables(const String &db_name, Vector<TableDetail> &output_table_array, u64 txn_id, TxnTimeStamp begin_ts) {
+Status Catalog::GetTables(const String &db_name, Vector<TableDetail> &output_table_array, Txn *txn) {
+    TransactionID txn_id = txn->TxnID();
+    TxnTimeStamp begin_ts = txn->BeginTS();
     // Check the db entries
     auto [db_entry, status] = this->GetDatabase(db_name, txn_id, begin_ts);
     if (!status.ok()) {
         // Error
-        LOG_ERROR(Format("Database: {} is invalid.", db_name));
+        LOG_ERROR(fmt::format("Database: {} is invalid.", db_name));
         return status;
     }
-    return db_entry->GetTablesDetail(txn_id, begin_ts, output_table_array);
+    return db_entry->GetTablesDetail(txn, output_table_array);
 }
 
-Tuple<TableEntry *, Status> NewCatalog::GetTableByName(const String &db_name, const String &table_name, u64 txn_id, TxnTimeStamp begin_ts) {
+Tuple<TableEntry *, Status> Catalog::GetTableByName(const String &db_name, const String &table_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
     // Check the db entries
     auto [db_entry, status] = this->GetDatabase(db_name, txn_id, begin_ts);
     if (!status.ok()) {
         // Error
-        LOG_ERROR(Format("Database: {} is invalid.", db_name));
+        LOG_ERROR(fmt::format("Database: {} is invalid.", db_name));
         return {nullptr, status};
     }
 
     return db_entry->GetTableCollection(table_name, txn_id, begin_ts);
 }
 
-Status NewCatalog::RemoveTableEntry(TableEntry *table_entry, u64 txn_id, TxnManager *txn_mgr) {
+Tuple<SharedPtr<TableSnapshotInfo>, Status> Catalog::GetTableSnapshot(const String &db_name, const String &table_name, Txn *txn_ptr) {
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        // Error
+        LOG_ERROR(fmt::format("Fail to get table {} from database: {}, error message: {}.", table_name, db_name, table_status.message()));
+        return {nullptr, table_status};
+    }
+    return {table_entry->GetSnapshotInfo(txn_ptr), Status::OK()};
+}
+
+Status Catalog::ApplyTableSnapshot(const SharedPtr<TableSnapshotInfo> &table_snapshot_info, Txn *txn_ptr) {
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [db_entry, status] = this->GetDatabase(table_snapshot_info->db_name_, txn_id, begin_ts);
+    if (!status.ok()) {
+        // Error
+        LOG_ERROR(fmt::format("Database: {} is invalid.", table_snapshot_info->db_name_));
+        return status;
+    }
+
+    return db_entry->ApplyTableSnapshot(table_snapshot_info, txn_ptr->TxnID(), txn_ptr->BeginTS());
+}
+
+Tuple<SharedPtr<TableInfo>, Status> Catalog::GetTableInfo(const String &db_name, const String &table_name, Txn *txn) {
+    TransactionID txn_id = txn->TxnID();
+    TxnTimeStamp begin_ts = txn->BeginTS();
+    auto [db_entry, status] = this->GetDatabase(db_name, txn_id, begin_ts);
+    if (!status.ok()) {
+        // Error
+        LOG_ERROR(fmt::format("Database: {} is invalid.", db_name));
+        return {nullptr, status};
+    }
+
+    return db_entry->GetTableInfo(table_name, txn);
+}
+
+Tuple<SharedPtr<SegmentInfo>, Status> Catalog::GetSegmentInfo(const String &db_name, const String &table_name, SegmentID segment_id, Txn *txn_ptr) {
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        return {nullptr, table_status};
+    }
+
+    SharedPtr<SegmentInfo> segment_info = table_entry->GetSegmentInfo(segment_id, txn_ptr);
+    if (segment_info == nullptr) {
+        return {nullptr, Status::SegmentNotExist(segment_id)};
+    }
+
+    return {segment_info, Status::OK()};
+}
+
+Tuple<Vector<SharedPtr<SegmentInfo>>, Status> Catalog::GetSegmentsInfo(const String &db_name, const String &table_name, Txn *txn_ptr) {
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        return {Vector<SharedPtr<SegmentInfo>>(), table_status};
+    }
+
+    return {table_entry->GetSegmentsInfo(txn_ptr), Status::OK()};
+}
+
+Tuple<SharedPtr<BlockInfo>, Status>
+Catalog::GetBlockInfo(const String &db_name, const String &table_name, SegmentID segment_id, BlockID block_id, Txn *txn_ptr) {
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        return {nullptr, table_status};
+    }
+
+    auto segment_entry = table_entry->GetSegmentByID(segment_id, txn_ptr->BeginTS());
+    if (!segment_entry) {
+        return {nullptr, Status::SegmentNotExist(segment_id)};
+    }
+
+    auto block_info = segment_entry->GetBlockInfo(block_id, txn_ptr);
+    if (!block_info) {
+        return {nullptr, Status::BlockNotExist(block_id)};
+    }
+
+    return {block_info, Status::OK()};
+}
+
+Tuple<Vector<SharedPtr<BlockInfo>>, Status>
+Catalog::GetBlocksInfo(const String &db_name, const String &table_name, SegmentID segment_id, Txn *txn_ptr) {
+
+    Vector<SharedPtr<BlockInfo>> null_result;
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        return {null_result, table_status};
+    }
+
+    auto segment_entry = table_entry->GetSegmentByID(segment_id, txn_ptr->BeginTS());
+    if (!segment_entry) {
+        return {null_result, Status::SegmentNotExist(segment_id)};
+    }
+
+    return {segment_entry->GetBlocksInfo(txn_ptr), Status::OK()};
+}
+
+Tuple<SharedPtr<BlockColumnInfo>, Status> Catalog::GetBlockColumnInfo(const String &db_name,
+                                                                      const String &table_name,
+                                                                      SegmentID segment_id,
+                                                                      BlockID block_id,
+                                                                      ColumnID column_id,
+                                                                      Txn *txn_ptr) {
+    TransactionID txn_id = txn_ptr->TxnID();
+    TxnTimeStamp begin_ts = txn_ptr->BeginTS();
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        return {nullptr, table_status};
+    }
+
+    auto segment_entry = table_entry->GetSegmentByID(segment_id, txn_ptr->BeginTS());
+    if (!segment_entry) {
+        return {nullptr, Status::SegmentNotExist(segment_id)};
+    }
+
+    return segment_entry->GetBlockColumnInfo(block_id, column_id, txn_ptr);
+}
+
+Status Catalog::RemoveTableEntry(TableEntry *table_entry, TransactionID txn_id) {
     TableMeta *table_meta = table_entry->GetTableMeta();
-    LOG_TRACE(Format("Remove a table/collection entry: {}", *table_entry->GetTableName()));
-    table_meta->DeleteNewEntry(txn_id, txn_mgr);
+    LOG_TRACE(fmt::format("Remove a table/collection entry: {}", *table_entry->GetTableName()));
+    table_meta->DeleteEntry(txn_id);
 
     return Status::OK();
 }
 
-Tuple<TableEntry *, TableIndexEntry *, Status> NewCatalog::CreateIndex(const String &db_name,
-                                                                       const String &table_name,
-                                                                       const SharedPtr<IndexDef> &index_def,
-                                                                       ConflictType conflict_type,
-                                                                       u64 txn_id,
-                                                                       TxnTimeStamp begin_ts,
-                                                                       TxnManager *txn_mgr) {
-    auto [table_entry, table_status] = GetTableByName(db_name, table_name, txn_id, begin_ts);
-    if (!table_status.ok()) {
-        LOG_ERROR(Format("Database: {}, Table: {} is invalid", db_name, table_name));
-        return {nullptr, nullptr, table_status};
-    }
+Tuple<TableIndexEntry *, Status> Catalog::CreateIndex(TableEntry *table_entry,
+                                                      const SharedPtr<IndexBase> &index_base,
+                                                      ConflictType conflict_type,
+                                                      TransactionID txn_id,
+                                                      TxnTimeStamp begin_ts,
+                                                      TxnManager *txn_mgr) {
 
-    auto [table_index_entry, index_status] = table_entry->CreateIndex(index_def, conflict_type, txn_id, begin_ts, txn_mgr);
-
-    return {table_entry, table_index_entry, index_status};
+    return table_entry->CreateIndex(index_base, conflict_type, txn_id, begin_ts, txn_mgr
+                                    // , is_replay, replay_table_index_dir
+    );
 }
 
-Tuple<TableIndexEntry *, Status> NewCatalog::DropIndex(const String &db_name,
-                                                       const String &table_name,
-                                                       const String &index_name,
-                                                       ConflictType conflict_type,
-                                                       u64 txn_id,
-                                                       TxnTimeStamp begin_ts,
-                                                       TxnManager *txn_mgr) {
+Tuple<SharedPtr<TableIndexEntry>, Status> Catalog::DropIndex(const String &db_name,
+                                                             const String &table_name,
+                                                             const String &index_name,
+                                                             ConflictType conflict_type,
+                                                             TransactionID txn_id,
+                                                             TxnTimeStamp begin_ts,
+                                                             TxnManager *txn_mgr) {
     auto [table_entry, table_status] = GetTableByName(db_name, table_name, txn_id, begin_ts);
     if (!table_status.ok()) {
-        LOG_ERROR(Format("Database: {}, Table: {} is invalid", db_name, table_name));
+        LOG_ERROR(fmt::format("Database: {}, Table: {} is invalid", db_name, table_name));
         return {nullptr, table_status};
     }
 
     return table_entry->DropIndex(index_name, conflict_type, txn_id, begin_ts, txn_mgr);
 }
 
-void NewCatalog::CreateIndexFile(TableEntry *table_entry,
-                                 void *txn_store,
-                                 TableIndexEntry *table_index_entry,
-                                 TxnTimeStamp begin_ts,
-                                 BufferManager *buffer_mgr) {
-    return table_entry->CreateIndexFile(txn_store, table_index_entry, begin_ts, buffer_mgr);
+Tuple<TableIndexEntry *, Status>
+Catalog::GetIndexByName(const String &db_name, const String &table_name, const String &index_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+    auto [table_entry, table_status] = this->GetTableByName(db_name, table_name, txn_id, begin_ts);
+    if (!table_status.ok()) {
+        return {nullptr, table_status};
+    }
+    return table_entry->GetIndex(index_name, txn_id, begin_ts);
 }
 
-Status NewCatalog::RemoveIndexEntry(const String &index_name, TableIndexEntry *table_index_entry, u64 txn_id, TxnManager *txn_mgr) {
-    const TableIndexMeta *table_index_meta = table_index_entry->table_index_meta();
-    TableEntry *table_entry = table_index_meta->GetTableEntry();
-    table_entry->RemoveIndexEntry(index_name, txn_id, txn_mgr);
+Status Catalog::RemoveIndexEntry(TableIndexEntry *table_index_entry, TransactionID txn_id) {
+    TableIndexMeta *table_index_meta = table_index_entry->table_index_meta();
+    LOG_TRACE(fmt::format("Remove a index entry: {}", *table_index_entry->GetIndexName()));
+    table_index_meta->DeleteEntry(txn_id);
     return Status::OK();
 }
 
-void NewCatalog::CommitCreateIndex(HashMap<String, TxnIndexStore> &txn_indexes_store_) { return TableEntry::CommitCreateIndex(txn_indexes_store_); }
-
-void NewCatalog::Append(TableEntry *table_entry, u64 txn_id, void *txn_store, BufferManager *buffer_mgr) {
-    return table_entry->Append(txn_id, txn_store, buffer_mgr);
+void Catalog::CommitCreateIndex(TxnIndexStore *txn_index_store, TxnTimeStamp commit_ts, bool is_replay) {
+    auto *table_index_entry = txn_index_store->table_index_entry_;
+    table_index_entry->CommitCreateIndex(txn_index_store, commit_ts, is_replay);
 }
 
-void NewCatalog::CommitAppend(TableEntry *table_entry, u64 txn_id, TxnTimeStamp commit_ts, const AppendState *append_state_ptr) {
-    return table_entry->CommitAppend(txn_id, commit_ts, append_state_ptr);
+// void Catalog::RollbackPopulateIndex(TxnIndexStore *txn_index_store, Txn *txn) {
+//     auto *table_index_entry = txn_index_store->table_index_entry_;
+//     table_index_entry->RollbackPopulateIndex(txn_index_store, txn);
+// }
+
+void Catalog::Append(TableEntry *table_entry,
+                     TransactionID txn_id,
+                     void *txn_store,
+                     TxnTimeStamp commit_ts,
+                     BufferManager *buffer_mgr,
+                     bool is_replay) {
+    return table_entry->AppendData(txn_id, txn_store, commit_ts, buffer_mgr, is_replay);
 }
 
-void NewCatalog::RollbackAppend(TableEntry *table_entry, u64 txn_id, TxnTimeStamp commit_ts, void *txn_store) {
+void Catalog::RollbackAppend(TableEntry *table_entry, TransactionID txn_id, TxnTimeStamp commit_ts, void *txn_store) {
     return table_entry->RollbackAppend(txn_id, commit_ts, txn_store);
 }
 
-Status NewCatalog::Delete(TableEntry *table_entry, u64 txn_id, TxnTimeStamp commit_ts, DeleteState &delete_state) {
-    return table_entry->Delete(txn_id, commit_ts, delete_state);
+Status Catalog::Delete(TableEntry *table_entry, TransactionID txn_id, void *txn_store, TxnTimeStamp commit_ts, DeleteState &delete_state) {
+    return table_entry->Delete(txn_id, txn_store, commit_ts, delete_state);
 }
 
-void NewCatalog::CommitDelete(TableEntry *table_entry, u64 txn_id, TxnTimeStamp commit_ts, const DeleteState &append_state) {
-    return table_entry->CommitDelete(txn_id, commit_ts, append_state);
-}
-
-Status NewCatalog::RollbackDelete(TableEntry *table_entry, u64 txn_id, DeleteState &append_state, BufferManager *buffer_mgr) {
+Status Catalog::RollbackDelete(TableEntry *table_entry, TransactionID txn_id, DeleteState &append_state, BufferManager *buffer_mgr) {
     return table_entry->RollbackDelete(txn_id, append_state, buffer_mgr);
 }
 
-Status NewCatalog::ImportSegment(TableEntry *table_entry, TxnTimeStamp commit_ts, SharedPtr<SegmentEntry> segment) {
-    return table_entry->ImportSegment(commit_ts, segment);
+Status Catalog::CommitCompact(TableEntry *table_entry, TransactionID txn_id, TxnTimeStamp commit_ts, TxnCompactStore &compact_store) {
+    return table_entry->CommitCompact(txn_id, commit_ts, compact_store);
 }
 
-u32 NewCatalog::GetNextSegmentID(TableEntry *table_entry) { return TableEntry::GetNextSegmentID(table_entry); }
+Status Catalog::RollbackCompact(TableEntry *table_entry, TransactionID txn_id, TxnTimeStamp commit_ts, const TxnCompactStore &compact_store) {
+    return table_entry->RollbackCompact(txn_id, commit_ts, compact_store);
+}
 
-u32 NewCatalog::GetMaxSegmentID(const TableEntry *table_entry) { return TableEntry::GetMaxSegmentID(table_entry); }
+Status Catalog::CommitWrite(TableEntry *table_entry,
+                            TransactionID txn_id,
+                            TxnTimeStamp commit_ts,
+                            const HashMap<SegmentID, TxnSegmentStore> &segment_stores,
+                            const DeleteState *delete_state) {
+    return table_entry->CommitWrite(txn_id, commit_ts, segment_stores, delete_state);
+}
 
-void NewCatalog::ImportSegment(TableEntry* table_entry, u32 segment_id, SharedPtr<SegmentEntry>& segment_entry) {
-    table_entry->segment_map_.emplace(segment_id, Move(segment_entry));
+Status Catalog::RollbackWrite(TableEntry *table_entry, TxnTimeStamp commit_ts, const Vector<TxnSegmentStore> &segment_stores) {
+    return table_entry->RollbackWrite(commit_ts, segment_stores);
+}
+
+SegmentID Catalog::GetNextSegmentID(TableEntry *table_entry) { return table_entry->GetNextSegmentID(); }
+
+void Catalog::AddSegment(TableEntry *table_entry, SharedPtr<SegmentEntry> &segment_entry) {
+    table_entry->segment_map_.emplace(segment_entry->segment_id(), std::move(segment_entry));
     // ATTENTION: focusing on the segment id
     table_entry->next_segment_id_++;
 }
 
-void NewCatalog::IncreaseTableRowCount(TableEntry* table_entry, u64 increased_row_count) {
-    table_entry->row_count_ += increased_row_count;
-}
-
-SharedPtr<FunctionSet> NewCatalog::GetFunctionSetByName(NewCatalog *catalog, String function_name) {
+SharedPtr<FunctionSet> Catalog::GetFunctionSetByName(Catalog *catalog, String function_name) {
     // Transfer the function to upper case.
     StringToLower(function_name);
 
     if (!catalog->function_sets_.contains(function_name)) {
-        Error<CatalogException>(Format("No function name: {}", function_name));
+        Status status = Status::FunctionNotFound(function_name);
+        RecoverableError(status);
     }
     return catalog->function_sets_[function_name];
 }
 
-void NewCatalog::AddFunctionSet(NewCatalog *catalog, const SharedPtr<FunctionSet> &function_set) {
+void Catalog::AddFunctionSet(Catalog *catalog, const SharedPtr<FunctionSet> &function_set) {
     String name = function_set->name();
     StringToLower(name);
     if (catalog->function_sets_.contains(name)) {
-        Error<CatalogException>(Format("Trying to add duplicated function table_name into catalog: {}", name));
+        String error_message = fmt::format("Trying to add duplicated function {} into catalog", name);
+        UnrecoverableError(error_message);
     }
     catalog->function_sets_.emplace(name, function_set);
 }
 
-void NewCatalog::DeleteFunctionSet(NewCatalog *catalog, String function_name) {
-    // Unused now.
-    StringToLower(function_name);
-    if (!catalog->function_sets_.contains(function_name)) {
-        Error<CatalogException>(Format("Delete not exist function: {}", function_name));
-    }
-    catalog->function_sets_.erase(function_name);
-}
-
-// Table Function related methods
-SharedPtr<TableFunction> NewCatalog::GetTableFunctionByName(NewCatalog *catalog, String function_name) {
-    StringToLower(function_name);
-    if (!catalog->table_functions_.contains(function_name)) {
-        Error<CatalogException>(Format("No table function table_name: {}", function_name));
-    }
-    return catalog->table_functions_[function_name];
-}
-
-void NewCatalog::AddTableFunction(NewCatalog *catalog, const SharedPtr<TableFunction> &table_function) {
-    String name = table_function->name();
+void Catalog::AppendToScalarFunctionSet(Catalog *catalog, const SharedPtr<FunctionSet> &function_set) {
+    String name = function_set->name();
     StringToLower(name);
-    if (catalog->table_functions_.contains(name)) {
-        Error<CatalogException>(Format("Trying to add duplicated table function into catalog: {}", name));
+    if (!catalog->function_sets_.contains(name)) {
+        String error_message = fmt::format("Trying to append to non-existent function {} in catalog", name);
+        UnrecoverableError(error_message);
     }
-    catalog->table_functions_.emplace(name, table_function);
+    auto target_scalar_function_set = std::dynamic_pointer_cast<ScalarFunctionSet>(catalog->function_sets_[name]);
+    if (!target_scalar_function_set) {
+        String error_message = fmt::format("Trying to append to non-scalar function {} in catalog", name);
+        UnrecoverableError(error_message);
+    }
+    auto source_function_set = std::dynamic_pointer_cast<ScalarFunctionSet>(function_set);
+    if (!source_function_set) {
+        String error_message = fmt::format("Trying to append non-scalar function to scalar function {} in catalog", name);
+        UnrecoverableError(error_message);
+    }
+    for (const auto &function : source_function_set->GetAllScalarFunctions()) {
+        target_scalar_function_set->AddFunction(function);
+    }
 }
 
-void NewCatalog::AddSpecialFunction(NewCatalog *catalog, const SharedPtr<SpecialFunction> &special_function) {
+void Catalog::AddSpecialFunction(Catalog *catalog, const SharedPtr<SpecialFunction> &special_function) {
     String name = special_function->name();
     StringToLower(name);
-    if (catalog->table_functions_.contains(name)) {
-        Error<CatalogException>(Format("Trying to add duplicated special function into catalog: {}", name));
+    if (catalog->special_functions_.contains(name)) {
+        String error_message = fmt::format("Trying to add duplicated special function into catalog: {}", name);
+        UnrecoverableError(error_message);
     }
     catalog->special_functions_.emplace(name, special_function);
+    switch (special_function->special_type()) {
+        case SpecialType::kRowID:
+        case SpecialType::kDistance:
+        case SpecialType::kDistanceFactors:
+        case SpecialType::kSimilarity:
+        case SpecialType::kSimilarityFactors:
+        case SpecialType::kScore:
+        case SpecialType::kScoreFactors:
+        case SpecialType::kFilterFullText: {
+            return;
+        }
+        case SpecialType::kCreateTs:
+        case SpecialType::kDeleteTs: {
+            break;
+        }
+    }
+    auto special_column_def = MakeUnique<ColumnDef>(special_function->extra_idx(),
+                                                    MakeShared<DataType>(special_function->data_type()),
+                                                    special_function->name(),
+                                                    std::set<ConstraintType>());
+    catalog->special_columns_.emplace(name, std::move(special_column_def));
 }
 
-SharedPtr<SpecialFunction> NewCatalog::GetSpecialFunctionByNameNoExcept(NewCatalog *catalog, String function_name) {
+Tuple<SpecialFunction *, Status> Catalog::GetSpecialFunctionByNameNoExcept(Catalog *catalog, String function_name) {
     StringToLower(function_name);
     if (!catalog->special_functions_.contains(function_name)) {
-        return nullptr;
+        return {nullptr, Status::SpecialFunctionNotFound()};
     }
-    return catalog->special_functions_[function_name];
+    return {catalog->special_functions_[function_name].get(), Status::OK()};
 }
 
-void NewCatalog::DeleteTableFunction(NewCatalog *catalog, String function_name) {
-    // Unused now.
-    StringToLower(function_name);
-    if (!catalog->table_functions_.contains(function_name)) {
-        Error<CatalogException>(Format("Delete not exist table function: {}", function_name));
-    }
-    catalog->table_functions_.erase(function_name);
-}
+nlohmann::json Catalog::Serialize(TxnTimeStamp max_commit_ts) {
+    nlohmann::json json_res;
+    TransactionID next_txn_id = this->next_txn_id_;
+    json_res["next_txn_id"] = next_txn_id;
+    json_res["full_ckp_commit_ts"] = this->full_ckp_commit_ts_;
 
-Json NewCatalog::Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
-    Json json_res;
-    Vector<DBMeta *> databases;
     {
-        SharedLock<RWMutex> lck(this->rw_locker_);
-        json_res["current_dir"] = *this->current_dir_;
-        json_res["next_txn_id"] = this->next_txn_id_;
-        json_res["catalog_version"] = this->catalog_version_;
-        databases.reserve(this->databases_.size());
-        for (auto &db_meta : this->databases_) {
-            databases.push_back(db_meta.second.get());
+        auto [_, db_meta_ptrs, meta_lock] = db_meta_map_.GetAllMetaGuard();
+        for (DBMeta *db_meta_ptr : db_meta_ptrs) {
+            json_res["databases"].emplace_back(db_meta_ptr->Serialize(max_commit_ts));
         }
     }
 
-    for (auto &db_meta : databases) {
-        json_res["databases"].emplace_back(db_meta->DBMeta::Serialize(max_commit_ts, is_full_checkpoint));
+    PersistenceManager *pm = InfinityContext::instance().persistence_manager();
+    if (pm != nullptr) {
+        PersistResultHandler handler(pm);
+        // Finalize current object to ensure PersistenceManager be in a consistent state
+        PersistWriteResult result = pm->CurrentObjFinalize(true);
+        handler.HandleWriteResult(result);
+
+        json_res["obj_addr_map"] = pm->Serialize();
     }
     return json_res;
 }
 
-// void NewCatalog::CheckCatalog() {
-//     for (auto &[db_name, db_meta] : this->databases_) {
-//         for (auto &base_entry : db_meta->entry_list()) {
-//             if (base_entry->entry_type_ == EntryType::kDummy) {
-//                 continue;
-//             }
-//             auto db_entry = static_cast<DBEntry *>(base_entry.get());
-//             for (auto &[table_name, table_meta] : db_entry->tables_) {
-//                 for (auto &base_entry : table_meta->entry_list_) {
-//                     if (base_entry->entry_type_ == EntryType::kDummy) {
-//                         continue;
-//                     }
-//                     auto table_entry = static_cast<TableEntry *>(base_entry.get());
-//                     if (table_entry->table_entry_->db_entry_ != db_entry) {
-//                         //                        int a = 1;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
-
-UniquePtr<NewCatalog> NewCatalog::LoadFromFiles(const Vector<String> &catalog_paths, BufferManager *buffer_mgr) {
-    auto catalog1 = MakeUnique<NewCatalog>(nullptr);
-    if (catalog_paths.empty()) {
-        Error<CatalogException>("Catalog paths is empty");
-    }
-    // Load the latest full checkpoint.
-    LOG_INFO(Format("Load base catalog1 from: {}", catalog_paths[0]));
-    catalog1 = NewCatalog::LoadFromFile(catalog_paths[0], buffer_mgr);
-
-    // Load catalogs delta checkpoints and merge.
-    for (SizeT i = 1; i < catalog_paths.size(); i++) {
-        LOG_INFO(Format("Load delta catalog1 from: {}", catalog_paths[i]));
-        UniquePtr<NewCatalog> catalog2 = NewCatalog::LoadFromFile(catalog_paths[i], buffer_mgr);
-        catalog1->MergeFrom(*catalog2);
-    }
-
-    return catalog1;
-}
-
-void NewCatalog::MergeFrom(NewCatalog &other) {
-    // Merge databases.
-    for (auto &[db_name, db_meta2] : other.databases_) {
-        auto it = this->databases_.find(db_name);
-        if (it == this->databases_.end()) {
-            this->databases_.emplace(db_name, Move(db_meta2));
-        } else {
-            it->second->MergeFrom(*db_meta2.get());
-        }
-    }
-}
-
-UniquePtr<NewCatalog> NewCatalog::LoadFromFile(const String &catalog_path, BufferManager *buffer_mgr) {
-    UniquePtr<NewCatalog> catalog = nullptr;
-    LocalFileSystem fs;
-    UniquePtr<FileHandler> catalog_file_handler = fs.OpenFile(catalog_path, FileFlags::READ_FLAG, FileLockType::kReadLock);
-    SizeT file_size = fs.GetFileSize(*catalog_file_handler);
-    String json_str(file_size, 0);
-    SizeT nbytes = catalog_file_handler->Read(json_str.data(), file_size);
-    if (file_size != nbytes) {
-        Error<StorageException>(Format("Catalog file {}, read error.", catalog_path));
-    }
-
-    Json catalog_json = Json::parse(json_str);
-    Deserialize(catalog_json, buffer_mgr, catalog);
+UniquePtr<Catalog> Catalog::NewCatalog() {
+    auto catalog = MakeUnique<Catalog>();
     return catalog;
 }
 
-void NewCatalog::Deserialize(const Json &catalog_json, BufferManager *buffer_mgr, UniquePtr<NewCatalog> &catalog) {
-    SharedPtr<String> current_dir = MakeShared<String>(catalog_json["current_dir"]);
+UniquePtr<Catalog>
+Catalog::LoadFromFiles(const FullCatalogFileInfo &full_ckp_info, const Vector<DeltaCatalogFileInfo> &delta_ckp_infos, BufferManager *buffer_mgr) {
 
-    // FIXME: new catalog need a scheduler, current we use nullptr to represent it.
-    catalog = MakeUnique<NewCatalog>(current_dir);
-    catalog->next_txn_id_ = catalog_json["next_txn_id"];
-    catalog->catalog_version_ = catalog_json["catalog_version"];
-    if (catalog_json.contains("databases")) {
-        for (const auto &db_json : catalog_json["databases"]) {
-            UniquePtr<DBMeta> db_meta = DBMeta::Deserialize(db_json, buffer_mgr);
-            catalog->databases_.emplace(*db_meta->db_name(), Move(db_meta));
+    // 1. load json
+    // 2. load entries
+    LOG_INFO(fmt::format("Load base FULL catalog json from: {}", full_ckp_info.path_));
+    auto catalog = Catalog::LoadFullCheckpoint(full_ckp_info.path_);
+
+    // Load catalogs delta checkpoints and merge.
+    for (const auto &delta_ckp_info : delta_ckp_infos) {
+        LOG_INFO(fmt::format("Load catalog DELTA entry binary from: {}", delta_ckp_info.path_));
+        catalog->AttachDeltaCheckpoint(delta_ckp_info.path_);
+    }
+
+    LOG_TRACE(fmt::format("Catalog Delta Op is done"));
+    return catalog;
+}
+void Catalog::AttachDeltaCheckpoint(const String &file_name) {
+    const auto &catalog_path = Path(InfinityContext::instance().config()->DataDir()) / file_name;
+    UniquePtr<CatalogDeltaEntry> catalog_delta_entry = Catalog::LoadFromFileDelta(catalog_path);
+    BufferManager *buffer_mgr = InfinityContext::instance().storage()->buffer_manager();
+    this->LoadFromEntryDelta(std::move(catalog_delta_entry), buffer_mgr);
+}
+
+// called by Replay
+UniquePtr<CatalogDeltaEntry> Catalog::LoadFromFileDelta(const String &catalog_path) {
+    VirtualStore::AddRequestCount();
+    if (!VirtualStore::Exists(catalog_path)) {
+        std::filesystem::path filePath = catalog_path;
+        String dst_file_name = filePath.filename();
+        VirtualStore::DownloadObject(catalog_path, dst_file_name);
+        VirtualStore::AddCacheMissCount();
+    }
+
+    auto [catalog_file_handle, status] = VirtualStore::Open(catalog_path, FileAccessMode::kRead);
+    if (!status.ok()) {
+        UnrecoverableError(fmt::format("{}:{}", catalog_path, status.message()));
+    }
+
+    i64 file_size = catalog_file_handle->FileSize();
+    Vector<char> buf(file_size);
+    catalog_file_handle->Read(buf.data(), file_size);
+
+    const char *ptr = buf.data();
+    auto catalog_delta_entry = CatalogDeltaEntry::ReadAdv(ptr, file_size);
+    if (catalog_delta_entry.get() == nullptr) {
+        String error_message = fmt::format("Load catalog delta entry failed: {}", catalog_path);
+        UnrecoverableError(error_message);
+    }
+    i32 n_bytes = catalog_delta_entry->GetSizeInBytes();
+    if (file_size != n_bytes && file_size != ptr - buf.data()) {
+        Status status = Status::FileCorrupted(catalog_path);
+        RecoverableError(status);
+    }
+    return catalog_delta_entry;
+}
+
+void Catalog::LoadFromEntryDelta(UniquePtr<CatalogDeltaEntry> delta_entry, BufferManager *buffer_mgr) {
+    Vector<UniquePtr<CatalogDeltaOperation>> &delta_ops = delta_entry->operations();
+    auto *pm = InfinityContext::instance().persistence_manager();
+    for (auto &op : delta_ops) {
+        auto type = op->GetType();
+        // LOG_INFO(fmt::format("Load delta op {}", op->ToString()));
+        auto commit_ts = op->commit_ts_;
+        auto txn_id = op->txn_id_;
+        auto begin_ts = op->begin_ts_;
+        std::string_view encode = *op->encode_;
+        MergeFlag merge_flag = op->merge_flag_;
+        if (op->commit_ts_ <= full_ckp_commit_ts_) {
+            // Ignore the old txn
+            continue;
+        }
+        op->addr_serializer_.AddToPersistenceManager(pm);
+        switch (type) {
+
+            // -----------------------------
+            // Entry
+            // -----------------------------
+            case CatalogDeltaOpType::ADD_DATABASE_ENTRY: {
+                auto add_db_entry_op = static_cast<AddDBEntryOp *>(op.get());
+                auto decodes = DBEntry::DecodeIndex(encode);
+                auto db_name = MakeShared<String>(decodes[0]);
+                const auto &db_entry_dir = add_db_entry_op->db_entry_dir_;
+                if (merge_flag == MergeFlag::kDelete || merge_flag == MergeFlag::kDeleteAndNew) {
+                    this->DropDatabaseReplay(
+                        *db_name,
+                        [&](DBMeta *db_meta, const SharedPtr<String> &db_name, TransactionID txn_id, TxnTimeStamp begin_ts) {
+                            return DBEntry::ReplayDBEntry(db_meta, true, db_entry_dir, db_name, MakeShared<String>(), txn_id, begin_ts, commit_ts);
+                        },
+                        txn_id,
+                        begin_ts);
+                }
+                if (merge_flag == MergeFlag::kNew || merge_flag == MergeFlag::kDeleteAndNew) {
+                    this->CreateDatabaseReplay(
+                        db_name,
+                        add_db_entry_op->comment_,
+                        [&](DBMeta *db_meta,
+                            const SharedPtr<String> &db_name,
+                            const SharedPtr<String> &comment,
+                            TransactionID txn_id,
+                            TxnTimeStamp begin_ts) {
+                            return DBEntry::ReplayDBEntry(db_meta, false, db_entry_dir, db_name, comment, txn_id, begin_ts, commit_ts);
+                        },
+                        txn_id,
+                        begin_ts);
+                } else if (merge_flag == MergeFlag::kUpdate) {
+                    String error_message = "Update database entry is not supported.";
+                    UnrecoverableError(error_message);
+                }
+                break;
+            }
+            case CatalogDeltaOpType::ADD_TABLE_ENTRY: {
+                auto add_table_entry_op = static_cast<AddTableEntryOp *>(op.get());
+                auto decodes = TableEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = MakeShared<String>(decodes[1]);
+                const auto &table_entry_dir = add_table_entry_op->table_entry_dir_;
+                const auto &column_defs = add_table_entry_op->column_defs_;
+                auto entry_type = add_table_entry_op->table_entry_type_;
+                auto row_count = add_table_entry_op->row_count_;
+                SegmentID unsealed_id = add_table_entry_op->unsealed_id_;
+                SegmentID next_segment_id = add_table_entry_op->next_segment_id_;
+                ColumnID next_column_id = add_table_entry_op->next_column_id_;
+                const SharedPtr<String> &table_comment = add_table_entry_op->table_comment_;
+
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                if (merge_flag == MergeFlag::kDelete || merge_flag == MergeFlag::kDeleteAndNew) {
+                    // Actually the table entry replayed doesn't have full information cause index entry are lacked, but that is ok for now.
+                    db_entry->DropTableReplay(
+                        *table_name,
+                        [&](TableMeta *table_meta,
+                            const SharedPtr<String> &table_name,
+                            const SharedPtr<String> &table_comment,
+                            TransactionID txn_id,
+                            TxnTimeStamp begin_ts) {
+                            return TableEntry::ReplayTableEntry(true,
+                                                                table_meta,
+                                                                table_entry_dir,
+                                                                table_name,
+                                                                table_comment,
+                                                                column_defs,
+                                                                entry_type,
+                                                                txn_id,
+                                                                begin_ts,
+                                                                commit_ts,
+                                                                row_count,
+                                                                unsealed_id,
+                                                                next_segment_id,
+                                                                next_column_id);
+                        },
+                        txn_id,
+                        begin_ts);
+                }
+                auto init_table_entry = [&](TableMeta *table_meta,
+                                            const SharedPtr<String> &table_name,
+                                            const SharedPtr<String> &table_comment,
+                                            TransactionID txn_id,
+                                            TxnTimeStamp begin_ts) {
+                    return TableEntry::ReplayTableEntry(false,
+                                                        table_meta,
+                                                        table_entry_dir,
+                                                        table_name,
+                                                        table_comment,
+                                                        column_defs,
+                                                        entry_type,
+                                                        txn_id,
+                                                        begin_ts,
+                                                        commit_ts,
+                                                        row_count,
+                                                        unsealed_id,
+                                                        next_segment_id,
+                                                        next_column_id);
+                };
+                if (merge_flag == MergeFlag::kNew || merge_flag == MergeFlag::kDeleteAndNew) {
+                    db_entry->CreateTableReplay(table_name, table_comment, init_table_entry, txn_id, begin_ts);
+                } else if (merge_flag == MergeFlag::kUpdate) {
+                    db_entry->UpdateTableReplay(table_name, table_comment, init_table_entry, txn_id, begin_ts);
+                }
+                break;
+            }
+            case CatalogDeltaOpType::ADD_SEGMENT_ENTRY: {
+                auto add_segment_entry_op = static_cast<AddSegmentEntryOp *>(op.get());
+                auto decodes = SegmentEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = String(decodes[1]);
+                SegmentID segment_id = 0;
+                std::from_chars(decodes[2].begin(), decodes[2].end(), segment_id);
+                auto segment_status = add_segment_entry_op->status_;
+                auto column_count = add_segment_entry_op->column_count_;
+                auto row_count = add_segment_entry_op->row_count_;
+                auto actual_row_count = add_segment_entry_op->actual_row_count_;
+                auto row_capacity = add_segment_entry_op->row_capacity_;
+                auto min_row_ts = add_segment_entry_op->min_row_ts_;
+                auto max_row_ts = add_segment_entry_op->max_row_ts_;
+                auto first_delete_ts = add_segment_entry_op->first_delete_ts_;
+                auto deprecate_ts = add_segment_entry_op->deprecate_ts_;
+                auto segment_filter_binary_data = add_segment_entry_op->segment_filter_binary_data_;
+
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                auto *table_entry = db_entry->GetTableReplay(table_name, txn_id, begin_ts);
+
+                auto segment_entry = SegmentEntry::NewReplaySegmentEntry(table_entry,
+                                                                         segment_id,
+                                                                         segment_status,
+                                                                         column_count,
+                                                                         row_count,
+                                                                         actual_row_count,
+                                                                         row_capacity,
+                                                                         min_row_ts,
+                                                                         max_row_ts,
+                                                                         commit_ts,
+                                                                         first_delete_ts,
+                                                                         deprecate_ts,
+                                                                         begin_ts,
+                                                                         txn_id);
+
+                if (merge_flag == MergeFlag::kNew) {
+                    if (!segment_filter_binary_data.empty()) {
+                        segment_entry->LoadFilterBinaryData(std::move(segment_filter_binary_data));
+                    }
+                    table_entry->AddSegmentReplay(segment_entry);
+                } else if (merge_flag == MergeFlag::kDelete || merge_flag == MergeFlag::kUpdate) {
+                    table_entry->UpdateSegmentReplay(segment_entry, std::move(segment_filter_binary_data));
+                } else {
+                    String error_message = fmt::format("Unsupported merge flag {} for segment entry", (i8)merge_flag);
+                    UnrecoverableError(error_message);
+                }
+                break;
+            }
+            case CatalogDeltaOpType::ADD_BLOCK_ENTRY: {
+                auto add_block_entry_op = static_cast<AddBlockEntryOp *>(op.get());
+                auto decodes = BlockEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = String(decodes[1]);
+                SegmentID segment_id = 0;
+                std::from_chars(decodes[2].begin(), decodes[2].end(), segment_id);
+                BlockID block_id = 0;
+                std::from_chars(decodes[3].begin(), decodes[3].end(), block_id);
+                auto row_count = add_block_entry_op->row_count_;
+                auto row_capacity = add_block_entry_op->row_capacity_;
+                auto min_row_ts = add_block_entry_op->min_row_ts_;
+                auto max_row_ts = add_block_entry_op->max_row_ts_;
+                auto check_point_ts = add_block_entry_op->checkpoint_ts_;
+                auto check_point_row_count = add_block_entry_op->checkpoint_row_count_;
+                auto block_filter_binary_data = add_block_entry_op->block_filter_binary_data_;
+
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                auto *table_entry = db_entry->GetTableReplay(table_name, txn_id, begin_ts);
+                auto *segment_entry = table_entry->segment_map_.at(segment_id).get();
+
+                auto new_block = BlockEntry::NewReplayBlockEntry(segment_entry,
+                                                                 block_id,
+                                                                 row_count,
+                                                                 row_capacity,
+                                                                 min_row_ts,
+                                                                 max_row_ts,
+                                                                 commit_ts,
+                                                                 check_point_ts,
+                                                                 check_point_row_count,
+                                                                 buffer_mgr,
+                                                                 txn_id);
+
+                if (merge_flag == MergeFlag::kNew) {
+                    if (!block_filter_binary_data.empty()) {
+                        new_block->LoadFilterBinaryData(std::move(block_filter_binary_data));
+                    }
+                    segment_entry->AddBlockReplay(std::move(new_block));
+                } else if (merge_flag == MergeFlag::kUpdate) {
+                    segment_entry->UpdateBlockReplay(std::move(new_block), std::move(block_filter_binary_data));
+                } else {
+                    String error_message = fmt::format("Unsupported merge flag {} for block entry", (i8)merge_flag);
+                    UnrecoverableError(error_message);
+                }
+                break;
+            }
+            case CatalogDeltaOpType::ADD_COLUMN_ENTRY: {
+                auto add_column_entry_op = static_cast<AddColumnEntryOp *>(op.get());
+                auto decodes = BlockColumnEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = String(decodes[1]);
+                SegmentID segment_id = 0;
+                std::from_chars(decodes[2].begin(), decodes[2].end(), segment_id);
+                BlockID block_id = 0;
+                std::from_chars(decodes[3].begin(), decodes[3].end(), block_id);
+                ColumnID column_id = 0;
+                std::from_chars(decodes[4].begin(), decodes[4].end(), column_id);
+                const auto [next_outline_idx, last_chunk_offset] = add_column_entry_op->outline_info_;
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                auto *table_entry = db_entry->GetTableReplay(table_name, txn_id, begin_ts);
+                auto *segment_entry = table_entry->segment_map_.at(segment_id).get();
+                auto *block_entry = segment_entry->GetBlockEntryByID(block_id).get();
+                if (merge_flag == MergeFlag::kDelete) {
+                    block_entry->DropColumnReplay(column_id);
+                } else if (merge_flag == MergeFlag::kNew || merge_flag == MergeFlag::kUpdate) {
+                    block_entry->AddColumnReplay(BlockColumnEntry::NewReplayBlockColumnEntry(block_entry,
+                                                                                             column_id,
+                                                                                             buffer_mgr,
+                                                                                             next_outline_idx,
+                                                                                             last_chunk_offset,
+                                                                                             commit_ts),
+                                                 column_id);
+                } else {
+                    UnrecoverableError(fmt::format("Unsupported merge flag {} for column entry {}", (i8)merge_flag, column_id));
+                }
+                break;
+            }
+
+            // -----------------------------
+            // Index
+            // -----------------------------
+            case CatalogDeltaOpType::ADD_TABLE_INDEX_ENTRY: {
+                auto add_table_index_entry_op = static_cast<AddTableIndexEntryOp *>(op.get());
+                auto decodes = TableIndexEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = String(decodes[1]);
+                auto index_name = MakeShared<String>(decodes[2]);
+                const auto &index_dir = add_table_index_entry_op->index_dir_;
+                auto index_base = add_table_index_entry_op->index_base_;
+
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                auto *table_entry = db_entry->GetTableReplay(table_name, txn_id, begin_ts);
+                if (merge_flag == MergeFlag::kDelete || merge_flag == MergeFlag::kDeleteAndNew) {
+                    table_entry->DropIndexReplay(
+                        *index_name,
+                        [&](TableIndexMeta *index_meta, TransactionID txn_id, TxnTimeStamp begin_ts) {
+                            auto index_base = MakeShared<IndexBase>(index_meta->index_name());
+                            auto index_entry = TableIndexEntry::NewTableIndexEntry(index_base, true, nullptr, index_meta, txn_id, begin_ts);
+                            index_entry->commit_ts_.store(commit_ts);
+                            return index_entry;
+                        },
+                        txn_id,
+                        begin_ts);
+                }
+                if (merge_flag == MergeFlag::kNew || merge_flag == MergeFlag::kDeleteAndNew) {
+                    table_entry->CreateIndexReplay(
+                        index_name,
+                        [&](TableIndexMeta *index_meta, TransactionID txn_id, TxnTimeStamp begin_ts) {
+                            return TableIndexEntry::ReplayTableIndexEntry(index_meta, false, index_base, index_dir, txn_id, begin_ts, commit_ts);
+                        },
+                        txn_id,
+                        begin_ts);
+                } else if (merge_flag == MergeFlag::kUpdate) {
+                    table_entry->UpdateIndexReplay(*index_name, txn_id, begin_ts, commit_ts);
+                }
+                break;
+            }
+            case CatalogDeltaOpType::ADD_SEGMENT_INDEX_ENTRY: {
+                auto add_segment_index_entry_op = static_cast<AddSegmentIndexEntryOp *>(op.get());
+                auto decodes = SegmentIndexEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = String(decodes[1]);
+                auto index_name = String(decodes[2]);
+                SegmentID segment_id = 0;
+                std::from_chars(decodes[3].begin(), decodes[3].end(), segment_id);
+                auto min_ts = add_segment_index_entry_op->min_ts_;
+                auto max_ts = add_segment_index_entry_op->max_ts_;
+                auto next_chunk_id = add_segment_index_entry_op->next_chunk_id_;
+                auto deprecate_ts = add_segment_index_entry_op->deprecate_ts_;
+
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                auto *table_entry = db_entry->GetTableReplay(table_name, txn_id, begin_ts);
+
+                if (auto iter = table_entry->segment_map_.find(segment_id); iter != table_entry->segment_map_.end()) {
+                    auto *table_index_entry = table_entry->GetIndexReplay(index_name, txn_id, begin_ts);
+                    auto *segment_entry = iter->second.get();
+                    if (merge_flag != MergeFlag::kDelete && segment_entry->status() == SegmentStatus::kDeprecated) {
+                        String error_message = fmt::format("Segment {} is deprecated", segment_id);
+                        UnrecoverableError(error_message);
+                    }
+                    auto segment_index_entry = SegmentIndexEntry::NewReplaySegmentIndexEntry(table_index_entry,
+                                                                                             table_entry,
+                                                                                             segment_id,
+                                                                                             buffer_mgr,
+                                                                                             min_ts,
+                                                                                             max_ts,
+                                                                                             next_chunk_id,
+                                                                                             txn_id,
+                                                                                             begin_ts,
+                                                                                             commit_ts,
+                                                                                             deprecate_ts);
+                    if (merge_flag == MergeFlag::kNew) {
+                        bool insert_ok = table_index_entry->index_by_segment().insert({segment_id, std::move(segment_index_entry)}).second;
+                        if (!insert_ok) {
+                            String error_message = fmt::format("Segment index {} is already in the catalog", segment_id);
+                            UnrecoverableError(error_message);
+                        }
+                    } else if (merge_flag == MergeFlag::kUpdate || merge_flag == MergeFlag::kDelete) {
+                        auto iter = table_index_entry->index_by_segment().find(segment_id);
+                        if (iter == table_index_entry->index_by_segment().end()) {
+                            String error_message = fmt::format("Segment index {} is not found", segment_id);
+                            UnrecoverableError(error_message);
+                        }
+                        iter->second->UpdateSegmentIndexReplay(segment_index_entry);
+                    }
+                }
+                break;
+            }
+            case CatalogDeltaOpType::ADD_CHUNK_INDEX_ENTRY: {
+                auto add_chunk_index_entry_op = static_cast<AddChunkIndexEntryOp *>(op.get());
+                auto decodes = ChunkIndexEntry::DecodeIndex(encode);
+                auto db_name = String(decodes[0]);
+                auto table_name = String(decodes[1]);
+                auto index_name = String(decodes[2]);
+                SegmentID segment_id = 0;
+                std::from_chars(decodes[3].begin(), decodes[3].end(), segment_id);
+                ChunkID chunk_id = 0;
+                std::from_chars(decodes[4].begin(), decodes[4].end(), chunk_id);
+                const auto &base_name = add_chunk_index_entry_op->base_name_;
+                auto base_rowid = add_chunk_index_entry_op->base_rowid_;
+                auto row_count = add_chunk_index_entry_op->row_count_;
+                auto commit_ts = add_chunk_index_entry_op->commit_ts_;
+                auto deprecate_ts = add_chunk_index_entry_op->deprecate_ts_;
+
+                auto *db_entry = this->GetDatabaseReplay(db_name, txn_id, begin_ts);
+                auto *table_entry = db_entry->GetTableReplay(table_name, txn_id, begin_ts);
+
+                if (auto iter = table_entry->segment_map_.find(segment_id); iter != table_entry->segment_map_.end()) {
+                    auto *table_index_entry = table_entry->GetIndexReplay(index_name, txn_id, begin_ts);
+                    auto *segment_entry = iter->second.get();
+                    if (segment_entry->status() == SegmentStatus::kDeprecated) {
+                        String error_message = fmt::format("Segment {} is deprecated", segment_id);
+                        UnrecoverableError(error_message);
+                    }
+                    auto iter2 = table_index_entry->index_by_segment().find(segment_id);
+                    if (iter2 == table_index_entry->index_by_segment().end()) {
+                        String error_message = fmt::format("Segment index {} is not found", segment_id);
+                        UnrecoverableError(error_message);
+                    }
+                    auto *segment_index_entry = iter2->second.get();
+                    segment_index_entry
+                        ->AddChunkIndexEntryReplay(chunk_id, table_entry, base_name, base_rowid, row_count, commit_ts, deprecate_ts, buffer_mgr);
+                }
+
+                break;
+            }
+            default:
+                String error_message = fmt::format("Unknown catalog delta op type: {}", op->GetTypeStr());
+                UnrecoverableError(error_message);
         }
     }
 }
 
-String NewCatalog::SaveAsFile(const String &dir, TxnTimeStamp max_commit_ts, bool is_full_checkpoint) {
-    Json catalog_json = Serialize(max_commit_ts, is_full_checkpoint);
+UniquePtr<nlohmann::json> Catalog::LoadFullCheckpointToJson(Config* config_ptr, const String &file_name) {
+    const auto &catalog_path = Path(config_ptr->DataDir()) / file_name;
+    String dst_dir = catalog_path.parent_path().string();
+    String dst_file_name = catalog_path.filename().string();
+
+    if (!VirtualStore::Exists(dst_dir)) {
+        VirtualStore::MakeDirectory(dst_dir);
+    }
+
+    VirtualStore::AddRequestCount();
+    if (!VirtualStore::Exists(catalog_path)) {
+        VirtualStore::DownloadObject(catalog_path, dst_file_name);
+        VirtualStore::AddCacheMissCount();
+    }
+
+    auto [catalog_file_handle, status] = VirtualStore::Open(catalog_path, FileAccessMode::kRead);
+    if (!status.ok()) {
+        UnrecoverableError(status.message());
+    }
+
+    i64 file_size = catalog_file_handle->FileSize();
+    String json_str(file_size, 0);
+    auto [n_bytes, status_read] = catalog_file_handle->Read(json_str.data(), file_size);
+    if (!status.ok()) {
+        RecoverableError(status_read);
+    }
+    if ((SizeT)file_size != n_bytes) {
+        Status status = Status::FileCorrupted(catalog_path);
+        RecoverableError(status);
+    }
+
+    return MakeUnique<nlohmann::json>(nlohmann::json::parse(json_str));
+}
+
+UniquePtr<Catalog> Catalog::LoadFullCheckpoint(const String &file_name) {
+    UniquePtr<nlohmann::json> catalog_json = LoadFullCheckpointToJson(InfinityContext::instance().config(), file_name);
+    BufferManager *buffer_mgr = InfinityContext::instance().storage()->buffer_manager();
+    return Deserialize(*catalog_json, buffer_mgr);
+}
+
+UniquePtr<Catalog> Catalog::Deserialize(const nlohmann::json &catalog_json, BufferManager *buffer_mgr) {
+    // FIXME: new catalog need a scheduler, current we use nullptr to represent it.
+    auto catalog = MakeUnique<Catalog>();
+    catalog->next_txn_id_ = catalog_json["next_txn_id"];
+    catalog->full_ckp_commit_ts_ = catalog_json["full_ckp_commit_ts"];
+    if (catalog_json.contains("databases")) {
+        for (const auto &db_json : catalog_json["databases"]) {
+            UniquePtr<DBMeta> db_meta = DBMeta::Deserialize(db_json, buffer_mgr);
+            catalog->db_meta_map_.AddNewMetaNoLock(*db_meta->db_name(), std::move(db_meta));
+        }
+    }
+    if (catalog_json.contains("obj_addr_map")) {
+        PersistenceManager *pm = InfinityContext::instance().persistence_manager();
+        if (pm != nullptr) {
+            pm->Deserialize(catalog_json["obj_addr_map"]);
+        }
+    }
+    return catalog;
+}
+
+void Catalog::SaveFullCatalog(TxnTimeStamp max_commit_ts, String &full_catalog_path, String &full_catalog_name) {
+    full_catalog_path = *catalog_dir_;
+    full_catalog_name = CatalogFile::FullCheckpointFilename(max_commit_ts);
+    String full_path = Path(InfinityContext::instance().config()->DataDir()) / *catalog_dir_ / full_catalog_name;
+    String catalog_tmp_path =
+        Path(InfinityContext::instance().config()->DataDir()) / *catalog_dir_ / CatalogFile::TempFullCheckpointFilename(max_commit_ts);
+
+    // Serialize catalog to string
+    full_ckp_commit_ts_ = max_commit_ts;
+    nlohmann::json catalog_json = Serialize(max_commit_ts);
     String catalog_str = catalog_json.dump();
 
+    // Save catalog to tmp file.
     // FIXME: Temp implementation, will be replaced by async task.
-    LocalFileSystem fs;
-
-    if (!fs.Exists(dir)) {
-        fs.CreateDirectory(dir);
+    auto [catalog_file_handle, status] = VirtualStore::Open(catalog_tmp_path, FileAccessMode::kWrite);
+    if (!status.ok()) {
+        UnrecoverableError(fmt::format("{}: {}", catalog_tmp_path, status.message()));
     }
 
-    String file_name = Format("META_{}", max_commit_ts);
-    if (is_full_checkpoint)
-        file_name += ".full.json";
-    else
-        file_name += ".delta.json";
-    String file_path = Format("{}/{}", dir, file_name);
+    status = catalog_file_handle->Append(catalog_str.data(), catalog_str.size());
+    if (!status.ok()) {
+        RecoverableError(status);
+    }
+    catalog_file_handle->Sync();
 
-    u8 fileflags = FileFlags::WRITE_FLAG;
-    if (!fs.Exists(file_path)) {
-        fileflags |= FileFlags::CREATE_FLAG;
+    // Rename temp file to regular catalog file
+    VirtualStore::Rename(catalog_tmp_path, full_path);
+    if (InfinityContext::instance().GetServerRole() == NodeRole::kLeader or InfinityContext::instance().GetServerRole() == NodeRole::kStandalone) {
+        VirtualStore::UploadObject(full_path, full_catalog_name);
     }
 
-    UniquePtr<FileHandler> catalog_file_handler = fs.OpenFile(file_path, fileflags, FileLockType::kWriteLock);
+    global_catalog_delta_entry_->SetFullCheckpointTs(max_commit_ts);
 
-    // TODO: Save as a temp filename, then rename it to the real filename.
-    SizeT nbytes = catalog_file_handler->Write(catalog_str.data(), catalog_str.size());
-    if (nbytes != catalog_str.size()) {
-        Error<StorageException>(Format("Catalog file {}, saving error.", file_path));
-    }
-    catalog_file_handler->Sync();
-    catalog_file_handler->Close();
-
-    LOG_INFO(Format("Saved catalog to: {}", file_path));
-    return file_path;
+    LOG_DEBUG(fmt::format("Saved catalog to: {}", full_path));
 }
+
+// called by bg_task
+bool Catalog::SaveDeltaCatalog(TxnTimeStamp last_ckp_ts, TxnTimeStamp &max_commit_ts, String &delta_catalog_path, String &delta_catalog_name) {
+    // Pick the delta entry to flush and set the max commit ts.
+    UniquePtr<CatalogDeltaEntry> flush_delta_entry = global_catalog_delta_entry_->PickFlushEntry(max_commit_ts);
+    if (last_ckp_ts >= max_commit_ts) {
+        return false;
+    }
+
+    delta_catalog_path = *catalog_dir_;
+    delta_catalog_name = CatalogFile::DeltaCheckpointFilename(max_commit_ts);
+    String delta_path = fmt::format("{}/{}/{}", InfinityContext::instance().config()->DataDir(), *catalog_dir_, delta_catalog_name);
+
+    if (flush_delta_entry->commit_ts() != max_commit_ts) {
+        String error_message = "Expect flush_delta_entry->commit_ts() == max_commit_ts";
+        UnrecoverableError(error_message);
+    }
+
+    LOG_TRACE(fmt::format("Save delta catalog commit ts:{}.", max_commit_ts));
+
+    for (auto &op : flush_delta_entry->operations()) {
+        switch (op->GetType()) {
+            case CatalogDeltaOpType::ADD_COLUMN_ENTRY: {
+                auto *column_entry_op = static_cast<AddColumnEntryOp *>(op.get());
+                LOG_TRACE(fmt::format("Flush column entry: {}", column_entry_op->ToString()));
+                column_entry_op->FlushDataToDisk(max_commit_ts);
+                LOG_TRACE(fmt::format("Flush column entry done"));
+                break;
+            }
+            case CatalogDeltaOpType::ADD_BLOCK_ENTRY: {
+                auto *block_entry_op = static_cast<AddBlockEntryOp *>(op.get());
+                LOG_TRACE(fmt::format("Flush block entry: {}", block_entry_op->ToString()));
+                block_entry_op->FlushDataToDisk(max_commit_ts);
+                LOG_TRACE(fmt::format("Flush block entry done"));
+                break;
+            }
+            case CatalogDeltaOpType::ADD_SEGMENT_INDEX_ENTRY: {
+                auto add_segment_index_entry_op = static_cast<AddSegmentIndexEntryOp *>(op.get());
+                LOG_TRACE(fmt::format("Flush segment index entry: {}", add_segment_index_entry_op->ToString()));
+                add_segment_index_entry_op->FlushDataToDisk(max_commit_ts);
+                LOG_TRACE(fmt::format("Flush segment index entry done"));
+                break;
+            }
+            default:
+                LOG_TRACE(fmt::format("Ignore delta op: {}", op->ToString()));
+                break;
+        }
+    }
+
+    // Finalize current object to ensure PersistenceManager be in a consistent state
+    PersistenceManager *pm = InfinityContext::instance().persistence_manager();
+    if (pm != nullptr) {
+        PersistResultHandler handler(pm);
+        PersistWriteResult result = pm->CurrentObjFinalize(true);
+        handler.HandleWriteResult(result);
+        for (auto &op : flush_delta_entry->operations()) {
+            op->InitializeAddrSerializer();
+        }
+    }
+
+    // Save the global catalog delta entry to disk.
+    auto exp_size = flush_delta_entry->GetSizeInBytes();
+    Vector<char> buf(exp_size);
+    char *ptr = buf.data();
+    flush_delta_entry->WriteAdv(ptr);
+    i32 act_size = ptr - buf.data();
+    if (exp_size != act_size) {
+        String error_message = fmt::format("Save delta catalog failed, exp_size: {}, act_size: {}", exp_size, act_size);
+        UnrecoverableError(error_message);
+    }
+
+    auto [out_file_handle, write_status] = VirtualStore::Open(delta_path, FileAccessMode::kWrite);
+    if (!write_status.ok()) {
+        String error_message = fmt::format("Failed to open delta catalog file: {}", delta_path);
+        UnrecoverableError(error_message);
+    }
+
+    out_file_handle->Append((reinterpret_cast<const char *>(buf.data())), act_size);
+    out_file_handle->Sync();
+    if (InfinityContext::instance().GetServerRole() == NodeRole::kLeader or InfinityContext::instance().GetServerRole() == NodeRole::kStandalone) {
+        VirtualStore::UploadObject(delta_path, delta_catalog_name);
+    }
+    // {
+    // log for delta op debug
+    //     std::stringstream ss;
+    //     ss << "Save delta catalog ops: ";
+    //     for (auto &op : flush_delta_entry->operations()) {
+    //         ss << op->ToString() << ". txn id: " << op->txn_id_ << "\n";
+    //     }
+    //     LOG_INFO(ss.str());
+    // }
+    LOG_DEBUG(fmt::format("Save delta catalog to: {}, size: {}.", delta_path, act_size));
+
+    return true;
+}
+
+void Catalog::AddDeltaEntry(UniquePtr<CatalogDeltaEntry> delta_entry) { global_catalog_delta_entry_->AddDeltaEntry(std::move(delta_entry)); }
+
+void Catalog::PickCleanup(CleanupScanner *scanner) { db_meta_map_.PickCleanup(scanner); }
+
+void Catalog::InitCompactionAlg(TxnTimeStamp system_start_ts) {
+    TransactionID txn_id = 0; // fake txn id
+    Vector<DBEntry *> db_entries = this->Databases(txn_id, system_start_ts);
+    for (auto *db_entry : db_entries) {
+        Vector<TableEntry *> table_entries = db_entry->TableCollections(txn_id, system_start_ts);
+        for (auto *table_entry : table_entries) {
+            table_entry->InitCompactionAlg(system_start_ts);
+        }
+    }
+}
+
+void Catalog::MemIndexCommit() {
+    NewTxnManager *new_txn_mgr = InfinityContext::instance().storage()->new_txn_manager();
+    if (!new_txn_mgr) {
+        auto db_meta_map_guard = db_meta_map_.GetMetaMap();
+        for (auto &[_, db_meta] : *db_meta_map_guard) {
+            auto [db_entry, status] = db_meta->GetEntryNolock(0UL, MAX_TIMESTAMP);
+            if (status.ok()) {
+                db_entry->MemIndexCommit();
+            }
+        }
+    } else {
+        TxnTimeStamp begin_ts = new_txn_mgr->CurrentTS();
+
+        KVStore *kv_store = new_txn_mgr->kv_store();
+        UniquePtr<KVInstance> kv_instance = kv_store->GetInstance();
+
+        Status status = NewCatalog::MemIndexCommit(kv_instance.get(), begin_ts);
+        if (!status.ok()) {
+            UnrecoverableError(fmt::format("MemIndexCommit catalog failed: {}", status.message()));
+        }
+
+        status = kv_instance->Commit();
+        if (!status.ok()) {
+            UnrecoverableError(fmt::format("Commit catalog failed: {}", status.message()));
+        }
+    }
+}
+
+void Catalog::MemIndexCommitLoop() {
+    auto prev_time = std::chrono::system_clock::now();
+    while (running_.load()) {
+        auto cur_time = std::chrono::system_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(cur_time - prev_time).count() < 1) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+        prev_time = cur_time;
+        MemIndexCommit();
+    }
+}
+
+void Catalog::MemIndexRecover(BufferManager *buffer_manager, TxnTimeStamp ts) {
+    all_memindex_recover_segment_.clear();
+    auto db_meta_map_guard = db_meta_map_.GetMetaMap();
+    for (auto &[_, db_meta] : *db_meta_map_guard) {
+        auto [db_entry, status] = db_meta->GetEntryNolock(0UL, MAX_TIMESTAMP);
+        if (status.ok()) {
+            db_entry->MemIndexRecover(buffer_manager, ts);
+        }
+    }
+    for (auto &segment_index_entry : all_memindex_recover_segment_) {
+        segment_index_entry->MemIndexWaitInflightTasks();
+    }
+    all_memindex_recover_segment_.clear();
+}
+
+void Catalog::StartMemoryIndexCommit() {
+    mem_index_commit_thread_ = MakeUnique<Thread>([this] { MemIndexCommitLoop(); });
+}
+
+SizeT Catalog::GetDeltaLogCount() const { return global_catalog_delta_entry_->OpSize(); }
+
+Vector<CatalogDeltaOpBrief> Catalog::GetDeltaLogBriefs() const { return global_catalog_delta_entry_->GetOperationBriefs(); }
 
 } // namespace infinity

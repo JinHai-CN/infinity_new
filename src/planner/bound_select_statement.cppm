@@ -21,23 +21,25 @@ import stl;
 import bind_context;
 import logical_node;
 import table_ref;
-import parser;
+
 import query_context;
 import search_expression;
 import knn_expression;
+import select_statement;
+import highlighter;
 
 export module bound_select_statement;
 
 namespace infinity {
 
-export struct BoundSelectStatement final: public BoundStatement {
+export struct BoundSelectStatement final : public BoundStatement {
 public:
     static inline UniquePtr<BoundSelectStatement> Make(SharedPtr<BindContext> bind_context) {
-        return MakeUnique<BoundSelectStatement>(Move(bind_context));
+        return MakeUnique<BoundSelectStatement>(std::move(bind_context));
     }
 
 public:
-    inline explicit BoundSelectStatement(SharedPtr<BindContext> bind_context): bind_context_(Move(bind_context)) {}
+    inline explicit BoundSelectStatement(SharedPtr<BindContext> bind_context) : bind_context_(std::move(bind_context)) {}
 
     SharedPtr<LogicalNode> BuildPlan(QueryContext *query_context) final;
 
@@ -62,6 +64,11 @@ public:
 
     SharedPtr<LogicalNode> BuildFilter(SharedPtr<LogicalNode> &root,
                                        Vector<SharedPtr<BaseExpression>> &conditions,
+                                       QueryContext *query_context,
+                                       const SharedPtr<BindContext> &bind_context);
+
+    SharedPtr<LogicalNode> BuildUnnest(SharedPtr<LogicalNode> &root,
+                                       Vector<SharedPtr<BaseExpression>> &expressions,
                                        QueryContext *query_context,
                                        const SharedPtr<BindContext> &bind_context);
 
@@ -98,6 +105,13 @@ public:
 
     // Project expression list
     Vector<SharedPtr<BaseExpression>> projection_expressions_{};
+    bool total_hits_count_flag_{false};
+
+    // Highlight info
+    Map<SizeT, SharedPtr<HighlightInfo>> highlight_columns_{};
+
+    // Unnest columns
+    Vector<SharedPtr<BaseExpression>> unnest_expressions_{};
 
     // Order by expression list
     Vector<SharedPtr<BaseExpression>> order_by_expressions_{};

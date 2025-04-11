@@ -14,9 +14,9 @@
 
 module;
 
-import stl;
-
 export module physical_operator_type;
+
+import stl;
 
 namespace infinity {
 
@@ -35,10 +35,16 @@ export enum class PhysicalOperatorType : i8 {
 
     kTableScan,
     kFilter,
+    kUnnest,
+    kUnnestAggregate,
     kIndexScan,
     kDummyScan,
     kKnnScan,
     kMergeKnn,
+    kMatchTensorScan,
+    kMergeMatchTensor,
+    kMatchSparseScan,
+    kMergeMatchSparse,
     kMatch,
     kFusion,
 
@@ -74,7 +80,6 @@ export enum class PhysicalOperatorType : i8 {
     // DDL
     kAlter,
     kCreateTable,
-    kCreateIndex,
     kCreateCollection,
     kCreateDatabase,
     kCreateView,
@@ -84,6 +89,10 @@ export enum class PhysicalOperatorType : i8 {
     kDropDatabase,
     kDropView,
 
+    kCreateIndexPrepare,
+    kCreateIndexDo,
+    kCreateIndexFinish,
+
     // misc
     kExplain,
     kPreparedPlan,
@@ -91,6 +100,14 @@ export enum class PhysicalOperatorType : i8 {
     kFlush,
     kOptimize,
     kCommand,
+
+    // Compact
+    kCompact,
+    kCompactIndexPrepare,
+    kCompactIndexDo,
+    kCompactFinish,
+
+    kReadCache,
 
     kSink,
     kSource,

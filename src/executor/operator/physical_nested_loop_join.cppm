@@ -14,8 +14,10 @@
 
 module;
 
+export module physical_nested_loop_join;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
@@ -24,8 +26,10 @@ import base_expression;
 import data_table;
 import load_meta;
 import infinity_exception;
-
-export module physical_nested_loop_join;
+import internal_types;
+import join_reference;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -37,23 +41,18 @@ public:
                                     UniquePtr<PhysicalOperator> left,
                                     UniquePtr<PhysicalOperator> right,
                                     SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kJoinNestedLoop, Move(left), Move(right), id, load_metas), join_type_(join_type),
-          conditions_(Move(conditions)) {}
+        : PhysicalOperator(PhysicalOperatorType::kJoinNestedLoop, std::move(left), std::move(right), id, load_metas), join_type_(join_type),
+          conditions_(std::move(conditions)) {}
 
     ~PhysicalNestedLoopJoin() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
     SharedPtr<Vector<String>> GetOutputNames() const final;
 
     SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline const Vector<SharedPtr<BaseExpression>> &conditions() const { return conditions_; }
 

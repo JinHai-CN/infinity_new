@@ -14,15 +14,28 @@
 
 module;
 
+export module expression_binder;
+
 import stl;
-import parser;
 import function;
 import bind_context;
 import base_expression;
 import query_context;
 import subquery_expression;
-
-export module expression_binder;
+import parsed_expr;
+import column_expr;
+import constant_expr;
+import between_expr;
+import function_expr;
+import case_expr;
+import in_expr;
+import knn_expr;
+import match_expr;
+import match_tensor_expr;
+import match_sparse_expr;
+import search_expr;
+import subquery_expr;
+import cast_expr;
 
 namespace infinity {
 
@@ -63,6 +76,12 @@ public:
 
     virtual SharedPtr<BaseExpression> BuildKnnExpr(const KnnExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root);
 
+    virtual SharedPtr<BaseExpression> BuildMatchTextExpr(const MatchExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root);
+
+    virtual SharedPtr<BaseExpression> BuildMatchTensorExpr(const MatchTensorExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root);
+
+    virtual SharedPtr<BaseExpression> BuildMatchSparseExpr(MatchSparseExpr &&expr, BindContext *bind_context_ptr, i64 depth, bool root);
+
     virtual SharedPtr<BaseExpression> BuildSearchExpr(const SearchExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root);
 
     // Bind subquery expression.
@@ -74,8 +93,13 @@ public:
     //    BuildWindow(const hsql::Expr &expr, const SharedPtr<BindContext>& bind_context_ptr);
 
     //    SharedPtr<PlanBuilder> plan_builder_ptr_;
+
+    virtual SharedPtr<BaseExpression> BuildUnnestExpr(const FunctionExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root);
+
 protected:
     Optional<SharedPtr<BaseExpression>> TryBuildSpecialFuncExpr(const FunctionExpr &expr, BindContext *bind_context_ptr, i64 depth);
+
+    static bool IsUnnestedFunction(const String &function_name);
 
     QueryContext *query_context_{};
 };

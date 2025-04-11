@@ -15,23 +15,19 @@
 module;
 
 #include <sstream>
+module search_expression;
 import stl;
-import parser;
 import expression_type;
 import scalar_function;
 import match_expression;
 import knn_expression;
+import match_tensor_expression;
 import fusion_expression;
-
-module search_expression;
 
 namespace infinity {
 
-SearchExpression::SearchExpression(Vector<SharedPtr<MatchExpression>> &match_exprs,
-                                   Vector<SharedPtr<KnnExpression>> &knn_exprs,
-                                   SharedPtr<FusionExpression> fusion_expr)
-    : BaseExpression(ExpressionType::kSearch, Vector<SharedPtr<BaseExpression>>()), match_exprs_(match_exprs), knn_exprs_(knn_exprs),
-      fusion_expr_(fusion_expr) {}
+SearchExpression::SearchExpression(Vector<SharedPtr<BaseExpression>> &match_exprs, Vector<SharedPtr<FusionExpression>> &fusion_exprs)
+    : BaseExpression(ExpressionType::kSearch, Vector<SharedPtr<BaseExpression>>()), match_exprs_(match_exprs), fusion_exprs_(fusion_exprs) {}
 
 String SearchExpression::ToString() const {
     if (!alias_.empty()) {
@@ -47,13 +43,7 @@ String SearchExpression::ToString() const {
         cnt++;
         oss << match_expr->ToString();
     }
-    for (auto &knn_expr : knn_exprs_) {
-        if (cnt != 0)
-            oss << ", ";
-        cnt++;
-        oss << knn_expr->ToString();
-    }
-    if (fusion_expr_.get() != nullptr) {
+    for (auto &fusion_expr_ : fusion_exprs_) {
         if (cnt != 0)
             oss << ", ";
         cnt++;

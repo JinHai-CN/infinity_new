@@ -14,18 +14,19 @@
 
 module;
 
-#include <cmath>
+module minus;
 
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module minus;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -41,14 +42,34 @@ struct MinusFunction {
 
 template <>
 inline bool MinusFunction::Run(HugeIntT, HugeIntT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MinusFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
 template <>
 inline bool MinusFunction::Run(DecimalT, DecimalT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MinusFunction::Run";
+    UnrecoverableError(error_message);
     return false;
+}
+
+template <>
+inline bool MinusFunction::Run(Float16T value, Float16T &result) {
+    result = -value;
+    if (const auto f = static_cast<float>(result); std::isinf(f) || std::isnan(f)) {
+        return false;
+    }
+    return true;
+}
+
+template <>
+inline bool MinusFunction::Run(BFloat16T value, BFloat16T &result) {
+    result = -value;
+    if (const auto f = static_cast<float>(result); std::isinf(f) || std::isnan(f)) {
+        return false;
+    }
+    return true;
 }
 
 template <>
@@ -89,7 +110,7 @@ inline bool MinusFunction::Run(MixedT value, MixedT &result) {
     return false;
 }
 
-void RegisterMinusFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+SharedPtr<ScalarFunctionSet> GetMinusFunctionSet() {
     String func_name = "-";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -125,6 +146,18 @@ void RegisterMinusFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                 &ScalarFunction::UnaryFunctionWithFailure<HugeIntT, HugeIntT, MinusFunction>);
     function_set_ptr->AddFunction(minus_int128);
 
+    ScalarFunction minus_float16(func_name,
+                                 {DataType(LogicalType::kFloat16)},
+                                 DataType(LogicalType::kFloat16),
+                                 &ScalarFunction::UnaryFunctionWithFailure<Float16T, Float16T, MinusFunction>);
+    function_set_ptr->AddFunction(minus_float16);
+
+    ScalarFunction minus_bfloat16(func_name,
+                                  {DataType(LogicalType::kBFloat16)},
+                                  DataType(LogicalType::kBFloat16),
+                                  &ScalarFunction::UnaryFunctionWithFailure<BFloat16T, BFloat16T, MinusFunction>);
+    function_set_ptr->AddFunction(minus_bfloat16);
+
     ScalarFunction minus_float(func_name,
                                {DataType(LogicalType::kFloat)},
                                DataType(LogicalType::kFloat),
@@ -149,6 +182,17 @@ void RegisterMinusFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                &ScalarFunction::UnaryFunctionWithFailure<MixedT, MixedT, MinusFunction>);
     function_set_ptr->AddFunction(minus_mixed);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    return function_set_ptr;
 }
+
+void RegisterMinusFunction(const UniquePtr<Catalog> &catalog_ptr) {
+    auto function_set_ptr = GetMinusFunctionSet();
+    Catalog::AddFunctionSet(catalog_ptr.get(), std::move(function_set_ptr));
+}
+
+void AppendRegisterMinusFunction(const UniquePtr<Catalog> &catalog_ptr) {
+    auto function_set_ptr = GetMinusFunctionSet();
+    Catalog::AppendToScalarFunctionSet(catalog_ptr.get(), std::move(function_set_ptr));
+}
+
 } // namespace infinity

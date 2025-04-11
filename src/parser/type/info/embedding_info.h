@@ -16,10 +16,14 @@
 
 #include "default_value.h"
 #include "type/complex/embedding_type.h"
-#include "type/logical_type.h"
 #include "type/type_info.h"
 
 #include <memory>
+
+namespace arrow {
+class FixedSizeListType;
+class ListType;
+} // namespace arrow
 
 namespace infinity {
 
@@ -36,6 +40,10 @@ public:
     ~EmbeddingInfo() override = default;
 
     bool operator==(const TypeInfo &other) const override;
+
+    bool operator==(const arrow::FixedSizeListType &other) const;
+
+    bool operator==(const arrow::ListType &other) const;
 
     [[nodiscard]] inline size_t Size() const override { return EmbeddingType::EmbeddingSize(embedding_data_type_, dimension_); }
 

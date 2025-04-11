@@ -17,14 +17,16 @@ module;
 #include <arpa/inet.h>
 #include <boost/asio/write.hpp>
 
+module buffer_writer;
+
 import stl;
+import third_party;
 import pg_message;
 import ring_buffer_iterator;
 
 import infinity_exception;
 import default_values;
-
-module buffer_writer;
+import logger;
 
 namespace infinity {
 
@@ -37,13 +39,13 @@ void BufferWriter::send_string(const String &value, NullTerminator null_terminat
     auto position_in_string = 0u;
 
     if (!full()) {
-        position_in_string = static_cast<u32>(Min(max_capacity() - size(), value.size()));
+        position_in_string = static_cast<u32>(std::min(max_capacity() - size(), static_cast<SizeT>(value.size())));
         RingBufferIterator::CopyN(value.c_str(), position_in_string, current_pos_);
         current_pos_.increment(position_in_string);
     }
 
     while (position_in_string < value.size()) {
-        const auto bytes_to_transfer = Min(max_capacity(), value.size() - position_in_string);
+        const auto bytes_to_transfer = std::min(max_capacity(), static_cast<SizeT>(value.size() - position_in_string));
         try_flush(bytes_to_transfer);
         RingBufferIterator::CopyN(value.c_str() + position_in_string, bytes_to_transfer, current_pos_);
         current_pos_.increment(bytes_to_transfer);
@@ -106,7 +108,8 @@ void BufferWriter::send_value_u32(u32 host_value) {
 
 void BufferWriter::flush(SizeT bytes) {
     if (bytes > size()) {
-        Error<NetworkException>("Can't flush more bytes than available");
+        String error_message = "Can't flush more bytes than available";
+        UnrecoverableError(error_message);
     }
     const auto bytes_to_send = bytes ? bytes : size();
     SizeT bytes_sent{0};
@@ -127,11 +130,12 @@ void BufferWriter::flush(SizeT bytes) {
     }
 
     if (boost_error == boost::asio::error::broken_pipe || boost_error == boost::asio::error::connection_reset || bytes_sent == 0) {
-        Error<NetworkException>("Write failed. Client close connection.");
+        String error_message = fmt::format("Can't flush more bytes than available: {}", boost_error.message());
+        UnrecoverableError(error_message);
     }
 
     if (boost_error) {
-        Error<NetworkException>(boost_error.message());
+        UnrecoverableError(boost_error.message());
     }
     start_pos_.increment(bytes_sent);
 }

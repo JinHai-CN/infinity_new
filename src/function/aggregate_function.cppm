@@ -13,7 +13,11 @@
 // limitations under the License.
 
 module;
+
 #include <type_traits>
+
+export module aggregate_function;
+
 import stl;
 import function;
 import function_data;
@@ -21,15 +25,16 @@ import column_vector;
 import vector_buffer;
 import infinity_exception;
 import base_expression;
-import parser;
-
-export module aggregate_function;
+import data_type;
+import logical_type;
+import internal_types;
+import logger;
 
 namespace infinity {
 
-using AggregateInitializeFuncType = StdFunction<void(ptr_t)>;
-using AggregateUpdateFuncType = StdFunction<void(ptr_t, const SharedPtr<ColumnVector> &)>;
-using AggregateFinalizeFuncType = StdFunction<ptr_t(ptr_t)>;
+using AggregateInitializeFuncType = std::function<void(ptr_t)>;
+using AggregateUpdateFuncType = std::function<void(ptr_t, const SharedPtr<ColumnVector> &)>;
+using AggregateFinalizeFuncType = std::function<ptr_t(ptr_t)>;
 
 class AggregateOperation {
 public:
@@ -45,7 +50,8 @@ public:
         switch (input_column_vector->vector_type()) {
             case ColumnVectorType::kCompactBit: {
                 if constexpr (!std::is_same_v<InputType, BooleanT>) {
-                    Error<TypeException>("kCompactBit column vector only support Boolean type");
+                    String error_message = "kCompactBit column vector only support Boolean type";
+                    UnrecoverableError(error_message);
                 } else {
                     // only for count, min, max
                     SizeT row_count = input_column_vector->Size();
@@ -69,7 +75,8 @@ public:
             case ColumnVectorType::kConstant: {
                 if (input_column_vector->data_type()->type() == LogicalType::kBoolean) {
                     if constexpr (!std::is_same_v<InputType, BooleanT>) {
-                        Error<TypeException>("types do not match");
+                        String error_message = "types do not match";
+                        UnrecoverableError(error_message);
                     } else {
                         BooleanT value = input_column_vector->buffer_->GetCompactBit(0);
                         ((AggregateState *)state)->Update(&value, 0);
@@ -81,10 +88,12 @@ public:
                 break;
             }
             case ColumnVectorType::kHeterogeneous: {
-                Error<NotImplementException>("Heterogeneous type isn't implemented");
+                String error_message = "Not implement: Heterogeneous type";
+                UnrecoverableError(error_message);
             }
             default: {
-                Error<NotImplementException>("Other type of column vector isn't implemented");
+                String error_message = "Not implement: Other type";
+                UnrecoverableError(error_message);
             }
         }
     }
@@ -106,10 +115,9 @@ public:
                                AggregateInitializeFuncType init_func,
                                AggregateUpdateFuncType update_func,
                                AggregateFinalizeFuncType finalize_func)
-        : Function(Move(name), FunctionType::kAggregate), init_func_(Move(init_func)), update_func_(Move(update_func)),
-          finalize_func_(Move(finalize_func)), argument_type_(Move(argument_type)), return_type_(Move(return_type)), state_size_(state_size) {
-        state_data_ = SharedPtr<char[]>(new char[state_size_]());
-    }
+        : Function(std::move(name), FunctionType::kAggregate), init_func_(std::move(init_func)), update_func_(std::move(update_func)),
+          finalize_func_(std::move(finalize_func)), argument_type_(std::move(argument_type)), return_type_(std::move(return_type)),
+          state_size_(state_size) {}
 
     void CastArgumentTypes(BaseExpression &input_argument);
 
@@ -117,7 +125,7 @@ public:
 
     [[nodiscard]] String ToString() const override;
 
-    [[nodiscard]] ptr_t GetState() const { return state_data_.get(); }
+    UniquePtr<char[]> InitState() const { return MakeUnique<char[]>(state_size_); }
 
     [[nodiscard]] String GetFuncName() const { return name_; }
 
@@ -129,7 +137,6 @@ public:
     DataType argument_type_;
     DataType return_type_;
 
-    SharedPtr<char[]> state_data_{nullptr};
     SizeT state_size_{};
 };
 
@@ -144,48 +151,4 @@ inline AggregateFunction UnaryAggregate(const String &name, const DataType &inpu
                              AggregateOperation::StateFinalize<AggregateState, ResultType>);
 }
 
-
-class CountStarAggregateOperation {
-public:
-    template <typename AggregateState>
-    static inline void StateInitialize(const ptr_t state) {
-        ((AggregateState *)state)->Initialize();
-    }
-
-    template <typename AggregateState>
-    static inline void StateUpdate(const ptr_t state, const SharedPtr<ColumnVector> &input_column_vector) {
-        // Loop execute state update according to the input column vector
-
-        switch (input_column_vector->vector_type()) {
-            case ColumnVectorType::kConstant: {
-                auto *input_ptr = (i64 *)(input_column_vector->data());
-                ((AggregateState *)state)->Update(input_ptr, 0);
-                break;
-            }
-            default: {
-                Error<NotImplementException>("Other type of column vector isn't implemented");
-            }
-        }
-    }
-
-    template <typename AggregateState, typename ResultType>
-    static inline ptr_t StateFinalize(const ptr_t state) {
-        // Loop execute state update according to the input column vector
-        ptr_t result = ((AggregateState *)state)->Finalize();
-        return result;
-    }
-};
-
-
-export template <typename AggregateState,typename ResultType>
-inline auto CountStarAggregate(String &name, const DataType &input_type, const DataType &return_type) -> AggregateFunction {
-    auto agg_function = AggregateFunction(name,
-                                          input_type,
-                                          return_type,
-                                          AggregateState::Size(input_type),
-                                          CountStarAggregateOperation::StateInitialize<AggregateState>,
-                                          CountStarAggregateOperation::StateUpdate<AggregateState>,
-                                          CountStarAggregateOperation::StateFinalize<AggregateState, ResultType>);
-    return agg_function;
-}
 } // namespace infinity

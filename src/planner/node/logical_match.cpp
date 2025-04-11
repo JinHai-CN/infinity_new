@@ -16,21 +16,25 @@ module;
 
 #include <sstream>
 
+module logical_match;
+
 import stl;
 import base_table_ref;
 import column_binding;
 import logical_node_type;
 import match_expression;
-import parser;
+
 import default_values;
 import third_party;
-
-module logical_match;
+import meta_info;
+import logical_type;
+import internal_types;
+import explain_logical_plan;
 
 namespace infinity {
 
 LogicalMatch::LogicalMatch(u64 node_id, SharedPtr<BaseTableRef> base_table_ref, SharedPtr<MatchExpression> match_expr)
-    : LogicalNode(node_id, LogicalNodeType::kMatch), base_table_ref_(base_table_ref), match_expr_(Move(match_expr)) {}
+    : LogicalNode(node_id, LogicalNodeType::kMatch), base_table_ref_(base_table_ref), match_expr_(std::move(match_expr)) {}
 
 Vector<ColumnBinding> LogicalMatch::GetColumnBindings() const {
     Vector<ColumnBinding> result;
@@ -64,7 +68,7 @@ SharedPtr<Vector<SharedPtr<DataType>>> LogicalMatch::GetOutputTypes() const {
     return result_types;
 }
 
-TableEntry *LogicalMatch::table_collection_ptr() const { return base_table_ref_->table_entry_ptr_; }
+TableInfo *LogicalMatch::table_info() const { return base_table_ref_->table_info_.get(); }
 
 String LogicalMatch::TableAlias() const { return base_table_ref_->alias_; }
 
@@ -79,7 +83,7 @@ String LogicalMatch::ToString(i64 &space) const {
     } else {
         arrow_str = "LogicalMatch ";
     }
-    arrow_str += Format("({})", this->node_id());
+    arrow_str += fmt::format("({})", this->node_id());
     ss << arrow_str << std::endl;
 
     // Table alias and name
@@ -87,21 +91,50 @@ String LogicalMatch::ToString(i64 &space) const {
     table_name += " - table name: ";
     table_name += this->TableAlias();
     table_name += "(";
-    table_name += *base_table_ref_->table_entry_ptr_->GetDBName();
+    table_name += *base_table_ref_->table_info_->db_name_;
     table_name += ".";
-    table_name += *base_table_ref_->table_entry_ptr_->GetTableName();
+    table_name += *base_table_ref_->table_info_->table_name_;
     table_name += ")";
     ss << table_name << std::endl;
 
     // Table index
     String table_index = String(space, ' ');
     table_index += " - table index: #";
-    table_index += ToStr(this->TableIndex());
+    table_index += std::to_string(this->TableIndex());
     ss << table_index << std::endl;
 
     String match_info = String(space, ' ');
     match_info += " - match info: " + match_expr_->ToString();
     ss << match_info << std::endl;
+
+    // filter expression
+    if (filter_expression_.get() != nullptr) {
+        ss << String(space, ' ');
+        ss << " - filter: ";
+        String filter_str;
+        ExplainLogicalPlan::Explain(filter_expression_.get(), filter_str);
+        ss << filter_str << '\n';
+        if (common_query_filter_) {
+            ss << String(space, ' ');
+            ss << " - filter with index: ";
+            if (common_query_filter_->index_filter_) {
+                String filter_str;
+                ExplainLogicalPlan::Explain(common_query_filter_->index_filter_.get(), filter_str);
+                ss << filter_str << '\n';
+            } else {
+                ss << "None\n";
+            }
+            ss << String(space, ' ');
+            ss << " - filter without index: ";
+            if (common_query_filter_->leftover_filter_) {
+                String filter_str;
+                ExplainLogicalPlan::Explain(common_query_filter_->leftover_filter_.get(), filter_str);
+                ss << filter_str << '\n';
+            } else {
+                ss << "None\n";
+            }
+        }
+    }
 
     // Output columns
     String output_columns = String(space, ' ');

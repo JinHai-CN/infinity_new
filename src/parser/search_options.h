@@ -21,7 +21,6 @@ namespace infinity {
 class SearchOptions {
 public:
     explicit SearchOptions(const std::string &options_str);
-    virtual ~SearchOptions(){};
     bool operator==(const SearchOptions &other) const;
     bool operator!=(const SearchOptions &other) const { return !(*this == other); }
 
@@ -30,7 +29,7 @@ public:
     std::map<std::string, std::string> options_;
 
 private:
-    std::pair<std::string, std::string> ParseOption(const std::string_view &option);
+    static std::pair<std::string, std::string> ParseOption(const std::string_view &option);
 };
 
 } // namespace infinity

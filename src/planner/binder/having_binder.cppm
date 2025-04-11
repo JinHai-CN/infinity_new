@@ -14,15 +14,19 @@
 
 module;
 
+export module having_binder;
+
 import stl;
-import parser;
+
 import base_expression;
 import bind_context;
 import expression_binder;
 import query_context;
 import bind_alias_proxy;
-
-export module having_binder;
+import parsed_expr;
+import column_expr;
+import function_expr;
+import knn_expr;
 
 namespace infinity {
 
@@ -39,6 +43,7 @@ public:
     SharedPtr<BaseExpression> BuildFuncExpr(const FunctionExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root) final;
 
     SharedPtr<BaseExpression> BuildKnnExpr(const KnnExpr &expr, BindContext *bind_context_ptr, i64 depth, bool root) override;
+
 private:
     const SharedPtr<BindAliasProxy> &bind_alias_proxy_;
     bool binding_agg_func_ = false;

@@ -14,13 +14,15 @@
 
 module;
 
+export module logical_create_collection;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
-
-export module logical_create_collection;
+import data_type;
+import internal_types;
+import extra_ddl_info;
 
 namespace infinity {
 
@@ -37,8 +39,8 @@ public:
                             SharedPtr<String> collection_name_,
                             u64 table_index,
                             ConflictType conflict_type)
-        : LogicalNode(node_id, LogicalNodeType::kCreateCollection), schema_name_(Move(schema_name)),
-          collection_name_(Move(collection_name_)), table_index_(table_index), conflict_type_(conflict_type) {}
+        : LogicalNode(node_id, LogicalNodeType::kCreateCollection), schema_name_(std::move(schema_name)),
+          collection_name_(std::move(collection_name_)), table_index_(table_index), conflict_type_(conflict_type) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const final;
 

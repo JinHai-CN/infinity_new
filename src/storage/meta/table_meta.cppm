@@ -14,68 +14,134 @@
 
 module;
 
-export module catalog:table_meta;
-
-import :base_entry;
+export module table_meta;
 
 import stl;
-import parser;
+
 import third_party;
 import table_entry_type;
 import buffer_manager;
 import status;
+import extra_ddl_info;
+import column_def;
+import base_entry;
+import snapshot_info;
+import table_entry;
+import entry_list;
+import meta_info;
+import cleanup_scanner;
 
 namespace infinity {
 
-export class DBEntry;
-class TableEntry;
+struct DBEntry;
 class TxnManager;
+class Txn;
 
-export struct TableMeta {
+export struct TableMeta : public BaseMeta {
+    using EntryT = TableEntry;
 
-friend class DBEntry;
-friend struct NewCatalog;
+    friend struct DBEntry;
+    friend struct Catalog;
 
 public:
-    inline explicit TableMeta(const SharedPtr<String> &db_entry_dir, SharedPtr<String> name, DBEntry *db_entry)
-        : db_entry_dir_(db_entry_dir), table_name_(Move(name)), db_entry_(db_entry) {}
+    inline explicit TableMeta(const SharedPtr<String> &db_entry_dir, const SharedPtr<String> table_name, DBEntry *db_entry)
+        : db_entry_dir_(db_entry_dir), table_name_(table_name), db_entry_(db_entry) {}
+
+    static UniquePtr<TableMeta> NewTableMeta(const SharedPtr<String> &db_entry_dir, const SharedPtr<String> &name, DBEntry *db_entry);
+
+    static UniquePtr<TableMeta>
+    NewTableMeta(const SharedPtr<String> &data_dir, const SharedPtr<String> &db_entry_dir, const SharedPtr<String> &name, DBEntry *db_entry);
 
     SharedPtr<String> ToString();
 
-    Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
+    nlohmann::json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<TableMeta> Deserialize(const Json &table_meta_json, DBEntry *db_entry, BufferManager *buffer_mgr);
-
-    void MergeFrom(TableMeta &other);
+    static UniquePtr<TableMeta> Deserialize(const nlohmann::json &table_meta_json, DBEntry *db_entry, BufferManager *buffer_mgr);
 
     [[nodiscard]] const SharedPtr<String> &table_name_ptr() const { return table_name_; }
     [[nodiscard]] const String &table_name() const { return *table_name_; }
-    const SharedPtr<String>& db_name_ptr() const;
+    [[nodiscard]] const SharedPtr<String> &db_name_ptr() const;
+
+    // Relative to the `data_dir`config item
+    [[nodiscard]] const SharedPtr<String> &db_entry_dir() const { return db_entry_dir_; }
+
+    DBEntry *db_entry() { return db_entry_; }
+
+    List<SharedPtr<TableEntry>> GetAllEntries() const { return table_entry_list_.GetAllEntries(); }
 
 private:
-    Tuple<TableEntry *, Status> CreateNewEntry(TableEntryType table_entry_type,
-                                               const SharedPtr<String> &table_collection_name,
-                                               const Vector<SharedPtr<ColumnDef>> &columns,
-                                               u64 txn_id,
-                                               TxnTimeStamp begin_ts,
-                                               TxnManager *txn_mgr);
+    Tuple<TableEntry *, Status> CreateEntry(std::shared_lock<std::shared_mutex> &&r_lock,
+                                            TableEntryType table_entry_type,
+                                            const SharedPtr<String> &table_name,
+                                            const SharedPtr<String> &table_comment,
+                                            const Vector<SharedPtr<ColumnDef>> &columns,
+                                            TransactionID txn_id,
+                                            TxnTimeStamp begin_ts,
+                                            TxnManager *txn_mgr,
+                                            ConflictType conflict_type);
 
-    Tuple<TableEntry *, Status>
-    DropNewEntry(u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr, const String &table_name, ConflictType conflict_type);
+    Tuple<SharedPtr<TableEntry>, Status> DropEntry(std::shared_lock<std::shared_mutex> &&r_lock,
+                                                   TransactionID txn_id,
+                                                   TxnTimeStamp begin_ts,
+                                                   TxnManager *txn_mgr,
+                                                   const String &table_name,
+                                                   ConflictType conflict_type);
 
-    void DeleteNewEntry(u64 txn_id, TxnManager *txn_mgr);
+    Tuple<SharedPtr<TableInfo>, Status> GetTableInfo(std::shared_lock<std::shared_mutex> &&r_lock, Txn *txn);
 
-    Tuple<TableEntry *, Status> GetEntry(u64 txn_id, TxnTimeStamp begin_ts);
+    Tuple<TableEntry *, Status> GetEntry(std::shared_lock<std::shared_mutex> &&r_lock, TransactionID txn_id, TxnTimeStamp begin_ts) {
+        return table_entry_list_.GetEntry(std::move(r_lock), txn_id, begin_ts);
+    }
+
+    Tuple<TableEntry *, Status> GetEntryNolock(TransactionID txn_id, TxnTimeStamp begin_ts) {
+        return table_entry_list_.GetEntryNolock(txn_id, begin_ts);
+    }
+
+    Status AddEntry(std::shared_lock<std::shared_mutex> &&r_lock,
+                    SharedPtr<TableEntry> table_entry,
+                    TransactionID txn_id,
+                    TxnTimeStamp begin_ts,
+                    TxnManager *txn_mgr,
+                    bool add_if_exist = false);
+
+    void DeleteEntry(TransactionID txn_id);
+
+    // replay
+    void
+    CreateEntryReplay(std::function<SharedPtr<TableEntry>(TransactionID, TxnTimeStamp)> &&init_entry, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    // restore snapshot
+    Status ApplyTableSnapshot(std::function<SharedPtr<TableEntry>(TransactionID, TxnTimeStamp)> &&restore_entry,
+                              TransactionID txn_id,
+                              TxnTimeStamp begin_ts);
+
+    void UpdateEntryReplay(std::function<void(SharedPtr<TableEntry>, TransactionID, TxnTimeStamp)> &&update_entry,
+                           TransactionID txn_id,
+                           TxnTimeStamp begin_ts);
+
+    void DropEntryReplay(std::function<SharedPtr<TableEntry>(TransactionID, TxnTimeStamp)> &&init_entry, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    TableEntry *GetEntryReplay(TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    void PushBackEntry(const SharedPtr<TableEntry> &new_table_entry);
+
+    void Sort();
 
 private:
-    RWMutex rw_locker_{};
     SharedPtr<String> db_entry_dir_{};
     SharedPtr<String> table_name_{};
 
     DBEntry *db_entry_{};
 
-    // Ordered by commit_ts from latest to oldest.
-    List<UniquePtr<BaseEntry>> entry_list_{};
+private:
+    EntryList<TableEntry> table_entry_list_{};
+
+public:
+    void Cleanup(CleanupInfoTracer *info_tracer = nullptr, bool dropped = true) override;
+
+    bool PickCleanup(CleanupScanner *scanner) override;
+
+    bool Empty() override { return table_entry_list_.Empty(); }
 };
 
 } // namespace infinity

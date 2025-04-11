@@ -14,23 +14,23 @@
 
 module;
 
+export module task_scheduler;
+
 import config;
 import stl;
 import fragment_task;
 import blocking_queue;
-
-export module task_scheduler;
+import base_statement;
 
 namespace infinity {
 
 class QueryContext;
 class PlanFragment;
 
-using FragmentTaskBlockQueue = BlockingQueue<FragmentTask*>;
+using FragmentTaskBlockQueue = BlockingQueue<FragmentTask *>;
 
 struct Worker {
-    Worker(u64 cpu_id, UniquePtr<FragmentTaskBlockQueue> queue, UniquePtr<Thread> thread)
-        : cpu_id_(cpu_id), queue_(Move(queue)), thread_(Move(thread)) {}
+    Worker(u64 cpu_id, UniquePtr<FragmentTaskBlockQueue> queue, UniquePtr<Thread> thread);
     u64 cpu_id_{0};
     UniquePtr<FragmentTaskBlockQueue> queue_{};
     UniquePtr<Thread> thread_{};
@@ -38,32 +38,28 @@ struct Worker {
 
 export class TaskScheduler {
 public:
-    explicit TaskScheduler(const Config *config_ptr);
+    explicit TaskScheduler(Config *config_ptr);
 
-    ~TaskScheduler() = default;
+    ~TaskScheduler();
 
-    void Init(const Config *config_ptr);
+    void Init(Config *config_ptr);
 
     void UnInit();
 
-    void Schedule(QueryContext* query_context, const Vector<FragmentTask *> &tasks, PlanFragment* plan_fragment);
+    // Schedule start fragments
+    void Schedule(PlanFragment *plan_fragment_root, const BaseStatement *base_statement);
+
+    // `plan_fragment` can be scheduled because all of its dependencies are met.
+    void ScheduleFragment(PlanFragment *plan_fragment);
+
+    void DumpPlanFragment(PlanFragment *plan_fragment);
 
 private:
-    void ScheduleOneWorkerPerQuery(QueryContext* query_context, const Vector<FragmentTask *> &tasks, PlanFragment* plan_fragment);
-    void ScheduleOneWorkerIfPossible(QueryContext* query_context, const Vector<FragmentTask *> &tasks, PlanFragment* plan_fragment);
-    void ScheduleRoundRobin(QueryContext* query_context, const Vector<FragmentTask *> &tasks, PlanFragment* plan_fragment);
+    u64 FindLeastWorkloadWorker();
 
-    inline void ScheduleTask(FragmentTask *task, u64 worker_id) {
-        worker_array_[worker_id].queue_->Enqueue(task);
-    }
+    void ScheduleTask(FragmentTask *task, u64 worker_id);
 
-    inline u64 ProposedWorkerID(u64 object_id) const {
-        return (object_id) % worker_count_;
-    }
-
-    void ToReadyQueue(FragmentTask *task);
-
-    void CoordinatorLoop(FragmentTaskBlockQueue *ready_queue, i64 cpu_id);
+    void RunTask(FragmentTask *task);
 
     void WorkerLoop(FragmentTaskBlockQueue *task_queue, i64 worker_id);
 
@@ -72,9 +68,6 @@ private:
 
     Vector<Worker> worker_array_{};
     Deque<Atomic<u64>> worker_workloads_{};
-
-    UniquePtr<FragmentTaskBlockQueue> ready_queue_{};
-    UniquePtr<Thread> coordinator_{};
 
     u64 worker_count_{0};
 };

@@ -14,82 +14,213 @@
 
 module;
 
-export module catalog:table_entry;
-
-import :segment_entry;
-import :block_entry;
-import :table_index_meta;
-import :base_entry;
+export module table_entry;
 
 import stl;
-import parser;
+
 import txn_store;
 import buffer_manager;
 import third_party;
 import table_entry_type;
-import block_index;
-import data_access_state;
 import status;
+import extra_ddl_info;
+import column_def;
+import internal_types;
+import base_entry;
+import txn_manager;
+import segment_entry;
+import block_entry;
+import table_index_meta;
+import compaction_alg;
+import meta_map;
+import snapshot_info;
+
+import cleanup_scanner;
+import random;
+
+import meta_info;
+import block_entry;
+import column_index_reader;
+import value;
+import infinity_exception;
+import snapshot_info;
+import txn;
 
 namespace infinity {
 
-class DBEntry;
-class IndexDef;
+struct BlockIndex;
+struct IndexIndex;
+class IndexBase;
+struct DBEntry;
 struct TableIndexEntry;
-class IrsIndexEntry;
 class TableMeta;
+struct Catalog;
+class AddTableEntryOp;
+class SegmentIndexEntry;
+class ChunkIndexEntry;
 
-struct TableEntry : public BaseEntry {
-    friend struct NewCatalog;
+struct AppendRange;
+struct DeleteState;
+
+export struct TableEntry final : public BaseEntry {
+    friend struct Catalog;
 
 public:
-    // for iterator unit test.
-    explicit TableEntry() : BaseEntry(EntryType::kTable) {}
+    static Vector<std::string_view> DecodeIndex(std::string_view encode);
 
-    explicit TableEntry(const SharedPtr<String> &db_entry_dir,
-                        SharedPtr<String> table_collection_name,
+    static String EncodeIndex(const String &table_name, TableMeta *table_meta);
+
+public:
+    using EntryOp = AddTableEntryOp;
+
+public:
+    explicit TableEntry(bool is_delete,
+                        const SharedPtr<String> &table_entry_dir,
+                        SharedPtr<String> table_name,
+                        SharedPtr<String> table_comment,
                         const Vector<SharedPtr<ColumnDef>> &columns,
                         TableEntryType table_entry_type,
                         TableMeta *table_meta,
-                        u64 txn_id,
-                        TxnTimeStamp begin_ts);
+                        TransactionID txn_id,
+                        TxnTimeStamp begin_ts,
+                        SegmentID unsealed_id,
+                        SegmentID next_segment_id,
+                        ColumnID next_column_id);
 
 private:
-    Tuple<TableIndexEntry *, Status>
-    CreateIndex(const SharedPtr<IndexDef> &index_def, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+    TableEntry(const TableEntry &other);
+
+public:
+    UniquePtr<TableEntry> Clone(TableMeta *meta = nullptr) const;
+
+    static SharedPtr<TableEntry> NewTableEntry(bool is_delete,
+                                               const SharedPtr<String> &db_entry_dir,
+                                               SharedPtr<String> table_name,
+                                               SharedPtr<String> table_comment,
+                                               const Vector<SharedPtr<ColumnDef>> &columns,
+                                               TableEntryType table_entry_type,
+                                               TableMeta *table_meta,
+                                               TransactionID txn_id,
+                                               TxnTimeStamp begin_ts);
+
+    static SharedPtr<TableEntry> ReplayTableEntry(bool is_delete,
+                                                  TableMeta *table_meta,
+                                                  SharedPtr<String> table_entry_dir,
+                                                  SharedPtr<String> table_name,
+                                                  SharedPtr<String> table_comment,
+                                                  const Vector<SharedPtr<ColumnDef>> &column_defs,
+                                                  TableEntryType table_entry_type,
+                                                  TransactionID txn_id,
+                                                  TxnTimeStamp begin_ts,
+                                                  TxnTimeStamp commit_ts,
+                                                  SizeT row_count,
+                                                  SegmentID unsealed_id,
+                                                  SegmentID next_segment_id,
+                                                  ColumnID next_column_id) noexcept;
+
+    static SharedPtr<TableEntry>
+    ApplyTableSnapshot(TableMeta *table_meta, const SharedPtr<TableSnapshotInfo> &table_snapshot_info, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+public:
+    SharedPtr<TableInfo> GetTableInfo(Txn *txn);
 
     Tuple<TableIndexEntry *, Status>
-    DropIndex(const String &index_name, ConflictType conflict_type, u64 txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
+    CreateIndex(const SharedPtr<IndexBase> &index_base, ConflictType conflict_type, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
 
-    Tuple<TableIndexEntry *, Status> GetIndex(const String &index_name, u64 txn_id, TxnTimeStamp begin_ts);
+    Tuple<SharedPtr<TableIndexEntry>, Status>
+    DropIndex(const String &index_name, ConflictType conflict_type, TransactionID txn_id, TxnTimeStamp begin_ts, TxnManager *txn_mgr);
 
-    void RemoveIndexEntry(const String &index_name, u64 txn_id, TxnManager *txn_mgr);
+    Tuple<TableIndexEntry *, Status> GetIndex(const String &index_name, TransactionID txn_id, TxnTimeStamp begin_ts);
 
-    void CreateIndexFile(void *txn_store, TableIndexEntry *table_index_entry, TxnTimeStamp begin_ts, BufferManager *buffer_mgr);
+    Tuple<Vector<SharedPtr<TableIndexInfo>>, Status> GetTableIndexesInfo(Txn *txn_ptr);
 
-    static void CommitCreateIndex(HashMap<String, TxnIndexStore> &txn_indexes_store_);
+    Tuple<SharedPtr<TableIndexInfo>, Status> GetTableIndexInfo(const String &index_name, Txn *txn_ptr);
 
+    void RemoveIndexEntry(const String &index_name, TransactionID txn_id);
+
+    MetaMap<TableIndexMeta>::MapGuard IndexMetaMap() const { return index_meta_map_.GetMetaMap(); }
+
+    void AddIndexMetaNoLock(const String &table_meta_name, UniquePtr<TableIndexMeta> table_index_meta);
+
+    // replay
+    void UpdateEntryReplay(const SharedPtr<TableEntry> &table_entry);
+
+    TableIndexEntry *CreateIndexReplay(const SharedPtr<String> &index_name,
+                                       std::function<SharedPtr<TableIndexEntry>(TableIndexMeta *, TransactionID, TxnTimeStamp)> &&init_entry,
+                                       TransactionID txn_id,
+                                       TxnTimeStamp begin_ts);
+
+    void UpdateIndexReplay(const String &index_name, TransactionID txn_id, TxnTimeStamp begin_ts, TxnTimeStamp commit_ts);
+
+    void DropIndexReplay(const String &index_name,
+                         std::function<SharedPtr<TableIndexEntry>(TableIndexMeta *, TransactionID, TxnTimeStamp)> &&init_entry,
+                         TransactionID txn_id,
+                         TxnTimeStamp begin_ts);
+
+    TableIndexEntry *GetIndexReplay(const String &index_name, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    Vector<TableIndexEntry *> TableIndexes(TransactionID txn_id, TxnTimeStamp begin_ts) const;
+
+    void AddSegmentReplayWalImport(SharedPtr<SegmentEntry> segment_entry);
+
+    void AddSegmentReplayWalCompact(SharedPtr<SegmentEntry> segment_entry);
+
+    SharedPtr<SegmentInfo> GetSegmentInfo(SegmentID segment_id, Txn *txn);
+
+    Vector<SharedPtr<SegmentInfo>> GetSegmentsInfo(Txn *txn);
+
+private:
+    void AddSegmentReplayWal(SharedPtr<SegmentEntry> segment_entry);
+
+public:
+    void AddSegmentReplay(SharedPtr<SegmentEntry> segment_entry);
+
+    void UpdateSegmentReplay(SharedPtr<SegmentEntry> segment_entry, String segment_filter_binary_data);
+
+public:
     TableMeta *GetTableMeta() const { return table_meta_; }
 
-    void Append(u64 txn_id, void *txn_store, BufferManager *buffer_mgr);
+    void Import(SharedPtr<SegmentEntry> segment_entry, Txn *txn);
 
-    void CommitAppend(u64 txn_id, TxnTimeStamp commit_ts, const AppendState *append_state_ptr);
+    void AddCompactNew(SharedPtr<SegmentEntry> segment_entry);
 
-    void RollbackAppend(u64 txn_id, TxnTimeStamp commit_ts, void *txn_store);
+    void AppendData(TransactionID txn_id, void *txn_store, TxnTimeStamp commit_ts, BufferManager *buffer_mgr, bool is_replay = false);
 
-    Status Delete(u64 txn_id, TxnTimeStamp commit_ts, DeleteState &delete_state);
+    void RollbackAppend(TransactionID txn_id, TxnTimeStamp commit_ts, void *txn_store);
 
-    void CommitDelete(u64 txn_id, TxnTimeStamp commit_ts, const DeleteState &append_state);
+    Status Delete(TransactionID txn_id, void *txn_store, TxnTimeStamp commit_ts, DeleteState &delete_state);
 
-    Status RollbackDelete(u64 txn_id, DeleteState &append_state, BufferManager *buffer_mgr);
+    Status RollbackDelete(TransactionID txn_id, DeleteState &append_state, BufferManager *buffer_mgr);
 
-    Status ImportSegment(TxnTimeStamp commit_ts, SharedPtr<SegmentEntry> segment);
+    Status CommitCompact(TransactionID txn_id, TxnTimeStamp commit_ts, TxnCompactStore &compact_state);
 
-    static inline u32 GetNextSegmentID(TableEntry *table_entry) { return table_entry->next_segment_id_++; }
+    Status RollbackCompact(TransactionID txn_id, TxnTimeStamp commit_ts, const TxnCompactStore &compact_state);
 
-    static inline u32 GetMaxSegmentID(const TableEntry *table_entry) { return table_entry->next_segment_id_; }
+    Status CommitWrite(TransactionID txn_id,
+                       TxnTimeStamp commit_ts,
+                       const HashMap<SegmentID, TxnSegmentStore> &segment_stores,
+                       const DeleteState *delete_state);
 
-    static SegmentEntry *GetSegmentByID(const TableEntry *table_entry, u32 seg_id);
+    Status RollbackWrite(TxnTimeStamp commit_ts, const Vector<TxnSegmentStore> &segment_stores);
+
+    SegmentID GetNextSegmentID() { return next_segment_id_++; }
+
+    SegmentID next_segment_id() const { return next_segment_id_; }
+
+    ColumnID next_column_id() const { return next_column_id_; }
+
+    static SharedPtr<String> DetermineTableDir(const String &parent_dir, const String &table_name);
+
+    // MemIndexInsert is non-blocking. Caller must ensure there's no RowID gap between each call.
+    void MemIndexInsert(Txn *txn, Vector<AppendRange> &append_ranges);
+
+    // User shall invoke this regularly to populate recently inserted rows into the fulltext index. Noop for other types of index.
+    void MemIndexCommit();
+
+    // Invoked once at init stage to recovery memory index.
+    void MemIndexRecover(BufferManager *buffer_manager, TxnTimeStamp ts);
+
+    void OptimizeIndex(Txn *txn);
 
 public:
     // Getter
@@ -98,61 +229,193 @@ public:
 
     inline const SharedPtr<String> &GetTableName() const { return table_name_; }
 
-    const BlockEntry *GetBlockEntryByID(u32 seg_id, u16 block_id) const;
+    inline const SharedPtr<String> &GetTableComment() const { return table_comment_; }
 
-    inline const ColumnDef *GetColumnDefByID(u64 column_id) const { return columns_[column_id].get(); }
+    TxnTimeStamp max_commit_ts() const {
+        std::shared_lock lock(rw_locker_);
+        return max_commit_ts_;
+    }
+
+    SharedPtr<SegmentEntry> GetSegmentByID(SegmentID seg_id, TxnTimeStamp ts) const;
+
+    SharedPtr<SegmentEntry> GetSegmentByID(SegmentID seg_id, Txn *txn) const;
+
+    Vector<SharedPtr<SegmentEntry>> GetVisibleSegments(Txn *txn) const;
+
+    const ColumnDef *GetColumnDefByIdx(SizeT idx) const {
+        if (idx >= columns_.size()) {
+            return nullptr;
+        }
+        return columns_[idx].get();
+    }
+
+    const ColumnDef *GetColumnDefByID(ColumnID column_id) const;
+
+    SharedPtr<ColumnDef> GetColumnDefByName(const String &column_name) const;
+
+    SizeT GetColumnIdxByID(ColumnID column_id) const;
 
     inline SizeT ColumnCount() const { return columns_.size(); }
 
     const SharedPtr<String> &TableEntryDir() const { return table_entry_dir_; }
 
+    String GetPathNameTail() const;
+
     inline SizeT row_count() const { return row_count_; }
 
     inline TableEntryType EntryType() const { return table_entry_type_; }
 
+    SegmentID unsealed_id() const { return unsealed_id_; }
+
     Pair<SizeT, Status> GetSegmentRowCountBySegmentID(u32 seg_id);
 
-    SharedPtr<BlockIndex> GetBlockIndex(u64 txn_id, TxnTimeStamp begin_ts);
+    SharedPtr<BlockIndex> GetBlockIndex(Txn *txn);
 
-    void GetFullTextAnalyzers(u64 txn_id, TxnTimeStamp begin_ts, SharedPtr<IrsIndexEntry> &irs_index_entry, Map<String, String> &column2analyzer);
+    SharedPtr<IndexIndex> GetIndexIndex(Txn *txn);
+
+    void GetFulltextAnalyzers(TransactionID txn_id, TxnTimeStamp begin_ts, Map<String, String> &column2analyzer);
+
+    Tuple<Vector<String>, Vector<TableIndexMeta *>, std::shared_lock<std::shared_mutex>> GetAllIndexMapGuard() const;
+
+    TableIndexMeta *GetIndexMetaPtrByName(const String &name) const;
 
 public:
-    Json Serialize(TxnTimeStamp max_commit_ts, bool is_full_checkpoint);
+    nlohmann::json Serialize(TxnTimeStamp max_commit_ts);
 
-    static UniquePtr<TableEntry> Deserialize(const Json &table_entry_json, TableMeta *table_meta, BufferManager *buffer_mgr);
+    static UniquePtr<TableEntry> Deserialize(const nlohmann::json &table_entry_json, TableMeta *table_meta, BufferManager *buffer_mgr);
 
-    virtual void MergeFrom(BaseEntry &other);
+    bool CheckDeleteConflict(const Vector<RowID> &delete_row_ids, TransactionID txn_id);
 
 public:
     u64 GetColumnIdByName(const String &column_name) const;
 
-    Map<u32, SharedPtr<SegmentEntry>> &segment_map() { return segment_map_; }
+    Map<SegmentID, SharedPtr<SegmentEntry>> &segment_map() { return segment_map_; }
 
-    HashMap<String, UniquePtr<TableIndexMeta>> &index_meta_map() { return index_meta_map_; }
+    SegmentEntry *GetSegmentEntry(SegmentID seg_id) const {
+        std::shared_lock lock(rw_locker_);
+        auto iter = segment_map_.find(seg_id);
+        if (iter == segment_map_.end()) {
+            return nullptr;
+        }
+        return iter->second.get();
+    }
 
-protected:
-    HashMap<String, u64> column_name2column_id_;
+    const Vector<SharedPtr<ColumnDef>> &column_defs() const { return columns_; }
 
-    RWMutex rw_locker_{};
+    SharedPtr<IndexReader> GetFullTextIndexReader(Txn *txn);
 
-    SharedPtr<String> table_entry_dir_{};
+    void UpdateFullTextSegmentTs(TxnTimeStamp ts, std::shared_mutex &segment_update_ts_mutex, TxnTimeStamp &segment_update_ts) {
+        return fulltext_column_index_cache_.UpdateKnownUpdateTs(ts, segment_update_ts_mutex, segment_update_ts);
+    }
 
-    SharedPtr<String> table_name_{};
+    void InvalidateFullTextIndexCache();
 
-    Vector<SharedPtr<ColumnDef>> columns_{};
+    void InvalidateFullTextIndexCache(TableIndexEntry *table_index_entry);
 
-    TableEntryType table_entry_type_{TableEntryType::kTableEntry};
+    void InvalidateFullTextSegmentIndexCache(SegmentIndexEntry *segment_index_entry);
 
+    void InvalidateFullTextChunkIndexCache(ChunkIndexEntry *chunk_index_entry);
+
+private:
     TableMeta *table_meta_{};
 
-    // From data table
-    Atomic<SizeT> row_count_{};
-    Map<u32, SharedPtr<SegmentEntry>> segment_map_{};
-    SegmentEntry *unsealed_segment_{};
-    atomic_u32 next_segment_id_{};
+    MetaMap<TableIndexMeta> index_meta_map_{};
 
-    // Index definition
-    HashMap<String, UniquePtr<TableIndexMeta>> index_meta_map_{};
+    const SharedPtr<String> table_entry_dir_{};
+
+    SharedPtr<String> table_name_{};
+    SharedPtr<String> table_comment_{};
+
+    Vector<SharedPtr<ColumnDef>> columns_{};
+    ColumnID next_column_id_{};
+
+    const TableEntryType table_entry_type_{TableEntryType::kTableEntry};
+
+    mutable std::shared_mutex rw_locker_{};
+
+    // From data table
+    Atomic<SizeT> row_count_{}; // this is actual row count
+    Map<SegmentID, SharedPtr<SegmentEntry>> segment_map_{};
+    SharedPtr<SegmentEntry> unsealed_segment_{};
+    SegmentID unsealed_id_{};
+    Atomic<SegmentID> next_segment_id_{};
+
+    // for full text search cache
+    TableIndexReaderCache fulltext_column_index_cache_;
+
+    TxnTimeStamp max_commit_ts_ = 0;
+
+public:
+    // set nullptr to close auto compaction
+    void SetCompactionAlg(UniquePtr<CompactionAlg> compaction_alg) { compaction_alg_ = std::move(compaction_alg); }
+
+    void AddSegmentToCompactionAlg(SegmentEntry *segment_entry);
+
+    void AddDeleteToCompactionAlg(SegmentID segment_id);
+
+    void InitCompactionAlg(TxnTimeStamp system_start_ts);
+
+    Vector<SegmentEntry *> CheckCompaction(TransactionID txn_id);
+
+    bool CompactPrepare() const;
+
+private:
+    // the compaction algorithm, mutable because all its interface are protected by lock
+    mutable UniquePtr<CompactionAlg> compaction_alg_{};
+
+private:
+    void MemIndexInsertInner(TableIndexEntry *table_index_entry, Txn *txn, SegmentID seg_id, Vector<AppendRange> &append_ranges);
+
+public:
+    bool CheckIfIndexColumn(ColumnID column_id, TransactionID txn_id, TxnTimeStamp begin_ts);
+
+    bool CheckAnyDelete(TxnTimeStamp check_ts) const;
+
+public:
+    void PickCleanup(CleanupScanner *scanner) override;
+
+    void Cleanup(CleanupInfoTracer *info_tracer = nullptr, bool dropped = true) override;
+
+    Vector<String> GetFilePath(Txn *txn) const final;
+
+public:
+    Status AddWriteTxnNum(Txn *txn);
+
+    void DecWriteTxnNum();
+
+    Status SetLocked();
+
+    Status SetUnlock();
+
+    enum struct TableStatus : u8 {
+        kNone = 0,
+        kCreatingIndex,
+        kCompacting,
+    };
+
+    bool SetCompact(TableStatus &status, Txn *txn);
+
+    bool SetCreatingIndex(TableStatus &status, Txn *txn);
+
+    void SetCompactDone();
+
+    void SetCreateIndexDone();
+
+private:
+    TableStatus table_status_ = TableStatus::kNone;
+
+    std::mutex mtx_; // when table is locked, write is not allowed.
+    std::condition_variable cv_;
+    bool locked_ = false;
+    bool wait_lock_ = false;
+    SizeT write_txn_num_ = 0;
+
+public:
+    void AddColumns(const Vector<SharedPtr<ColumnDef>> &columns, TxnTableStore *txn_store);
+
+    void DropColumns(const Vector<String> &column_names, TxnTableStore *txn_store);
+
+    SharedPtr<TableSnapshotInfo> GetSnapshotInfo(Txn *txn_ptr) const;
 };
 
 } // namespace infinity

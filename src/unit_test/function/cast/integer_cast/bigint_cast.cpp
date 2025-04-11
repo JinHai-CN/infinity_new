@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -36,8 +36,16 @@ import cast_table;
 import column_vector;
 import integer_cast;
 import bound_cast_func;
+import internal_types;
+import logical_type;
+import data_type;
 
-class BigIntCastTest : public BaseTest {};
+using namespace infinity;
+class BigIntCastTest : public BaseTest {
+    void SetUp() override {}
+
+    void TearDown() override { BaseTest::TearDown(); }
+};
 
 TEST_F(BigIntCastTest, bigint_cast0) {
     using namespace infinity;
@@ -47,7 +55,7 @@ TEST_F(BigIntCastTest, bigint_cast0) {
         BigIntT source = 0;
         BigIntT target;
 
-        EXPECT_THROW(IntegerTryCastToFixlen::Run(source, target), FunctionException);
+        EXPECT_THROW(IntegerTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
 
     // BigIntT to TinyInt
@@ -170,7 +178,7 @@ TEST_F(BigIntCastTest, bigint_cast0) {
     {
         BigIntT source = std::numeric_limits<BigIntT>::min();
         DecimalT target;
-        EXPECT_THROW(IntegerTryCastToFixlen::Run(source, target), NotImplementException);
+        EXPECT_THROW(IntegerTryCastToFixlen::Run(source, target), UnrecoverableException);
     }
 
     // BigIntT to VarcharT
@@ -184,53 +192,53 @@ TEST_F(BigIntCastTest, bigint_cast0) {
         col_varchar_ptr->Initialize();
 
         source = std::numeric_limits<BigIntT>::min();
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
 
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 20);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 20);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = std::numeric_limits<BigIntT>::max();
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 19);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 19);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 0;
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 1);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 1);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 9;
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 1);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 1);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 10;
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 2);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 2);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 99;
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 2);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 2);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = -100;
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 4);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 4);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
 
         source = 100;
-        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr));
-//        src_str = ToStr(source);
-//        EXPECT_EQ(src_str.size(), 3);
-//        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
+        EXPECT_TRUE(IntegerTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
+        //        src_str = std::to_string(source);
+        //        EXPECT_EQ(src_str.size(), 3);
+        //        EXPECT_STREQ(src_str.c_str(), target.ToString().c_str());
     }
 }
 
@@ -388,7 +396,7 @@ TEST_F(BigIntCastTest, bigint_cast1) {
         col_target->Initialize();
 
         CastParameters cast_parameters;
-        EXPECT_THROW(big2decimal_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), NotImplementException);
+        EXPECT_THROW(big2decimal_ptr.function(col_source, col_target, DEFAULT_VECTOR_SIZE, cast_parameters), UnrecoverableException);
     }
 
     // cast bigint column vector to Varchar vector
@@ -406,7 +414,7 @@ TEST_F(BigIntCastTest, bigint_cast1) {
         EXPECT_TRUE(result);
         for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
             i64 check_value = static_cast<i64>(i);
-            String check_str(ToStr(check_value));
+            String check_str(std::to_string(check_value));
             Value vx = col_target->GetValue(i);
             const String &s2 = vx.GetVarchar();
             EXPECT_STREQ(s2.c_str(), check_str.c_str());
@@ -417,6 +425,6 @@ TEST_F(BigIntCastTest, bigint_cast1) {
     {
         DataType source(LogicalType::kBigInt);
         DataType target(LogicalType::kTimestamp);
-        EXPECT_THROW(BindIntegerCast<IntegerT>(source, target), TypeException);
+        EXPECT_THROW(BindIntegerCast<IntegerT>(source, target), RecoverableException);
     }
 }

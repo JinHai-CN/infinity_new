@@ -14,16 +14,18 @@
 
 module;
 
+module first;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import aggregate_function;
 import aggregate_function_set;
-import parser;
-import third_party;
 
-module first;
+import third_party;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
@@ -87,9 +89,9 @@ public:
     inline static SizeT Size(const DataType &) { return sizeof(FirstState<VarcharT, VarcharT>); }
 };
 //
-//template <>
-//struct FirstState<PathT, PathT> {
-//public:
+// template <>
+// struct FirstState<PathT, PathT> {
+// public:
 //    PathT value_{};
 //    bool is_set_{false};
 //
@@ -118,7 +120,7 @@ public:
 //    inline static SizeT Size(const DataType &data_type) { return sizeof(FirstState<PathT, PathT>); }
 //};
 
-void RegisterFirstFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterFirstFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "FIRST";
 
     SharedPtr<AggregateFunctionSet> function_set_ptr = MakeShared<AggregateFunctionSet>(func_name);
@@ -161,6 +163,20 @@ void RegisterFirstFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
         AggregateFunction first_function = UnaryAggregate<FirstState<HugeIntT, HugeIntT>, HugeIntT, HugeIntT>(func_name,
                                                                                                               DataType(LogicalType::kHugeInt),
                                                                                                               DataType(LogicalType::kHugeInt));
+        function_set_ptr->AddFunction(first_function);
+    }
+
+    {
+        AggregateFunction first_function = UnaryAggregate<FirstState<Float16T, Float16T>, Float16T, Float16T>(func_name,
+                                                                                                              DataType(LogicalType::kFloat16),
+                                                                                                              DataType(LogicalType::kFloat16));
+        function_set_ptr->AddFunction(first_function);
+    }
+
+    {
+        AggregateFunction first_function = UnaryAggregate<FirstState<BFloat16T, BFloat16T>, BFloat16T, BFloat16T>(func_name,
+                                                                                                                  DataType(LogicalType::kBFloat16),
+                                                                                                                  DataType(LogicalType::kBFloat16));
         function_set_ptr->AddFunction(first_function);
     }
 
@@ -255,7 +271,7 @@ void RegisterFirstFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
         function_set_ptr->AddFunction(first_function);
     }
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

@@ -13,60 +13,70 @@
 // limitations under the License.
 
 module;
-#include <cmath>
+
+#include <compare>
 #include <type_traits>
 
+module inequals;
+
+import logical_type;
 import stl;
 import catalog;
-
+import status;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module inequals;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 struct InEqualsFunction {
     template <typename TA, typename TB, typename TC>
     static inline void Run(TA left, TB right, TC &result) {
-        if constexpr (std::is_same_v<std::remove_cv_t<TA>, u8> && std::is_same_v<std::remove_cv_t<TB>, u8> &&
-                      std::is_same_v<std::remove_cv_t<TC>, u8>) {
-            result = (left ^ right);
-        } else {
-            result = (left != right);
-        }
+        static_assert(false, "Unsupported type");
+    }
+};
+
+struct BooleanInEqualsFunction {
+    // keep compatible with template Run call
+    template <typename TA, typename TB, typename TC>
+    static inline void Run(TA left, TB right, TC &result) {
+        static_assert(false, "Unsupported type");
     }
 };
 
 template <>
-inline void InEqualsFunction::Run(VarcharT left, VarcharT right, bool &result) {
-    if (left.length_ != right.length_) {
-        result = true;
-        return;
-    }
-    if (left.IsInlined()) {
-        result = (Memcmp(left.short_.data_, right.short_.data_, left.length_) != 0);
-        return;
-    } else {
-        // Both left and right are not inline
-        if(left.IsValue() && right.IsValue()) {
-            if (Memcmp(left.value_.prefix_, right.value_.prefix_, VARCHAR_PREFIX_LEN) != 0) {
-                result = (Memcmp(left.value_.ptr_, right.value_.ptr_, left.length_) != 0);
-                return;
-            }
-        } else {
-            Error<NotImplementException>("Column vector varchar can't be compared");
-        }
-    }
-    result = true;
+inline void BooleanInEqualsFunction::Run<u8, u8, u8>(u8 left, u8 right, u8 &result) {
+    result = (left ^ right);
 }
 
 template <>
+inline void BooleanInEqualsFunction::Run<bool, bool, bool>(bool left, bool right, bool &result) {
+    result = (left != right);
+}
+
+struct PODTypeInEqualsFunction {
+    template <typename TA, typename TB, typename TC>
+    static inline void Run(TA left, TB right, TC &result) {
+        result.SetValue(left != right);
+    }
+};
+
+struct ColumnValueReaderTypeInEqualsFunction {
+    template <typename TA, typename TB, typename TC>
+    static inline void Run(TA &left, TB &right, TC &result) {
+        result.SetValue(!CheckReaderValueEquality(left, right));
+    }
+};
+
+template <>
 inline void InEqualsFunction::Run(MixedT, BigIntT, bool &) {
-    Error<NotImplementException>("Not implement: mixed <> bigint");
+    Status status = Status::NotSupport("Not implement: mixed <> bigint");
+    RecoverableError(status);
 }
 
 template <>
@@ -76,7 +86,8 @@ inline void InEqualsFunction::Run(BigIntT left, MixedT right, bool &result) {
 
 template <>
 inline void InEqualsFunction::Run(MixedT, DoubleT, bool &) {
-    Error<NotImplementException>("Not implement: mixed <> double");
+    Status status = Status::NotSupport("Not implement: mixed <> double");
+    RecoverableError(status);
 }
 
 template <>
@@ -86,7 +97,8 @@ inline void InEqualsFunction::Run(DoubleT left, MixedT right, bool &result) {
 
 template <>
 inline void InEqualsFunction::Run(MixedT, VarcharT, bool &) {
-    Error<NotImplementException>("Not implement: mixed <> varchar");
+    Status status = Status::NotSupport("Not implement: mixed <> varchar");
+    RecoverableError(status);
 }
 
 template <>
@@ -94,42 +106,44 @@ inline void InEqualsFunction::Run(VarcharT left, MixedT right, bool &result) {
     InEqualsFunction::Run(right, left, result);
 }
 
-template <typename CompareType>
+template <typename CompareType, typename InEqualsFunction>
 static void GenerateInEqualsFunction(SharedPtr<ScalarFunctionSet> &function_set_ptr, DataType data_type) {
     String func_name = "<>";
     ScalarFunction inequals_function(func_name,
                                      {data_type, data_type},
-                                     DataType(kBoolean),
+                                     DataType(LogicalType::kBoolean),
                                      &ScalarFunction::BinaryFunction<CompareType, CompareType, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(inequals_function);
 }
 
-void RegisterInEqualsFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterInEqualFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "<>";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
 
-    GenerateInEqualsFunction<BooleanT>(function_set_ptr, DataType(LogicalType::kBoolean));
-    GenerateInEqualsFunction<TinyIntT>(function_set_ptr, DataType(LogicalType::kTinyInt));
-    GenerateInEqualsFunction<SmallIntT>(function_set_ptr, DataType(LogicalType::kSmallInt));
-    GenerateInEqualsFunction<IntegerT>(function_set_ptr, DataType(LogicalType::kInteger));
-    GenerateInEqualsFunction<BigIntT>(function_set_ptr, DataType(LogicalType::kBigInt));
-    GenerateInEqualsFunction<HugeIntT>(function_set_ptr, DataType(LogicalType::kHugeInt));
-    GenerateInEqualsFunction<FloatT>(function_set_ptr, DataType(LogicalType::kFloat));
-    GenerateInEqualsFunction<DoubleT>(function_set_ptr, DataType(LogicalType::kDouble));
+    GenerateInEqualsFunction<BooleanT, BooleanInEqualsFunction>(function_set_ptr, DataType(LogicalType::kBoolean));
+    GenerateInEqualsFunction<TinyIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kTinyInt));
+    GenerateInEqualsFunction<SmallIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kSmallInt));
+    GenerateInEqualsFunction<IntegerT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kInteger));
+    GenerateInEqualsFunction<BigIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kBigInt));
+    GenerateInEqualsFunction<HugeIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kHugeInt));
+    GenerateInEqualsFunction<FloatT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kFloat16));
+    GenerateInEqualsFunction<FloatT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kBFloat16));
+    GenerateInEqualsFunction<FloatT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kFloat));
+    GenerateInEqualsFunction<DoubleT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kDouble));
 
     //    GenerateInEqualsFunction<Decimal16T>(function_set_ptr, DataType(LogicalType::kDecimal16));
     //    GenerateInEqualsFunction<Decimal32T>(function_set_ptr, DataType(LogicalType::kDecimal32));
     //    GenerateInEqualsFunction<Decimal64T>(function_set_ptr, DataType(LogicalType::kDecimal64));
     //    GenerateInEqualsFunction<Decimal128T>(function_set_ptr, DataType(LogicalType::kDecimal128));
 
-    GenerateInEqualsFunction<VarcharT>(function_set_ptr, DataType(LogicalType::kVarchar));
+    GenerateInEqualsFunction<VarcharT, ColumnValueReaderTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kVarchar));
     //    GenerateInEqualsFunction<CharT>(function_set_ptr, DataType(LogicalType::kChar));
 
-    GenerateInEqualsFunction<DateT>(function_set_ptr, DataType(LogicalType::kDate));
-    GenerateInEqualsFunction<TimeT>(function_set_ptr, DataType(LogicalType::kTime));
-    GenerateInEqualsFunction<DateTimeT>(function_set_ptr, DataType(LogicalType::kDateTime));
-    GenerateInEqualsFunction<TimestampT>(function_set_ptr, DataType(LogicalType::kTimestamp));
+    GenerateInEqualsFunction<DateT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kDate));
+    GenerateInEqualsFunction<TimeT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kTime));
+    GenerateInEqualsFunction<DateTimeT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kDateTime));
+    GenerateInEqualsFunction<TimestampT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kTimestamp));
     //    GenerateInEqualsFunction<TimestampTZT>(function_set_ptr, DataType(LogicalType::kTimestampTZ));
     //    GenerateInEqualsFunction<IntervalT>(function_set_ptr, DataType(LogicalType::kInterval));
 
@@ -150,41 +164,126 @@ void RegisterInEqualsFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
 
     ScalarFunction mix_inequals_bigint(func_name,
                                        {DataType(LogicalType::kMixed), DataType(LogicalType::kBigInt)},
-                                       DataType(kBoolean),
+                                       DataType(LogicalType::kBoolean),
                                        &ScalarFunction::BinaryFunction<MixedT, BigIntT, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(mix_inequals_bigint);
 
     ScalarFunction bigint_inequals_mixed(func_name,
                                          {DataType(LogicalType::kBigInt), DataType(LogicalType::kMixed)},
-                                         DataType(kBoolean),
+                                         DataType(LogicalType::kBoolean),
                                          &ScalarFunction::BinaryFunction<BigIntT, MixedT, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(bigint_inequals_mixed);
 
     ScalarFunction mix_inequals_double(func_name,
                                        {DataType(LogicalType::kMixed), DataType(LogicalType::kDouble)},
-                                       DataType(kBoolean),
+                                       DataType(LogicalType::kBoolean),
                                        &ScalarFunction::BinaryFunction<MixedT, DoubleT, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(mix_inequals_double);
 
     ScalarFunction double_inequals_mixed(func_name,
                                          {DataType(LogicalType::kDouble), DataType(LogicalType::kMixed)},
-                                         DataType(kBoolean),
+                                         DataType(LogicalType::kBoolean),
                                          &ScalarFunction::BinaryFunction<DoubleT, MixedT, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(double_inequals_mixed);
 
     ScalarFunction mix_inequals_varchar(func_name,
                                         {DataType(LogicalType::kMixed), DataType(LogicalType::kVarchar)},
-                                        DataType(kBoolean),
+                                        DataType(LogicalType::kBoolean),
                                         &ScalarFunction::BinaryFunction<MixedT, VarcharT, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(mix_inequals_varchar);
 
     ScalarFunction varchar_inequals_mixed(func_name,
                                           {DataType(LogicalType::kVarchar), DataType(LogicalType::kMixed)},
-                                          DataType(kBoolean),
+                                          DataType(LogicalType::kBoolean),
                                           &ScalarFunction::BinaryFunction<VarcharT, MixedT, BooleanT, InEqualsFunction>);
     function_set_ptr->AddFunction(varchar_inequals_mixed);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+}
+
+void RegisterInEqualAliasFunction(const UniquePtr<Catalog> &catalog_ptr) {
+    String func_name = "!=";
+
+    SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
+
+    GenerateInEqualsFunction<BooleanT, BooleanInEqualsFunction>(function_set_ptr, DataType(LogicalType::kBoolean));
+    GenerateInEqualsFunction<TinyIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kTinyInt));
+    GenerateInEqualsFunction<SmallIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kSmallInt));
+    GenerateInEqualsFunction<IntegerT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kInteger));
+    GenerateInEqualsFunction<BigIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kBigInt));
+    GenerateInEqualsFunction<HugeIntT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kHugeInt));
+    GenerateInEqualsFunction<FloatT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kFloat16));
+    GenerateInEqualsFunction<FloatT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kBFloat16));
+    GenerateInEqualsFunction<FloatT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kFloat));
+    GenerateInEqualsFunction<DoubleT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kDouble));
+
+    //    GenerateInEqualsFunction<Decimal16T>(function_set_ptr, DataType(LogicalType::kDecimal16));
+    //    GenerateInEqualsFunction<Decimal32T>(function_set_ptr, DataType(LogicalType::kDecimal32));
+    //    GenerateInEqualsFunction<Decimal64T>(function_set_ptr, DataType(LogicalType::kDecimal64));
+    //    GenerateInEqualsFunction<Decimal128T>(function_set_ptr, DataType(LogicalType::kDecimal128));
+
+    GenerateInEqualsFunction<VarcharT, ColumnValueReaderTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kVarchar));
+    //    GenerateInEqualsFunction<CharT>(function_set_ptr, DataType(LogicalType::kChar));
+
+    GenerateInEqualsFunction<DateT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kDate));
+    GenerateInEqualsFunction<TimeT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kTime));
+    GenerateInEqualsFunction<DateTimeT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kDateTime));
+    GenerateInEqualsFunction<TimestampT, PODTypeInEqualsFunction>(function_set_ptr, DataType(LogicalType::kTimestamp));
+    //    GenerateInEqualsFunction<TimestampTZT>(function_set_ptr, DataType(LogicalType::kTimestampTZ));
+    //    GenerateInEqualsFunction<IntervalT>(function_set_ptr, DataType(LogicalType::kInterval));
+
+    //    GenerateInEqualsFunction<PointT>(function_set_ptr, DataType(LogicalType::kPoint));
+    //    GenerateInEqualsFunction<LineT>(function_set_ptr, DataType(LogicalType::kLine));
+    //    GenerateInEqualsFunction<LineSegT>(function_set_ptr, DataType(LogicalType::kLineSeg));
+    //    GenerateInEqualsFunction<BoxT>(function_set_ptr, DataType(LogicalType::kBox));
+    //    GenerateInEqualsFunction<PathT>(function_set_ptr, DataType(LogicalType::kPath));
+    //    GenerateInEqualsFunction<PolygonT>(function_set_ptr, DataType(LogicalType::kPolygon));
+    //    GenerateInEqualsFunction<CircleT>(function_set_ptr, DataType(LogicalType::kCircle));
+    //
+    //    GenerateInEqualsFunction<BitmapT>(function_set_ptr, DataType(LogicalType::kBitmap));
+    //    GenerateInEqualsFunction<UuidT>(function_set_ptr, DataType(LogicalType::kUuid));
+    //    GenerateInEqualsFunction<BlobT>(function_set_ptr, DataType(LogicalType::kBlob));
+    //    GenerateInEqualsFunction<EmbeddingT>(function_set_ptr, DataType(LogicalType::kEmbedding));
+
+    //    GenerateInEqualsFunction<MixedT>(function_set_ptr, DataType(LogicalType::kMixed));
+
+    ScalarFunction mix_inequals_bigint(func_name,
+                                       {DataType(LogicalType::kMixed), DataType(LogicalType::kBigInt)},
+                                       DataType(LogicalType::kBoolean),
+                                       &ScalarFunction::BinaryFunction<MixedT, BigIntT, BooleanT, InEqualsFunction>);
+    function_set_ptr->AddFunction(mix_inequals_bigint);
+
+    ScalarFunction bigint_inequals_mixed(func_name,
+                                         {DataType(LogicalType::kBigInt), DataType(LogicalType::kMixed)},
+                                         DataType(LogicalType::kBoolean),
+                                         &ScalarFunction::BinaryFunction<BigIntT, MixedT, BooleanT, InEqualsFunction>);
+    function_set_ptr->AddFunction(bigint_inequals_mixed);
+
+    ScalarFunction mix_inequals_double(func_name,
+                                       {DataType(LogicalType::kMixed), DataType(LogicalType::kDouble)},
+                                       DataType(LogicalType::kBoolean),
+                                       &ScalarFunction::BinaryFunction<MixedT, DoubleT, BooleanT, InEqualsFunction>);
+    function_set_ptr->AddFunction(mix_inequals_double);
+
+    ScalarFunction double_inequals_mixed(func_name,
+                                         {DataType(LogicalType::kDouble), DataType(LogicalType::kMixed)},
+                                         DataType(LogicalType::kBoolean),
+                                         &ScalarFunction::BinaryFunction<DoubleT, MixedT, BooleanT, InEqualsFunction>);
+    function_set_ptr->AddFunction(double_inequals_mixed);
+
+    ScalarFunction mix_inequals_varchar(func_name,
+                                        {DataType(LogicalType::kMixed), DataType(LogicalType::kVarchar)},
+                                        DataType(LogicalType::kBoolean),
+                                        &ScalarFunction::BinaryFunction<MixedT, VarcharT, BooleanT, InEqualsFunction>);
+    function_set_ptr->AddFunction(mix_inequals_varchar);
+
+    ScalarFunction varchar_inequals_mixed(func_name,
+                                          {DataType(LogicalType::kVarchar), DataType(LogicalType::kMixed)},
+                                          DataType(LogicalType::kBoolean),
+                                          &ScalarFunction::BinaryFunction<VarcharT, MixedT, BooleanT, InEqualsFunction>);
+    function_set_ptr->AddFunction(varchar_inequals_mixed);
+
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

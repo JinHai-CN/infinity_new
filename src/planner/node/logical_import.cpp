@@ -16,12 +16,12 @@ module;
 
 #include <sstream>
 
+module logical_import;
+
 import stl;
 import column_binding;
-import parser;
-import catalog;
 
-module logical_import;
+import internal_types;
 
 namespace infinity {
 
@@ -59,9 +59,25 @@ String LogicalImport::ToString(i64 &space) const {
             ss << "(FVECS) ";
             break;
         }
+        case CopyFileType::kCSR: {
+            ss << "(CSR) ";
+            break;
+        }
+        case CopyFileType::kBVECS: {
+            ss << "(BVECS) ";
+            break;
+        }
+        case CopyFileType::kPARQUET: {
+            ss << "(PARQUET) ";
+            break;
+        }
+        case CopyFileType::kInvalid: {
+            ss << "(Invalid) ";
+            break;
+        }
     }
 
-    ss << "to " << *table_entry_->GetDBName() << '.' << *table_entry_->GetTableName();
+    ss << "to " << *table_info_->db_name_ << '.' << *table_info_->table_name_;
 
     space += arrow_str.size();
 

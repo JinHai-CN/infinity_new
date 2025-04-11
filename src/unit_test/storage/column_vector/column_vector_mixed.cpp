@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import logger;
 import column_vector;
 import value;
-import parser;
+
 import default_values;
 import third_party;
 import stl;
@@ -27,9 +28,12 @@ import selection;
 import vector_buffer;
 import infinity_context;
 import global_resource_usage;
+import internal_types;
+import logical_type;
 
 // mask the unittest because BUG1213_1
 #if 0
+using namespace infinity;
 class ColumnVectorMixedTest : public BaseTest {};
 
 TEST_F(ColumnVectorMixedTest, mixed_integer_a) {
@@ -40,13 +44,13 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -67,7 +71,7 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_a) {
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kInteger);
         auto *integer_mixed_ptr = (IntegerMixedType *)(&vx.value_.mixed_value);
         EXPECT_EQ(integer_mixed_ptr->value, i);
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -91,8 +95,8 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_a) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -101,13 +105,13 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -124,7 +128,7 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_a) {
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kInteger);
         auto *integer_mixed_ptr = (IntegerMixedType *)(&vx.value_.mixed_value);
         EXPECT_EQ(integer_mixed_ptr->value, i);
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -171,7 +175,7 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -210,7 +214,7 @@ TEST_F(ColumnVectorMixedTest, mixed_integer_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -231,13 +235,13 @@ TEST_F(ColumnVectorMixedTest, mixed_float_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -257,7 +261,7 @@ TEST_F(ColumnVectorMixedTest, mixed_float_a) {
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kFloat);
         auto *float_mixed_ptr = (FloatMixedType *)(&vx.value_.mixed_value);
         EXPECT_FLOAT_EQ(float_mixed_ptr->value, static_cast<f64>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -281,8 +285,8 @@ TEST_F(ColumnVectorMixedTest, mixed_float_a) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -291,13 +295,13 @@ TEST_F(ColumnVectorMixedTest, mixed_float_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -315,7 +319,7 @@ TEST_F(ColumnVectorMixedTest, mixed_float_a) {
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kFloat);
         auto *float_mixed_ptr = (FloatMixedType *)(&vx.value_.mixed_value);
         EXPECT_FLOAT_EQ(float_mixed_ptr->value, static_cast<f64>(i));
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -362,7 +366,7 @@ TEST_F(ColumnVectorMixedTest, mixed_float_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -401,7 +405,7 @@ TEST_F(ColumnVectorMixedTest, mixed_float_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -422,13 +426,13 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -439,7 +443,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
     EXPECT_TRUE(column_vector.initialized);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         MixedT mixed_str1 = MixedType::MakeString(str);
         Value v = Value::MakeMixedData(mixed_str1);
         EXPECT_EQ(v.GetValue<MixedT>(), mixed_str1);
@@ -451,7 +455,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
         auto *short_str_mixed_ptr = (ShortStrMixedType *)(&vx.value_.mixed_value);
         EXPECT_EQ(short_str_mixed_ptr->length, str.size());
         EXPECT_STREQ(short_str_mixed_ptr->ptr, str.c_str());
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -467,7 +471,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
     EXPECT_EQ(column_vector.vector_type(), clone_column_vector.vector_type());
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kShortStr);
@@ -477,8 +481,8 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
     }
 
     column_vector.Reset();
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -487,13 +491,13 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -503,7 +507,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
     EXPECT_NE(column_vector.nulls_ptr_, nullptr);
     EXPECT_TRUE(column_vector.initialized);
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         MixedT mixed_str1 = MixedType::MakeString(str);
         column_vector.AppendByPtr((ptr_t)(&mixed_str1));
 
@@ -513,12 +517,12 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_a) {
         auto *short_str_mixed_ptr = (ShortStrMixedType *)(&vx.value_.mixed_value);
         EXPECT_EQ(short_str_mixed_ptr->length, str.size());
         EXPECT_STREQ(short_str_mixed_ptr->ptr, str.c_str());
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         column_constant.Initialize(ColumnVectorType::kConstant, DEFAULT_VECTOR_SIZE);
         column_constant.SetValue(0, column_vector.GetValue(i));
         column_constant.Finalize(1);
@@ -539,7 +543,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_column_vector_select) {
     column_vector.Initialize();
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         MixedT mixed_str1 = MixedType::MakeString(str);
         Value v = Value::MakeMixedData(mixed_str1);
         EXPECT_EQ(v.GetValue<MixedT>(), mixed_str1);
@@ -548,7 +552,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_column_vector_select) {
     }
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kShortStr);
@@ -565,10 +569,10 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
-        String str = ToStr(2 * i);
+        String str = std::to_string(2 * i);
         Value vx = target_column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kShortStr);
@@ -586,7 +590,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_column_slice_init) {
     column_vector.Initialize();
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         MixedT mixed_str1 = MixedType::MakeString(str);
         Value v = Value::MakeMixedData(mixed_str1);
         EXPECT_EQ(v.GetValue<MixedT>(), mixed_str1);
@@ -595,7 +599,7 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_column_slice_init) {
     }
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE; ++i) {
-        String str = ToStr(i);
+        String str = std::to_string(i);
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kShortStr);
@@ -609,12 +613,12 @@ TEST_F(ColumnVectorMixedTest, mixed_short_str_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
         i64 src_idx = start_idx + i;
-        String str = ToStr(src_idx);
+        String str = std::to_string(src_idx);
         Value vx = target_column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kShortStr);
@@ -632,13 +636,13 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -667,7 +671,7 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_a) {
 
         String value_header(long_str_mixed_ptr->header, BaseMixedType::LONG_STR_HEADER);
         EXPECT_STREQ(value_header.c_str(), header.c_str());
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -700,8 +704,8 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_a) {
 
     column_vector.Reset();
 
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -711,13 +715,13 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -743,7 +747,7 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_a) {
 
         String value_header(long_str_mixed_ptr->header, BaseMixedType::LONG_STR_HEADER);
         EXPECT_STREQ(value_header.c_str(), header.c_str());
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -809,7 +813,7 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         String str(20, 'a' + (2 * i) % 26);
@@ -866,7 +870,7 @@ TEST_F(ColumnVectorMixedTest, mixed_long_str_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -895,13 +899,13 @@ TEST_F(ColumnVectorMixedTest, mixed_null_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -920,7 +924,7 @@ TEST_F(ColumnVectorMixedTest, mixed_null_a) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kNull);
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -943,8 +947,8 @@ TEST_F(ColumnVectorMixedTest, mixed_null_a) {
 
     column_vector.Reset();
 
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -953,13 +957,13 @@ TEST_F(ColumnVectorMixedTest, mixed_null_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -975,7 +979,7 @@ TEST_F(ColumnVectorMixedTest, mixed_null_a) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kNull);
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -1019,7 +1023,7 @@ TEST_F(ColumnVectorMixedTest, mixed_null_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -1054,7 +1058,7 @@ TEST_F(ColumnVectorMixedTest, mixed_null_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -1073,13 +1077,13 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1098,7 +1102,7 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_a) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kMissing);
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -1121,8 +1125,8 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_a) {
 
     column_vector.Reset();
 
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_NE(column_vector.data(), nullptr);
@@ -1131,13 +1135,13 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1153,7 +1157,7 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_a) {
         Value vx = column_vector.GetValue(i);
         EXPECT_EQ(vx.type().type(), LogicalType::kMixed);
         EXPECT_EQ(vx.value_.mixed_value.type, MixedValueType::kMissing);
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -1197,7 +1201,7 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         Value vx = target_column_vector.GetValue(i);
@@ -1232,7 +1236,7 @@ TEST_F(ColumnVectorMixedTest, mixed_missing_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -1251,13 +1255,13 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1443,7 +1447,7 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_a) {
             }
         }
 
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -1592,8 +1596,8 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_a) {
 
     column_vector.Reset();
 
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -1603,13 +1607,13 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -1792,7 +1796,7 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_a) {
             }
         }
 
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -2172,7 +2176,7 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         f64 fvalue = static_cast<f64>(2 * i) + static_cast<f64>(2 * i) / 10.0f;
@@ -2501,7 +2505,7 @@ TEST_F(ColumnVectorMixedTest, mixed_tuple_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {
@@ -2645,13 +2649,13 @@ TEST_F(ColumnVectorMixedTest, mixed_array_a) {
     column_vector.Initialize();
 
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -2864,7 +2868,7 @@ TEST_F(ColumnVectorMixedTest, mixed_array_a) {
             }
         }
 
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector clone_column_vector(data_type);
@@ -3036,8 +3040,8 @@ TEST_F(ColumnVectorMixedTest, mixed_array_a) {
 
     column_vector.Reset();
 
-    EXPECT_EQ(column_vector.capacity(), 0);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), 0u);
+    EXPECT_EQ(column_vector.Size(), 0u);
     //    EXPECT_EQ(column_vector.data_type_size_, 0);
     EXPECT_NE(column_vector.buffer_, nullptr);
     EXPECT_EQ(column_vector.buffer_->fix_heap_mgr_, nullptr);
@@ -3047,13 +3051,13 @@ TEST_F(ColumnVectorMixedTest, mixed_array_a) {
     // ====
     column_vector.Initialize();
     
-    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), TypeException);
+    EXPECT_THROW(column_vector.SetVectorType(ColumnVectorType::kFlat), UnrecoverableException);
 
-    EXPECT_EQ(column_vector.capacity(), DEFAULT_VECTOR_SIZE);
-    EXPECT_EQ(column_vector.Size(), 0);
+    EXPECT_EQ(column_vector.capacity(), (u64)DEFAULT_VECTOR_SIZE);
+    EXPECT_EQ(column_vector.Size(), 0u);
 
-    EXPECT_THROW(column_vector.GetValue(0), TypeException);
-    EXPECT_EQ(column_vector.data_type_size_, 16);
+    EXPECT_THROW(column_vector.GetValue(0), UnrecoverableException);
+    EXPECT_EQ(column_vector.data_type_size_, 16u);
     EXPECT_NE(column_vector.data(), nullptr);
     EXPECT_EQ(column_vector.vector_type(), ColumnVectorType::kFlat);
     EXPECT_EQ(column_vector.data_type(), data_type);
@@ -3263,7 +3267,7 @@ TEST_F(ColumnVectorMixedTest, mixed_array_a) {
             }
         }
 
-        EXPECT_THROW(column_vector.GetValue(i + 1), TypeException);
+        EXPECT_THROW(column_vector.GetValue(i + 1), UnrecoverableException);
     }
 
     ColumnVector column_constant(data_type);
@@ -3699,7 +3703,7 @@ TEST_F(ColumnVectorMixedTest, mixed_array_column_vector_select) {
 
     ColumnVector target_column_vector(data_type);
     target_column_vector.Initialize(column_vector, input_select);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < DEFAULT_VECTOR_SIZE / 2; ++i) {
         f64 fvalue = static_cast<f64>(2 * i) + static_cast<f64>(2 * i) / 10.0f;
@@ -4079,7 +4083,7 @@ TEST_F(ColumnVectorMixedTest, mixed_array_column_slice_init) {
     i64 end_idx = 3 * DEFAULT_VECTOR_SIZE / 4;
     i64 count = end_idx - start_idx;
     target_column_vector.Initialize(column_vector, start_idx, end_idx);
-    EXPECT_EQ(target_column_vector.Size(), DEFAULT_VECTOR_SIZE / 2);
+    EXPECT_EQ(target_column_vector.Size(), (u64)DEFAULT_VECTOR_SIZE / 2);
     EXPECT_EQ(count, DEFAULT_VECTOR_SIZE / 2);
 
     for (i64 i = 0; i < count; ++i) {

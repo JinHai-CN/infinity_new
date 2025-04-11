@@ -15,16 +15,21 @@
 module;
 
 #include <type_traits>
+
+module or_func;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-// import third_party;
 
-module or_func;
+// import third_party;
+import status;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -38,7 +43,8 @@ struct OrFunction {
                              std::is_same_v<std::remove_cv_t<TC>, BooleanT>) {
             result = left or right;
         } else {
-            Error<TypeException>("OR function accepts only u8 and BooleanT.");
+            String error_message = "OR function accepts only u8 and BooleanT.";
+            UnrecoverableError(error_message);
         }
     }
 };
@@ -52,14 +58,14 @@ static void GenerateOrFunction(SharedPtr<ScalarFunctionSet> &function_set_ptr) {
     function_set_ptr->AddFunction(or_function);
 }
 
-void RegisterOrFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterOrFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "OR";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
 
     GenerateOrFunction(function_set_ptr);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

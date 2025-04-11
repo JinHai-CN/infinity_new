@@ -14,18 +14,22 @@
 
 module;
 
+export module physical_create_table;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
-import index_def;
+import index_base;
 import table_def;
 import load_meta;
 import infinity_exception;
-
-export module physical_create_table;
+import internal_types;
+import extra_ddl_info;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -51,14 +55,10 @@ public:
 
     ~PhysicalCreateTable() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }

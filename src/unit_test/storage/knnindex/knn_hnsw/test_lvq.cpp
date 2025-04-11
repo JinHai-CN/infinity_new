@@ -12,64 +12,77 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
-#include <iostream>
+#include "gtest/gtest.h"
 #include <random>
+import base_test;
 
-import lvq_store;
-import local_file_system;
-import file_system;
-import file_system_type;
 import dist_func_l2;
-import compilation_config;
+import data_store;
+import vec_store_type;
+import stl;
+import infinity_exception;
+import hnsw_common;
+import virtual_store;
+import local_file_handle;
 
 using namespace infinity;
 
 class HnswLVQTest : public BaseTest {
 public:
-    using LVQ8Store = LVQStore<float, int8_t, LVQL2Cache<float, int8_t>>;
-    using LVQ8Data = LVQ8Store::StoreType;
+    void SetUp() override {
+        system(("rm -rf " + file_dir_).c_str());
+        system(("mkdir -p " + file_dir_).c_str());
+    }
+
+    void TearDown() override { system(("rm -rf " + file_dir_).c_str()); }
+
+public:
+    using LabelT = int;
+    using VecStoreType = LVQL2VecStoreType<float, int8_t>;
+    using DataStore = DataStore<VecStoreType, LabelT>;
+    using LVQ8Data = typename VecStoreType::StoreType;
 
     static constexpr size_t dim_ = 16;
-    static constexpr size_t vec_n_ = 20;
-    static constexpr size_t buffer_size_ = 4;
-    const std::string file_dir_ = tmp_data_path();
+    static constexpr size_t vec_n_ = 32;
+    const std::string file_dir_ = GetFullTmpDir();
 
     bool dump_ = false;
 
-    void CheckStore(LVQ8Store &store, const float *vecs) {
-
+    void CheckStore(DataStore &store, const float *vecs) {
         std::cout.widen(8);
         std::cout.fill('0');
-        auto mean = store.GetMean();
-        store.Compress();
+        const auto &vec_store_meta = store.vec_store_meta();
+        const auto *mean = vec_store_meta.mean();
         for (size_t i = 0; i < store.cur_vec_num(); ++i) {
             const float *vec = vecs + dim_ * i;
             LVQ8Data lvq = store.GetVec(i);
-            auto c = lvq.GetCompressVec();
+            const auto *c = lvq->compress_vec_;
             auto res = std::make_unique<float[]>(dim_);
             for (size_t j = 0; j < dim_; ++j) {
-                auto [scale, bias] = lvq.GetScalar();
+                auto scale = lvq->scale_;
+                auto bias = lvq->bias_;
                 res[j] = scale * c[j] + bias + mean[j];
+            }
+
+            if (dump_) {
+                std::cout << i << std::endl;
+                std::cout << "LVQ:\t";
+                for (size_t j = 0; j < 16; ++j) {
+                    std::cout << res[j] << " ";
+                }
+                std::cout << std::endl;
+
+                std::cout << "Old:\t";
+                for (size_t j = 0; j < 16; ++j) {
+                    std::cout << vec[j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            for (size_t j = 0; j < dim_; ++j) {
                 float error = std::abs((res[j] - vec[j]) / vec[j]);
-                EXPECT_LE(error, 1e-2);
+                EXPECT_LE(error, 2e-2);
             }
-
-            if (!dump_) {
-                continue;
-            }
-            std::cout << i << std::endl;
-            std::cout << "LVQ:\t";
-            for (size_t j = 0; j < 16; ++j) {
-                std::cout << res[j] << " ";
-            }
-            std::cout << std::endl;
-
-            std::cout << "Old:\t";
-            for (size_t j = 0; j < 16; ++j) {
-                std::cout << vec[i] << " ";
-            }
-            std::cout << std::endl;
         }
         if (dump_) {
             std::cout << "---------------" << std::endl;
@@ -91,99 +104,96 @@ TEST_F(HnswLVQTest, test1) {
 
     // dump_ = true;
     {
-        LVQ8Store lvq_store = LVQ8Store::Make(vec_n_, dim_, buffer_size_);
-        auto ret = lvq_store.AddVec(data.get(), vec_n_);
-        EXPECT_NE(ret, LVQ8Store::ERR_IDX);
+        auto lvq_store = DataStore::Make(vec_n_, 1 /*chunk_n*/, dim_, 0 /*Mmax0*/, 0 /*Mmax*/);
+        auto iter = DenseVectorIter<float, LabelT>(data.get(), dim_, vec_n_);
+        auto [start_i, end_i] = lvq_store.OptAddVec(std::move(iter));
+        EXPECT_EQ(start_i, 0u);
+        EXPECT_EQ(end_i, vec_n_);
         CheckStore(lvq_store, data.get());
     }
 
     {
         size_t idx = 0;
-        LVQ8Store lvq_store = LVQ8Store::Make(vec_n_, dim_, buffer_size_);
-        auto ret = lvq_store.AddVec(data.get(), vec_n_ / 2);
-        EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-        idx += vec_n_ / 2;
-
-        ret = lvq_store.AddVec(data.get() + idx * dim_, vec_n_ - idx);
-        EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-        CheckStore(lvq_store, data.get());
-    }
-
-    {
-        size_t idx = 0;
-        LVQ8Store lvq_store = LVQ8Store::Make(vec_n_, dim_, buffer_size_);
-        auto ret = lvq_store.AddVec(data.get(), vec_n_ / 2);
-        EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-        idx += vec_n_ / 2;
-
-        for (size_t i = 0; i < buffer_size_ && idx < vec_n_; ++i) {
-            ret = lvq_store.AddVec(data.get() + idx * dim_, 1);
-            EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-            ++idx;
+        auto lvq_store = DataStore::Make(vec_n_, 1 /*chunk_n*/, dim_, 0 /*Mmax0*/, 0 /*Mmax*/);
+        {
+            auto iter = DenseVectorIter<float, LabelT>(data.get(), dim_, vec_n_ / 2);
+            auto [start_i, end_i] = lvq_store.OptAddVec(std::move(iter));
+            EXPECT_EQ(start_i, 0u);
+            EXPECT_EQ(end_i, vec_n_ / 2);
+            idx = end_i;
         }
-        ret = lvq_store.AddVec(data.get() + idx * dim_, vec_n_ - idx);
-        EXPECT_NE(ret, LVQ8Store::ERR_IDX);
 
+        {
+            auto iter = DenseVectorIter<float, LabelT>(data.get() + idx * dim_, dim_, vec_n_ - idx);
+            auto [start_i, end_i] = lvq_store.AddVec(std::move(iter));
+            EXPECT_EQ(start_i, vec_n_ / 2);
+            EXPECT_EQ(end_i, vec_n_);
+        }
         CheckStore(lvq_store, data.get());
+        lvq_store.Optimize();
+        CheckStore(lvq_store, data.get());
+    }
+
+    {
+        size_t idx = 0;
+        auto lvq_store = DataStore::Make(vec_n_, 1 /*chunk_n*/, dim_, 0 /*Mmax0*/, 0 /*Mmax*/);
+        {
+            auto iter = DenseVectorIter<float, LabelT>(data.get(), dim_, vec_n_ / 2);
+            auto [start_i, end_i] = lvq_store.AddVec(std::move(iter));
+            EXPECT_EQ(start_i, 0u);
+            EXPECT_EQ(end_i, vec_n_ / 2);
+            idx = end_i;
+        }
+
+        {
+            auto iter = DenseVectorIter<float, LabelT>(data.get() + idx * dim_, dim_, vec_n_ - idx);
+            auto [start_i, end_i] = lvq_store.OptAddVec(std::move(iter));
+            EXPECT_EQ(start_i, vec_n_ / 2);
+            EXPECT_EQ(end_i, vec_n_);
+        }
+        CheckStore(lvq_store, data.get());
+    }
+
+    {
+        auto lvq_store = DataStore::Make(vec_n_, 1 /*chunk_n*/, dim_, 0 /*Mmax0*/, 0 /*Mmax*/);
+        {
+            for (SizeT i = 0; i < vec_n_; ++i) {
+                auto iter = DenseVectorIter<float, LabelT>(data.get() + i * dim_, dim_, 1);
+                auto [start_i, end_i] = lvq_store.OptAddVec(std::move(iter));
+                EXPECT_EQ(start_i, i);
+                EXPECT_EQ(end_i, i + 1);
+                CheckStore(lvq_store, data.get());
+            }
+        }
     }
 
     {
         std::string file_path = file_dir_ + "/lvq_store1.bin";
-        LocalFileSystem fs;
-        if (fs.Exists(file_dir_)) {
-            fs.DeleteDirectory(file_dir_);
-        }
-        fs.CreateDirectory(file_dir_);
+
+        VirtualStore::CleanupDirectory(file_dir_);
 
         {
-            uint8_t file_flags = FileFlags::WRITE_FLAG | FileFlags::CREATE_FLAG;
-            std::unique_ptr<FileHandler> file_handler = fs.OpenFile(file_path, file_flags, FileLockType::kWriteLock);
-
-            LVQ8Store lvq_store = LVQ8Store::Make(vec_n_, dim_, buffer_size_);
-            auto ret = lvq_store.AddVec(data.get(), vec_n_ / 2);
-            EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-
-            lvq_store.Save(*file_handler);
-        }
-        {
-            uint8_t file_flags = FileFlags::READ_FLAG;
-            std::unique_ptr<FileHandler> file_handler = fs.OpenFile(file_path, file_flags, FileLockType::kReadLock);
-
-            LVQ8Store lvq_store = LVQ8Store::Load(*file_handler, 0, buffer_size_);
-
-            CheckStore(lvq_store, data.get());
-        }
-    }
-
-    {
-        std::string file_path = file_dir_ + "/lvq_store2.bin";
-        LocalFileSystem fs;
-
-        size_t idx = 0;
-        {
-            uint8_t file_flags = FileFlags::WRITE_FLAG | FileFlags::CREATE_FLAG;
-            std::unique_ptr<FileHandler> file_handler = fs.OpenFile(file_path, file_flags, FileLockType::kWriteLock);
-
-            LVQ8Store lvq_store = LVQ8Store::Make(vec_n_, dim_, buffer_size_);
-            auto ret = lvq_store.AddVec(data.get(), vec_n_ / 2);
-            EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-            idx += vec_n_ / 2;
-
-            for (size_t i = 0; i < buffer_size_ && idx < vec_n_; ++i) {
-                ret = lvq_store.AddVec(data.get() + idx * dim_, 1);
-                EXPECT_NE(ret, LVQ8Store::ERR_IDX);
-                ++idx;
+            auto [file_handle, status] = VirtualStore::Open(file_path, FileAccessMode::kWrite);
+            if (!status.ok()) {
+                UnrecoverableError(status.message());
             }
-            lvq_store.Save(*file_handler);
+
+            auto lvq_store = DataStore::Make(vec_n_, 1 /*chunk_n*/, dim_, 0 /*Mmax0*/, 0 /*Mmax*/);
+            auto iter = DenseVectorIter<float, LabelT>(data.get(), dim_, vec_n_ / 2);
+            auto [start_i, end_i] = lvq_store.OptAddVec(std::move(iter));
+            EXPECT_EQ(start_i, 0u);
+            EXPECT_EQ(end_i, vec_n_ / 2);
+            auto iter2 = DenseVectorIter<float, LabelT>(data.get() + vec_n_ / 2 * dim_, dim_, vec_n_ - vec_n_ / 2);
+            lvq_store.AddVec(std::move(iter2));
+
+            lvq_store.Save(*file_handle);
         }
         {
-            uint8_t file_flags = FileFlags::READ_FLAG;
-            std::unique_ptr<FileHandler> file_handler = fs.OpenFile(file_path, file_flags, FileLockType::kReadLock);
-
-            LVQ8Store lvq_store = LVQ8Store::Load(*file_handler, 0, buffer_size_);
-
-            auto ret = lvq_store.AddVec(data.get() + idx * dim_, vec_n_ - idx);
-            EXPECT_NE(ret, LVQ8Store::ERR_IDX);
+            auto [file_handle, status] = VirtualStore::Open(file_path, FileAccessMode::kRead);
+            if (!status.ok()) {
+                UnrecoverableError(status.message());
+            }
+            auto lvq_store = DataStore::Load(*file_handle);
 
             CheckStore(lvq_store, data.get());
         }

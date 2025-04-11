@@ -14,26 +14,24 @@
 
 module;
 
-import stl;
-
 export module expression_evaluator;
 
+import stl;
+import base_expression;
+import aggregate_expression;
+import case_expression;
+import cast_expression;
+import column_expression;
+import function_expression;
+import reference_expression;
+import value_expression;
+import in_expression;
+import filter_fulltext_expression;
+import data_block;
+import column_vector;
+import expression_state;
+
 namespace infinity {
-
-class BaseExpression;
-class AggregateExpression;
-class CaseExpression;
-class CastExpression;
-class ColumnExpression;
-class ReferenceExpression;
-class FunctionExpression;
-class ValueExpression;
-class InExpression;
-
-class DataBlock;
-class ColumnVector;
-
-class ExpressionState;
 
 export class ExpressionEvaluator {
 public:
@@ -56,6 +54,8 @@ public:
     void Execute(const SharedPtr<ReferenceExpression> &expr, SharedPtr<ExpressionState> &state, SharedPtr<ColumnVector> &output_column_vector);
 
     void Execute(const SharedPtr<InExpression> &expr, SharedPtr<ExpressionState> &state, SharedPtr<ColumnVector> &output_column_vector);
+
+    void Execute(const SharedPtr<FilterFulltextExpression> &expr, SharedPtr<ExpressionState> &state, SharedPtr<ColumnVector> &output_column_vector);
 
 private:
     const DataBlock *input_data_block_{};

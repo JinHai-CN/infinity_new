@@ -1,26 +1,19 @@
 module;
 
+export module posting_list_format;
+
 import stl;
 import doc_list_format_option;
-import pos_list_format_option;
-import posting_value;
+import position_list_format_option;
+import posting_field;
 import index_defines;
-export module posting_list_format;
 
 namespace infinity {
 
 export class PostingFormatOption {
 public:
-    inline PostingFormatOption(optionflag_t flag = OPTION_FLAG_ALL) : has_term_payload_(false) { InitOptionFlag(flag); }
-    ~PostingFormatOption() = default;
-
-    inline void InitOptionFlag(optionflag_t flag) {
-        has_term_payload_ = flag & of_term_payload;
-        doc_list_format_option_.Init(flag);
-        pos_list_format_option_.Init(flag);
-    }
-
-    bool HasTfBitmap() const { return doc_list_format_option_.HasTfBitmap(); }
+    inline PostingFormatOption(optionflag_t flag = OPTION_FLAG_ALL)
+        : has_term_payload_(flag & of_term_payload), doc_list_format_option_(flag), pos_list_format_option_(flag) {}
 
     bool HasTfList() const { return doc_list_format_option_.HasTfList(); }
 
@@ -42,7 +35,8 @@ public:
 
     bool operator==(const PostingFormatOption &right) const;
 
-    bool IsOnlyTermPayLoad() const { return HasTermPayload() && !HasTfBitmap() && !HasPositionList(); }
+    bool IsOnlyTermPayLoad() const { return HasTermPayload() && !HasPositionList(); }
+
 private:
     bool has_term_payload_;
     DocListFormatOption doc_list_format_option_;
@@ -51,7 +45,7 @@ private:
 
 export class PostingFormat {
 public:
-    PostingFormat(const PostingFormatOption &option) : doc_list_format_(nullptr), pos_list_format_(nullptr) {
+    explicit PostingFormat(const PostingFormatOption &option) : option_(option), doc_list_format_(nullptr), pos_list_format_(nullptr) {
         doc_list_format_ = new DocListFormat(option.GetDocListFormatOption());
         if (option.HasPositionList()) {
             pos_list_format_ = new PositionListFormat(option.GetPosListFormatOption());
@@ -70,6 +64,10 @@ public:
 
     DocListFormat *GetDocListFormat() const { return doc_list_format_; }
     PositionListFormat *GetPositionListFormat() const { return pos_list_format_; }
+    const PostingFormatOption GetOption() const { return option_; }
+
+private:
+    const PostingFormatOption option_;
 
 private:
     DocListFormat *doc_list_format_;

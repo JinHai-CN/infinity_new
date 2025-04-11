@@ -14,23 +14,58 @@
 
 module;
 
+#include <set>
+
+module hnsw_file_worker;
+
 import infinity_exception;
 import stl;
 import index_file_worker;
 import hnsw_alg;
+import hnsw_common;
 import index_hnsw;
-import parser;
+
 import index_base;
-import dist_func_l2;
-import dist_func_ip;
-import lvq_store;
-import plain_store;
 import third_party;
 import logger;
-
-module hnsw_file_worker;
+import logical_type;
+import embedding_info;
+import create_index_info;
+import internal_types;
+import abstract_hnsw;
+import virtual_store;
+import persistence_manager;
+import local_file_handle;
 
 namespace infinity {
+
+HnswFileWorker::HnswFileWorker(SharedPtr<String> data_dir,
+                               SharedPtr<String> temp_dir,
+                               SharedPtr<String> file_dir,
+                               SharedPtr<String> file_name,
+                               SharedPtr<IndexBase> index_base,
+                               SharedPtr<ColumnDef> column_def,
+                               PersistenceManager *persistence_manager,
+                               SizeT index_size)
+    : IndexFileWorker(std::move(data_dir),
+                      std::move(temp_dir),
+                      std::move(file_dir),
+                      std::move(file_name),
+                      std::move(index_base),
+                      std::move(column_def),
+                      persistence_manager) {
+    if (index_size == 0) {
+
+        String index_path = GetFilePath();
+        auto [file_handle, status] = VirtualStore::Open(index_path, FileAccessMode::kRead);
+        if (status.ok()) {
+            // When replay by full checkpoint, the data is deleted, but catalog is recovered. Do not read file in recovery.
+            index_size = file_handle->FileSize();
+        }
+    }
+    index_size_ = index_size;
+}
+
 HnswFileWorker::~HnswFileWorker() {
     if (data_ != nullptr) {
         FreeInMemory();
@@ -40,257 +75,124 @@ HnswFileWorker::~HnswFileWorker() {
 
 void HnswFileWorker::AllocateInMemory() {
     if (data_) {
-        Error<StorageException>("Data is already allocated.");
+        String error_message = "Data is already allocated.";
+        UnrecoverableError(error_message);
     }
-    if (index_base_->index_type_ != IndexType::kHnsw) {
-        Error<StorageException>("Bug.");
-    }
-
-    auto data_type = column_def_->type();
-    if (data_type->type() != LogicalType::kEmbedding) {
-        StorageException("Index should be created on embedding column now.");
-    }
-
-    SizeT dimension = GetDimension();
-    const IndexHnsw *index_hnsw = static_cast<const IndexHnsw *>(index_base_);
-    SizeT M = index_hnsw->M_;
-    SizeT ef_c = index_hnsw->ef_construction_;
-    auto AllocateData = [&](auto *hnsw_index) { data_ = static_cast<void *>(hnsw_index); };
-
-    switch (GetType()) {
-        case kElemFloat: {
-            switch (index_hnsw->encode_type_) {
-                case HnswEncodeType::kPlain: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainIPDist<f32>>;
-                            AllocateData(Hnsw::Make(max_element_, dimension, M, ef_c, {}).release());
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainL2Dist<f32>>;
-                            AllocateData(Hnsw::Make(max_element_, dimension, M, ef_c, {}).release());
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                case HnswEncodeType::kLVQ: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQIPCache<f32, i8>>, LVQIPDist<f32, i8>>;
-                            AllocateData(Hnsw::Make(max_element_, dimension, M, ef_c, {}).release());
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQL2Cache<f32, i8>>, LVQL2Dist<f32, i8>>;
-                            AllocateData(Hnsw::Make(max_element_, dimension, M, ef_c, {}).release());
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                default: {
-                    Error<StorageException>("Bug.");
-                }
-            }
-            break;
-        }
-        default: {
-            Error<StorageException>("Index should be created on float embedding column now.");
-        }
-    }
+    data_ = static_cast<void *>(new AbstractHnsw());
 }
 
 void HnswFileWorker::FreeInMemory() {
     if (!data_) {
-        Error<StorageException>("FreeInMemory: Data is not allocated.");
+        String error_message = "FreeInMemory: Data is not allocated.";
+        UnrecoverableError(error_message);
     }
-    const IndexHnsw *index_hnsw = static_cast<const IndexHnsw *>(index_base_);
-    auto FreeData = [&](auto *hnsw_index) { delete hnsw_index; };
-    EmbeddingDataType embedding_type = GetType();
-    switch (embedding_type) {
-        case kElemFloat: {
-            switch (index_hnsw->encode_type_) {
-                case HnswEncodeType::kPlain: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainIPDist<f32>>;
-                            FreeData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainL2Dist<f32>>;
-                            FreeData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                case HnswEncodeType::kLVQ: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQIPCache<f32, i8>>, LVQIPDist<f32, i8>>;
-                            FreeData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQL2Cache<f32, i8>>, LVQL2Dist<f32, i8>>;
-                            FreeData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                default: {
-                    Error<StorageException>("Bug.");
+    auto *p = reinterpret_cast<AbstractHnsw *>(data_);
+    std::visit(
+        [&](auto &&index) {
+            using T = std::decay_t<decltype(index)>;
+            if constexpr (!std::is_same_v<T, std::nullptr_t>) {
+                if (index != nullptr) {
+                    delete index;
                 }
             }
-            break;
-        }
-        default: {
-            Error<StorageException>(Format("Index should be created on float embedding column now, type: {}", EmbeddingDataType2String(embedding_type)));
-        }
-    }
+        },
+        *p);
+    delete p;
     data_ = nullptr;
 }
 
-void HnswFileWorker::WriteToFileImpl(bool &prepare_success) {
+bool HnswFileWorker::WriteToFileImpl(bool to_spill, bool &prepare_success, const FileWorkerSaveCtx &ctx) {
     if (!data_) {
-        Error<StorageException>("WriteToFileImpl: Data is not allocated.");
+        String error_message = "WriteToFileImpl: Data is not allocated.";
+        UnrecoverableError(error_message);
     }
-    const IndexHnsw *index_hnsw = static_cast<const IndexHnsw *>(index_base_);
-    auto SaveData = [&](auto *hnsw_index) { hnsw_index->Save(*file_handler_); };
-    switch (GetType()) {
-        case kElemFloat: {
-            switch (index_hnsw->encode_type_) {
-                case HnswEncodeType::kPlain: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainIPDist<f32>>;
-                            SaveData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainL2Dist<f32>>;
-                            SaveData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                case HnswEncodeType::kLVQ: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQIPCache<f32, i8>>, LVQIPDist<f32, i8>>;
-                            SaveData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQL2Cache<f32, i8>>, LVQL2Dist<f32, i8>>;
-                            SaveData(static_cast<Hnsw *>(data_));
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                default: {
-                    Error<StorageException>("Bug.");
+    auto *hnsw_index = reinterpret_cast<AbstractHnsw *>(data_);
+    std::visit(
+        [&](auto &&index) {
+            using T = std::decay_t<decltype(index)>;
+            if constexpr (std::is_same_v<T, std::nullptr_t>) {
+                UnrecoverableError("Invalid index type.");
+            } else {
+                using IndexT = std::decay_t<decltype(*index)>;
+                if constexpr (IndexT::kOwnMem) {
+                    index->SaveToPtr(*file_handle_);
+                } else {
+                    UnrecoverableError("Invalid index type.");
                 }
             }
-            break;
-        }
-        default: {
-            Error<StorageException>("Index should be created on float embedding column now.");
-        }
-    }
+        },
+        *hnsw_index);
     prepare_success = true;
+    return true;
 }
 
-void HnswFileWorker::ReadFromFileImpl() {
-    // TODO!! not save index parameter in index file.
-    const IndexHnsw *index_hnsw = static_cast<const IndexHnsw *>(index_base_);
-    auto LoadData = [&](auto *hnsw_index) { data_ = static_cast<void *>(hnsw_index); };
-    switch (GetType()) {
-        case kElemFloat: {
-            switch (index_hnsw->encode_type_) {
-                case HnswEncodeType::kPlain: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainIPDist<f32>>;
-                            LoadData(Hnsw::Load(*file_handler_, {}).release());
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, PlainStore<f32>, PlainL2Dist<f32>>;
-                            LoadData(Hnsw::Load(*file_handler_, {}).release());
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
+void HnswFileWorker::ReadFromFileImpl(SizeT file_size, bool from_spill) {
+    if (data_ != nullptr) {
+        UnrecoverableError("Data is already allocated.");
+    }
+    data_ = static_cast<void *>(new AbstractHnsw(HnswIndexInMem::InitAbstractIndex(index_base_.get(), column_def_.get())));
+    auto *hnsw_index = reinterpret_cast<AbstractHnsw *>(data_);
+    std::visit(
+        [&](auto &&index) {
+            using T = std::decay_t<decltype(index)>;
+            if constexpr (std::is_same_v<T, std::nullptr_t>) {
+                UnrecoverableError("Invalid index type.");
+            } else {
+                using IndexT = std::decay_t<decltype(*index)>;
+                if constexpr (IndexT::kOwnMem) {
+                    if (from_spill) {
+                        index = IndexT::Load(*file_handle_).release();
+                    } else {
+                        index = IndexT::LoadFromPtr(*file_handle_, file_size).release();
                     }
-                    break;
-                }
-                case HnswEncodeType::kLVQ: {
-                    switch (index_hnsw->metric_type_) {
-                        case MetricType::kMerticInnerProduct: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQIPCache<f32, i8>>, LVQIPDist<f32, i8>>;
-                            LoadData(Hnsw::Load(*file_handler_, {}).release());
-                            break;
-                        }
-                        case MetricType::kMerticL2: {
-                            using Hnsw = KnnHnsw<f32, u64, LVQStore<f32, i8, LVQL2Cache<f32, i8>>, LVQL2Dist<f32, i8>>;
-                            LoadData(Hnsw::Load(*file_handler_, {}).release());
-                            break;
-                        }
-                        default: {
-                            Error<StorageException>("Bug.");
-                        }
-                    }
-                    break;
-                }
-                default: {
-                    Error<StorageException>("Bug.");
+                } else {
+                    UnrecoverableError("Invalid index type.");
                 }
             }
-            break;
-        }
-        default: {
-            Error<StorageException>("Index should be created on float embedding column now.");
-        }
+        },
+        *hnsw_index);
+}
+
+bool HnswFileWorker::ReadFromMmapImpl(const void *ptr, SizeT size) {
+    if (mmap_data_ != nullptr) {
+        UnrecoverableError("Mmap data is already allocated.");
     }
+    mmap_data_ = reinterpret_cast<u8 *>(new AbstractHnsw(HnswIndexInMem::InitAbstractIndex(index_base_.get(), column_def_.get(), false)));
+    auto *hnsw_index = reinterpret_cast<AbstractHnsw *>(mmap_data_);
+    std::visit(
+        [&](auto &&index) {
+            using T = std::decay_t<decltype(index)>;
+            if constexpr (std::is_same_v<T, std::nullptr_t>) {
+                UnrecoverableError("Invalid index type.");
+            } else {
+                using IndexT = std::decay_t<decltype(*index)>;
+                if constexpr (!IndexT::kOwnMem) {
+                    const auto *p = static_cast<const char *>(ptr);
+                    index = IndexT::LoadFromPtr(p, size).release();
+                } else {
+                    UnrecoverableError("Invalid index type.");
+                }
+            }
+        },
+        *hnsw_index);
+    return true;
 }
 
-EmbeddingDataType HnswFileWorker::GetType() const {
-    auto data_type = column_def_->type();
-    auto type_info = data_type->type_info().get();
-    auto embedding_info = (EmbeddingInfo *)type_info;
-    return embedding_info->Type();
+void HnswFileWorker::FreeFromMmapImpl() {
+    if (mmap_data_ == nullptr) {
+        UnrecoverableError("Mmap data is not allocated.");
+    }
+    auto *hnsw_index = reinterpret_cast<AbstractHnsw *>(mmap_data_);
+    std::visit(
+        [&](auto &&index) {
+            using T = std::decay_t<decltype(index)>;
+            if constexpr (!std::is_same_v<T, std::nullptr_t>) {
+                delete index;
+            }
+        },
+        *hnsw_index);
+    delete hnsw_index;
+    mmap_data_ = nullptr;
 }
 
-SizeT HnswFileWorker::GetDimension() const {
-    auto data_type = column_def_->type();
-    auto type_info = data_type->type_info().get();
-    auto embedding_info = (EmbeddingInfo *)type_info;
-    return embedding_info->Dimension();
-}
 } // namespace infinity

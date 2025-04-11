@@ -16,11 +16,12 @@ module;
 
 #include <sstream>
 
-import stl;
-import parser;
-import column_binding;
-
 module logical_flush;
+
+import stl;
+
+import column_binding;
+import internal_types;
 
 namespace infinity {
 
@@ -39,6 +40,10 @@ String LogicalFlush::ToString(i64 &space) const {
     }
 
     switch (flush_type_) {
+        case FlushType::kDelta:
+            ss << String(space, ' ') << "-> "
+               << "Flush Delta: ";
+            break;
         case FlushType::kData:
             ss << String(space, ' ') << "-> "
                << "Flush Data: ";

@@ -14,35 +14,50 @@
 
 module;
 
+export module physical_export;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
 import load_meta;
 import infinity_exception;
-
-export module physical_export;
+import internal_types;
+import statement_common;
+import data_type;
+import meta_info;
+import logger;
+import third_party;
+import column_def;
+import column_vector;
+import knn_filter;
 
 namespace infinity {
+
+class BlockIndex;
 
 export class PhysicalExport : public PhysicalOperator {
 public:
     explicit PhysicalExport(u64 id,
+                            const SharedPtr<TableInfo> &table_info,
                             String schema_name,
                             String table_name,
                             String file_path,
                             bool header,
                             char delimiter,
                             CopyFileType type,
-                            SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kExport, nullptr, nullptr, id, load_metas), file_type_(type), file_path_(Move(file_path)),
-          table_name_(Move(table_name)), schema_name_(Move(schema_name)), header_(header), delimiter_(delimiter) {}
+                            SizeT offset,
+                            SizeT limit,
+                            SizeT row_limit,
+                            Vector<u64> column_idx_array,
+                            SharedPtr<BlockIndex> block_index,
+                            SharedPtr<Vector<LoadMeta>> load_metas);
 
-    ~PhysicalExport() override = default;
+    ~PhysicalExport() override;
 
-    void Init() override;
+    void Init(QueryContext *query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
 
@@ -50,14 +65,15 @@ public:
 
     inline SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final { return output_types_; }
 
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
+    SizeT ExportToCSV(QueryContext *query_context, ExportOperatorState *export_op_state);
 
-    void ExportCSV(QueryContext *query_context);
+    SizeT ExportToJSONL(QueryContext *query_context, ExportOperatorState *export_op_state);
 
-    void ExportJSON(QueryContext *query_context);
+    SizeT ExportToFileInner(QueryContext *query_context, ExportOperatorState *export_op_state, std::function<String(const Vector<ColumnVector> &, SizeT)> line_to_string);
+
+    SizeT ExportToFVECS(QueryContext *query_context, ExportOperatorState *export_op_state);
+
+    SizeT ExportToPARQUET(QueryContext *query_context, ExportOperatorState *export_op_state);
 
     inline CopyFileType FileType() const { return file_type_; }
 
@@ -75,12 +91,18 @@ private:
     SharedPtr<Vector<String>> output_names_{};
     SharedPtr<Vector<SharedPtr<DataType>>> output_types_{};
 
-    CopyFileType file_type_{CopyFileType::kCSV};
+    SharedPtr<TableInfo> table_info_{};
+    CopyFileType file_type_{CopyFileType::kInvalid};
     String file_path_{};
     String table_name_{};
-    String schema_name_{"default"};
+    String schema_name_{"default_db"};
     bool header_{false};
     char delimiter_{','};
+    SizeT offset_{};
+    SizeT limit_{};
+    SizeT row_limit_{};
+    Vector<u64> column_idx_array_;
+    SharedPtr<BlockIndex> block_index_{};
 };
 
 } // namespace infinity

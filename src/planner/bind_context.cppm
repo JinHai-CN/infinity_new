@@ -14,8 +14,10 @@
 
 module;
 
+export module bind_context;
+
 import stl;
-import parser;
+
 import column_binding;
 import third_party;
 
@@ -24,18 +26,22 @@ import column_expression;
 import column_identifer;
 import binding;
 import base_expression;
-import block_index;
-import catalog;
-
-export module bind_context;
+import meta_info;
+import internal_types;
+import select_statement;
+import parsed_expr;
+import search_expr;
+import data_type;
+import global_resource_usage;
 
 namespace infinity {
 
+struct BlockIndex;
 class ExpressionBinder;
 
 export struct CommonTableExpressionInfo {
     CommonTableExpressionInfo(String alias, SelectStatement *select_stmt, HashSet<String> masked_name_set)
-        : alias_(Move(alias)), select_statement_(select_stmt), masked_name_set_(Move(masked_name_set)) {}
+        : alias_(std::move(alias)), select_statement_(select_stmt), masked_name_set_(std::move(masked_name_set)) {}
 
     String alias_;
     SelectStatement *select_statement_;
@@ -49,9 +55,19 @@ public:
     static inline SharedPtr<BindContext> Make(BindContext *parent) { return MakeShared<BindContext>(parent); }
 
 public:
-    explicit BindContext(const SharedPtr<BindContext> &parent) : parent_(parent.get()) { binding_context_id_ = GenerateBindingContextIndex(); }
+    explicit BindContext(const SharedPtr<BindContext> &parent) : parent_(parent.get()) {
+        binding_context_id_ = GenerateBindingContextIndex();
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("BindContext");
+#endif
+    }
 
-    explicit BindContext(BindContext *parent) : parent_(parent) { binding_context_id_ = GenerateBindingContextIndex(); }
+    explicit BindContext(BindContext *parent) : parent_(parent) {
+        binding_context_id_ = GenerateBindingContextIndex();
+#ifdef INFINITY_DEBUG
+        GlobalResourceUsage::IncrObjectCount("BindContext");
+#endif
+    }
 
     virtual ~BindContext();
 
@@ -94,6 +110,11 @@ public:
     //    HashMap<String, SharedPtr<BaseExpression>> group_by_name_;
     HashMap<String, i64> group_index_by_name_;
 
+    u64 unnest_table_index_{0};
+    String unnest_table_name_{};
+    Vector<SharedPtr<BaseExpression>> unnest_exprs_;
+    HashMap<String, i64> unnest_index_by_name_;
+
     // Bound aggregate function expr
     u64 aggregate_table_index_{0};
     String aggregate_table_name_{};
@@ -113,13 +134,13 @@ public:
     u64 knn_table_index_{};
 
     // Bound CTE
-    HashSet<SharedPtr<CommonTableExpressionInfo>> bound_cte_set_;
+    HashSet<SharedPtr<CommonTableExpressionInfo>> bound_cte_set_{};
 
     // Bound View
-    HashSet<String> bound_view_set_;
+    HashSet<String> bound_view_set_{};
 
     // Bound Table (base table)
-    HashSet<String> bound_table_set_;
+    HashSet<String> bound_table_set_{};
 
     // Bound subquery (TODO: How to get the subquery name?)
     HashSet<String> bound_subquery_set_;
@@ -134,6 +155,7 @@ public:
     bool single_row = false;
 
     bool allow_distance = false;
+    bool allow_similarity = false;
     bool allow_score = false;
 
 public:
@@ -161,15 +183,7 @@ public:
 
     void BoundTable(const String &table_name) { bound_table_set_.insert(table_name); }
 
-    void BoundSearch(ParsedExpr *expr) {
-        if (expr == nullptr) {
-            return;
-        }
-        auto search_expr = (SearchExpr *)expr;
-
-        allow_distance = !search_expr->knn_exprs_.empty() && search_expr->fusion_expr_ == nullptr;
-        allow_score = !search_expr->match_exprs_.empty() || search_expr->fusion_expr_ != nullptr;
-    }
+    void BoundSearch(ParsedExpr *expr);
 
     void AddSubqueryBinding(const String &name,
                             u64 table_index,
@@ -184,7 +198,7 @@ public:
 
     void AddTableBinding(const String &name,
                          u64 table_index,
-                         TableEntry *table_collection_entry_ptr,
+                         SharedPtr<TableInfo> table_info,
                          SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                          SharedPtr<Vector<String>> column_names,
                          SharedPtr<BlockIndex> block_index);

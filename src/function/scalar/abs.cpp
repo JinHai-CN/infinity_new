@@ -16,16 +16,18 @@ module;
 
 #include <numeric>
 
+module abs;
+
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module abs;
+import third_party;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
@@ -43,11 +45,11 @@ struct AbsFunctionInt {
 struct AbsFunctionFloat {
     template <typename SourceType, typename TargetType>
     static inline void Run(SourceType value, TargetType &result) {
-        result = value < 0 ? -value : value;
+        result = value < static_cast<SourceType>(0.0f) ? -value : value;
     }
 };
 
-void RegisterAbsFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterAbsFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "ABS";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -88,7 +90,19 @@ void RegisterAbsFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                               &ScalarFunction::UnaryFunction<DoubleT, DoubleT, AbsFunctionFloat>);
     function_set_ptr->AddFunction(abs_double);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    ScalarFunction abs_float16(func_name,
+                               {DataType(LogicalType::kFloat16)},
+                               {DataType(LogicalType::kFloat16)},
+                               &ScalarFunction::UnaryFunction<Float16T, Float16T, AbsFunctionFloat>);
+    function_set_ptr->AddFunction(abs_float16);
+
+    ScalarFunction abs_bfloat16(func_name,
+                                {DataType(LogicalType::kBFloat16)},
+                                {DataType(LogicalType::kBFloat16)},
+                                &ScalarFunction::UnaryFunction<BFloat16T, BFloat16T, AbsFunctionFloat>);
+    function_set_ptr->AddFunction(abs_bfloat16);
+
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

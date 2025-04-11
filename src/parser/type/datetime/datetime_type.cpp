@@ -84,9 +84,9 @@ int64_t DateTimeType::GetDateTimePart(DateTimeType input, TimeUnit unit) {
     return -1;
 }
 
-int64_t DateTimeType::GetEpochTime(const DateTimeType &dt) {
-    constexpr int32_t TotalSecondsInDay = 24 * 60 * 60;
-    return dt.date.value * TotalSecondsInDay + dt.time.value;
+int64_t DateTimeType::GetEpochTime() const {
+    constexpr int64_t TotalSecondsInDay = 24 * 60 * 60;
+    return date.GetValue() * TotalSecondsInDay + time.GetValue();
 }
 
 bool DateTimeType::YMDHMS2DateTime(int32_t year, int32_t month, int32_t day, int32_t hour, int32_t minute, int32_t second, DateTimeType &datetime) {
@@ -106,6 +106,16 @@ bool DateTimeType::DateTime2YMDHMS(int32_t days,
 
 bool DateTimeType::IsDateTimeValid(int32_t year, int32_t month, int32_t day, int32_t hour, int32_t minute, int32_t second) {
     return TimeType::IsTimeValid(hour, minute, second) and DateType::IsDateValid(year, month, day);
+}
+
+
+bool DateTimeType::OuterDateTime2YMD(int32_t days, std::chrono::year_month_day &ymd) {
+    int32_t year, month, day;
+    bool result = DateType::Date2YMD(days, year, month, day);
+    if (result) {
+        ymd = std::chrono::year_month_day(std::chrono::year(year), std::chrono::month(month), std::chrono::day(day));
+    }
+    return result;
 }
 
 } // namespace infinity

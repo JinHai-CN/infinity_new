@@ -1,11 +1,14 @@
 module;
 
-import stl;
-import byte_slice;
-
-import infinity_exception;
+#include <cassert>
 
 module byte_slice_reader;
+
+import stl;
+import byte_slice;
+import status;
+import infinity_exception;
+import logger;
 
 namespace infinity {
 
@@ -24,7 +27,8 @@ void ByteSliceReader::Open(ByteSliceList *slice_list) {
     current_slice_offset_ = 0;
 
     if (current_slice_ == nullptr) {
-        Error<StorageException>("Read past EOF");
+        String error_message = "Read past EOF";
+        UnrecoverableError(error_message);
     }
 }
 
@@ -35,7 +39,8 @@ void ByteSliceReader::Open(ByteSlice *slice) {
     current_slice_offset_ = 0;
 
     if (current_slice_ == nullptr) {
-        Error<StorageException>("Read past EOF");
+        String error_message = "Read past EOF";
+        UnrecoverableError(error_message);
     }
 }
 
@@ -55,7 +60,7 @@ SizeT ByteSliceReader::Read(void *value, SizeT len) {
     }
 
     if (current_slice_offset_ + len <= GetSliceDataSize(current_slice_)) {
-        Memcpy(value, current_slice_->data_ + current_slice_offset_, len);
+        std::memcpy(value, current_slice_->data_ + current_slice_offset_, len);
         current_slice_offset_ += len;
         global_offset_ += len;
         return len;
@@ -68,7 +73,7 @@ SizeT ByteSliceReader::Read(void *value, SizeT len) {
     while (total_len > 0) {
         leftLen = GetSliceDataSize(current_slice_) - offset;
         if (leftLen < total_len) {
-            Memcpy(dest, current_slice_->data_ + offset, leftLen);
+            std::memcpy(dest, current_slice_->data_ + offset, leftLen);
             total_len -= leftLen;
             dest += leftLen;
 
@@ -78,7 +83,7 @@ SizeT ByteSliceReader::Read(void *value, SizeT len) {
                 break;
             }
         } else {
-            Memcpy(dest, current_slice_->data_ + offset, total_len);
+            std::memcpy(dest, current_slice_->data_ + offset, total_len);
             dest += total_len;
             offset += (SizeT)total_len;
             total_len = 0;
@@ -106,8 +111,8 @@ SizeT ByteSliceReader::ReadMayCopy(void *&value, SizeT len) {
 
 SizeT ByteSliceReader::Seek(SizeT offset) {
     if (offset < global_offset_) {
-        // fmt::format("invalid offset value: seek offset = {}, State: list length = {}, offset = {}", offset, GetSize(), global_offset_));
-        Error<StorageException>("Invalide offset value");
+        // seeking backward is disallowed
+        return BYTE_SLICE_EOF;
     }
 
     SizeT len = offset - global_offset_;
@@ -118,16 +123,17 @@ SizeT ByteSliceReader::Seek(SizeT offset) {
     if (current_slice_offset_ + len < GetSliceDataSize(current_slice_)) {
         current_slice_offset_ += len;
         global_offset_ += len;
+        assert(global_offset_ == offset);
         return global_offset_;
     } else {
         // current byteslice is not long enough, seek to next byteslices
         i64 total_len = len;
-        i64 remainLen;
+        i64 remain_len;
         while (total_len > 0) {
-            remainLen = current_slice_->size_ - current_slice_offset_;
-            if (remainLen <= total_len) {
-                global_offset_ += remainLen;
-                total_len -= remainLen;
+            remain_len = current_slice_->size_ - current_slice_offset_;
+            if (remain_len <= total_len) {
+                global_offset_ += remain_len;
+                total_len -= remain_len;
                 current_slice_ = current_slice_->next_;
                 current_slice_offset_ = 0;
                 if (current_slice_ == nullptr) {
@@ -147,7 +153,7 @@ SizeT ByteSliceReader::Seek(SizeT offset) {
             current_slice_ = ByteSlice::GetEmptySlice();
             current_slice_offset_ = 0;
         }
-
+        assert(global_offset_ == offset);
         return global_offset_;
     }
 }

@@ -15,16 +15,14 @@
 module;
 
 import stl;
+import base_expression;
+import expression_state;
+import data_block;
+import selection;
 
 export module expression_selector;
 
 namespace infinity {
-
-class BaseExpression;
-class ExpressionState;
-class DataBlock;
-class Selection;
-class Bitmask;
 class ColumnVector;
 
 export class ExpressionSelector {

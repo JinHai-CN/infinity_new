@@ -18,11 +18,14 @@ module;
 #include <boost/asio/read.hpp>
 
 import stl;
+import third_party;
 import pg_message;
 import ring_buffer_iterator;
 
 import infinity_exception;
 import default_values;
+import status;
+import logger;
 
 module buffer_reader;
 
@@ -118,12 +121,12 @@ String BufferReader::read_string(const SizeT string_length, NullTerminator null_
     result.reserve(string_length);
 
     if (size() != 0) {
-        RingBufferIterator::CopyN(start_pos_, Min(string_length, size()), result);
+        RingBufferIterator::CopyN(start_pos_, std::min(string_length, size()), result);
         start_pos_.increment(result.size());
     }
 
     while (result.size() < string_length) {
-        const auto substring_length = Min(string_length - result.size(), max_capacity());
+        const auto substring_length = std::min(string_length - result.size(), max_capacity());
         receive_more(substring_length);
         RingBufferIterator::CopyN(start_pos_, substring_length, result);
         start_pos_.increment(substring_length);
@@ -131,7 +134,8 @@ String BufferReader::read_string(const SizeT string_length, NullTerminator null_
 
     if (null_terminator == NullTerminator::kYes) {
         if (result.back() != NULL_END) {
-            Error<NetworkException>("Last character isn't null.");
+            String error_message = "Last character isn't null.";
+            RecoverableError(Status::IOError(error_message));
         }
         result.pop_back();
     }
@@ -166,12 +170,19 @@ void BufferReader::receive_more(SizeT bytes) {
             boost_error);
     }
 
-    if (boost_error == boost::asio::error::broken_pipe || boost_error == boost::asio::error::connection_reset || bytes_read == 0) {
-        Error<ClientException>("Client close the connection.");
+    if (boost_error == boost::asio::error::broken_pipe || boost_error == boost::asio::error::connection_reset) {
+        String error_message = fmt::format("Client close the connection: {}", boost_error.message());
+        RecoverableError(Status::ClientClose());
+    }
+
+    if (bytes_read == 0) {
+        LOG_TRACE("Client is disconnected.");
+        RecoverableError(Status::ClientClose());
     }
 
     if (boost_error) {
-        Error<NetworkException>(boost_error.message());
+        String error_message = boost_error.message();
+        RecoverableError(Status::IOError(error_message));
     }
 
     current_pos_.increment(bytes_read);

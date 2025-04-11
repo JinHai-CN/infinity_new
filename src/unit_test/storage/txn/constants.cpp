@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
@@ -23,9 +24,11 @@ import logger;
 import txn_state;
 import infinity_context;
 
+using namespace infinity;
+
 class TxnContants : public BaseTest {};
 
 TEST_F(TxnContants, test1) {
     using namespace infinity;
-    EXPECT_EQ(ToString(TxnState::kStarted), "Started");
+    EXPECT_EQ(TxnState2Str(TxnState::kStarted), "Started");
 }

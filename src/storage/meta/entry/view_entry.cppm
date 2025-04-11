@@ -14,33 +14,32 @@
 
 module;
 
-export module catalog:view_entry;
+export module view_entry;
 
-import :base_entry;
-
+import base_entry;
+import internal_types;
 import stl;
-import parser;
-
-// FIXME: Not finished
+import data_type;
+import select_statement;
+import create_view_info;
+import txn;
 
 namespace infinity {
 
 class ViewMeta;
 
-class Txn;
-
 export struct ViewEntry : public BaseEntry {
 public:
-    explicit ViewEntry(const SharedPtr<String> &base_dir,
+    explicit ViewEntry(bool deleted,
                        SharedPtr<CreateViewInfo> create_view_info,
                        SharedPtr<String> view_name,
                        SharedPtr<Vector<SharedPtr<DataType>>> column_types,
                        SharedPtr<Vector<String>> column_names,
                        ViewMeta *view_meta,
-                       u64 txn_id,
+                       TransactionID txn_id,
                        TxnTimeStamp begin_ts)
-        : BaseEntry(EntryType::kView), create_view_info_(create_view_info), base_dir_(base_dir), view_name_(Move(view_name)),
-          column_types_(Move(column_types)), column_names_(Move(column_names)), view_meta_(view_meta) {
+        : BaseEntry(EntryType::kView, deleted, ""), create_view_info_(create_view_info), view_name_(std::move(view_name)),
+          column_types_(std::move(column_types)), column_names_(std::move(column_names)), view_meta_(view_meta) {
         begin_ts_ = begin_ts;
         txn_id_ = txn_id;
     }
@@ -53,12 +52,12 @@ public:
 
     inline const SharedPtr<String> &view_name() const { return view_name_; }
 
+    Vector<String> GetFilePath(Txn* txn) const final { return Vector<String>(); }
+
 private:
-    RWMutex rw_locker_{};
+    std::shared_mutex rw_locker_{};
 
     SharedPtr<CreateViewInfo> create_view_info_;
-
-    SharedPtr<String> base_dir_{};
 
     SharedPtr<String> view_name_{};
 

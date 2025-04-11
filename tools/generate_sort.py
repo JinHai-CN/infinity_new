@@ -7,16 +7,16 @@ import argparse
 def generate(generate_if_exists: bool, copy_dir: str):
     row_n = 9000
     sort_dir = "./test/data/csv"
-    slt_dir = "./test/sql/dql"
+    slt_dir = "./test/sql/dql/sort_top"
 
     table_name = "test_sort"
-    sort_path = sort_dir + "/test_sort.csv"
-    slt_path = slt_dir + "/sort.slt"
-    copy_path = copy_dir + "/test_sort.csv"
+    sort_path = sort_dir + "/test_big_sort.csv"
+    slt_path = slt_dir + "/big_sort.slt"
+    copy_path = copy_dir + "/test_big_sort.csv"
 
     os.makedirs(sort_dir, exist_ok=True)
     os.makedirs(slt_dir, exist_ok=True)
-    if os.path.exists(sort_path) and os.path.exists(slt_path) and generate_if_exists:
+    if os.path.exists(sort_path) and os.path.exists(slt_path) and not generate_if_exists:
         print(
             "File {} and {} already existed exists. Skip Generating.".format(
                 slt_path, sort_path
@@ -34,14 +34,15 @@ def generate(generate_if_exists: bool, copy_dir: str):
         slt_file.write("\n")
         slt_file.write("query I\n")
         slt_file.write(
-            "COPY {} FROM '{}' WITH ( DELIMITER ',' );\n".format(
+            "COPY {} FROM '{}' WITH ( DELIMITER ',', FORMAT CSV );\n".format(
                 table_name, copy_path
             )
         )
         slt_file.write("----\n")
         slt_file.write("\n")
         slt_file.write("query I\n")
-        slt_file.write("SELECT * FROM {} order by c1, c2;\n".format(table_name))
+        slt_file.write(
+            "SELECT * FROM {} order by c1, c2;\n".format(table_name))
         slt_file.write("----\n")
 
         random_integers = np.random.randint(low=1, high=row_n, size=row_n)
@@ -73,7 +74,7 @@ if __name__ == "__main__":
         "-c",
         "--copy",
         type=str,
-        default="/tmp/infinity/test_data",
+        default="/var/infinity/test_data",
         dest="copy_dir",
     )
     args = parser.parse_args()

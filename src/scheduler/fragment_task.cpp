@@ -16,7 +16,8 @@ module;
 
 #include <sstream>
 
-import fragment_context;
+module fragment_task;
+
 import profiler;
 import plan_fragment;
 import stl;
@@ -31,8 +32,10 @@ import physical_operator_type;
 import query_context;
 import base_table_ref;
 import defer_op;
-
-module fragment_task;
+import fragment_context;
+import status;
+import parser_assert;
+import infinity_context;
 
 namespace infinity {
 
@@ -42,12 +45,14 @@ void FragmentTask::Init() {
     operator_states_.resize(operator_count_);
 }
 
-void FragmentTask::OnExecute(i64) {
+void FragmentTask::OnExecute() {
+    LOG_TRACE(fmt::format("Task: {} of Fragment: {} is running", task_id_, FragmentId()));
     //    infinity::BaseProfiler prof;
     //    prof.Begin();
     FragmentContext *fragment_context = (FragmentContext *)fragment_context_;
     QueryContext *query_context = fragment_context->query_context();
-
+    //    bool enable_profiler = InfinityContext::instance().storage()->catalog()->GetProfile();
+    bool explain_analyze = query_context->explain_analyze();
     // TODO:
     // Tell the fragment type:
     // For materialized type, we need to run the sink on the last source
@@ -56,75 +61,121 @@ void FragmentTask::OnExecute(i64) {
     // For streaming type, we need to run sink each execution
 
     PhysicalSource *source_op = fragment_context->GetSourceOperator();
+    if (source_state_->state_type_ == SourceStateType::kQueue) {
+        // For debug
+        LOG_TRACE(PhysOpsToString());
+    }
 
     bool execute_success{false};
-    bool source_complete = source_op->Execute(fragment_context->query_context(), source_state_.get());
-    if(source_state_->error_message_.get() == nullptr) {
+    source_op->Execute(query_context, source_state_.get());
+    Status operator_status{};
+    if (source_state_->status_.ok()) {
         // No source error
         Vector<PhysicalOperator *> &operator_refs = fragment_context->GetOperators();
 
-        bool enable_profiler = query_context->is_enable_profiling();
-        TaskProfiler profiler(TaskBinding(), enable_profiler, operator_count_);
+        TaskProfiler profiler(TaskBinding(), explain_analyze, operator_count_);
         HashMap<SizeT, SharedPtr<BaseTableRef>> table_refs;
         profiler.Begin();
-        UniquePtr<String> err_msg = nullptr;
         try {
             for (i64 op_idx = operator_count_ - 1; op_idx >= 0; --op_idx) {
                 profiler.StartOperator(operator_refs[op_idx]);
                 DeferFn defer_fn([&]() { profiler.StopOperator(operator_states_[op_idx].get()); });
 
-                operator_refs[op_idx]->InputLoad(fragment_context->query_context(), operator_states_[op_idx].get(), table_refs);
-                execute_success = operator_refs[op_idx]->Execute(fragment_context->query_context(), operator_states_[op_idx].get());
+                operator_refs[op_idx]->InputLoad(query_context, operator_states_[op_idx].get(), table_refs);
+                execute_success = operator_refs[op_idx]->Execute(query_context, operator_states_[op_idx].get());
                 operator_refs[op_idx]->FillingTableRefs(table_refs);
 
+                if (!operator_states_[op_idx]->status_.ok()) {
+                    operator_status = operator_states_[op_idx]->status_;
+                    break;
+                }
                 if (!execute_success) {
                     break;
                 }
             }
-        } catch (const Exception &e) {
-            err_msg = MakeUnique<String>(e.what());
+        } catch (RecoverableException &e) {
+            LOG_ERROR(e.what());
+            operator_status = Status(e.ErrorCode(), e.what());
+        } catch (ParserException &e) {
+            LOG_ERROR(e.what());
+            operator_status = Status::ParserError(e.what());
+        } catch (UnrecoverableException &e) {
+            LOG_CRITICAL(e.what());
+            throw e;
         }
+
         profiler.End();
         fragment_context->FlushProfiler(profiler);
-
-        if (err_msg.get() != nullptr) {
-            sink_state_->error_message_ = Move(err_msg);
-            this->set_status(FragmentTaskStatus::kError);
-        }
     }
 
-    if(source_complete && source_state_->error_message_.get() != nullptr) {
-        sink_state_->error_message_ = Move(source_state_->error_message_);
-        this->set_status(FragmentTaskStatus::kError);
-    }
-
-    if (execute_success or sink_state_->error_message_.get() != nullptr) {
+    if (!operator_status.ok()) {
+        sink_state_->status_ = operator_status;
+        status_ = FragmentTaskStatus::kError;
+    } else if (execute_success) {
         PhysicalSink *sink_op = fragment_context->GetSinkOperator();
         sink_op->Execute(query_context, fragment_context, sink_state_.get());
     }
 }
 
-bool FragmentTask::Ready() const {
-    FragmentContext *fragment_context = (FragmentContext *)fragment_context_;
-    PhysicalSource *source_op = fragment_context->GetSourceOperator();
-    return source_op->ReadyToExec(source_state_.get());
+u64 FragmentTask::FragmentId() const {
+    auto *fragment_context = static_cast<FragmentContext *>(fragment_context_);
+    return fragment_context->plan_fragment_ptr()->FragmentID();
 }
 
-bool FragmentTask::IsComplete() const { return sink_state_->prev_op_state_->Complete() or status() == FragmentTaskStatus::kError; }
+// Finished **OR** Error
+bool FragmentTask::IsComplete() { return sink_state_->prev_op_state_->Complete(); }
+
+bool FragmentTask::TryIntoWorkerLoop() {
+    std::unique_lock lock(mutex_);
+    if (status_ != FragmentTaskStatus::kPending) {
+        return false;
+    }
+    status_ = FragmentTaskStatus::kRunning;
+    return true;
+}
+
+// Stream fragment source has no data
+bool FragmentTask::QuitFromWorkerLoop() {
+    // return false; // FIXME
+    // If reach here, child fragment must be stream
+    if (source_state_->state_type_ != SourceStateType::kQueue) {
+        // fragment's source is not from queue
+        return false;
+    }
+    auto *queue_state = static_cast<QueueSourceState *>(source_state_.get());
+
+    std::unique_lock lock(mutex_);
+    if (queue_state->source_queue_.Empty() && status_ == FragmentTaskStatus::kRunning) {
+        status_ = FragmentTaskStatus::kPending;
+        LOG_TRACE(fmt::format("Task: {} of Fragment: {} quits from worker loop", task_id_, FragmentId()));
+        return true;
+    }
+    LOG_TRACE(fmt::format("Task: {} of Fragment: {} is still running", task_id_, FragmentId()));
+    return false;
+}
 
 TaskBinding FragmentTask::TaskBinding() const {
-    FragmentContext *fragment_context = (FragmentContext *)fragment_context_;
-    struct TaskBinding binding {};
+    struct TaskBinding binding{};
 
     binding.task_id_ = task_id_;
-    binding.fragment_id_ = fragment_context->fragment_ptr()->FragmentID();
+    binding.fragment_id_ = FragmentId();
     return binding;
 }
 
-void FragmentTask::TryCompleteFragment() {
+bool FragmentTask::CompleteTask() {
+    // One thread reach here
+    {
+        std::unique_lock lock(mutex_);
+        if (status_ == FragmentTaskStatus::kRunning) {
+            status_ = FragmentTaskStatus::kFinished;
+        } else if (status_ != FragmentTaskStatus::kError) {
+            String error_message = "Status should be an error status";
+            UnrecoverableError(error_message);
+        }
+    }
     FragmentContext *fragment_context = (FragmentContext *)fragment_context_;
-    LOG_TRACE(Format("Task: {} of Fragment: {} is completed", task_id_, fragment_context->fragment_ptr()->FragmentID()));
-    fragment_context->FinishTask();
+    LOG_TRACE(fmt::format("Task: {} of Fragment: {} is completed", task_id_, FragmentId()));
+    return fragment_context->TryFinishFragment();
 }
 
 String FragmentTask::PhysOpsToString() {
@@ -135,5 +186,7 @@ String FragmentTask::PhysOpsToString() {
     }
     return ss.str();
 }
+
+FragmentContext *FragmentTask::fragment_context() const { return reinterpret_cast<FragmentContext *>(fragment_context_); }
 
 } // namespace infinity

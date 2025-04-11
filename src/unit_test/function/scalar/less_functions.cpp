@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
@@ -34,18 +35,24 @@ import data_block;
 import base_expression;
 import column_vector;
 import less;
+import logical_type;
+import internal_types;
+import data_type;
 
-class LessFunctionsTest : public BaseTest {};
+using namespace infinity;
+class LessFunctionsTest : public BaseTestParamStr {};
 
-TEST_F(LessFunctionsTest, less_func) {
+INSTANTIATE_TEST_SUITE_P(TestWithDifferentParams, LessFunctionsTest, ::testing::Values(BaseTestParamStr::NULL_CONFIG_PATH));
+
+TEST_P(LessFunctionsTest, less_func) {
     using namespace infinity;
 
-    UniquePtr<NewCatalog> catalog_ptr = MakeUnique<NewCatalog>(nullptr);
+    UniquePtr<Catalog> catalog_ptr = MakeUnique<Catalog>();
 
     RegisterLessFunction(catalog_ptr);
 
     String op = "<";
-    SharedPtr<FunctionSet> function_set = NewCatalog::GetFunctionSetByName(catalog_ptr.get(), op);
+    SharedPtr<FunctionSet> function_set = Catalog::GetFunctionSetByName(catalog_ptr.get(), op);
     EXPECT_EQ(function_set->type_, FunctionType::kScalar);
     SharedPtr<ScalarFunctionSet> scalar_function_set = std::static_pointer_cast<ScalarFunctionSet>(function_set);
 
@@ -446,11 +453,11 @@ TEST_F(LessFunctionsTest, less_func) {
 
         for (SizeT i = 0; i < row_count; ++i) {
             if (i % 2 == 0) {
-                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + ToStr(i)));
-                data_block.AppendValue(1, Value::MakeVarchar("Helloworld" + ToStr(i)));
+                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+                data_block.AppendValue(1, Value::MakeVarchar("Helloworld" + std::to_string(i)));
             } else {
-                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + ToStr(i)));
-                data_block.AppendValue(1, Value::MakeVarchar("helloworld" + ToStr(i)));
+                data_block.AppendValue(0, Value::MakeVarchar("Helloworld" + std::to_string(i)));
+                data_block.AppendValue(1, Value::MakeVarchar("helloworld" + std::to_string(i)));
             }
         }
         data_block.Finalize();
@@ -461,11 +468,11 @@ TEST_F(LessFunctionsTest, less_func) {
             EXPECT_EQ(v1.type_.type(), LogicalType::kVarchar);
             EXPECT_EQ(v2.type_.type(), LogicalType::kVarchar);
             if (i % 2 == 0) {
-                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-                EXPECT_EQ(v2.value_.varchar.ToString(), "Helloworld" + ToStr(i));
+                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+                EXPECT_EQ(v2.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
             } else {
-                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + ToStr(i));
-                EXPECT_EQ(v2.value_.varchar.ToString(), "helloworld" + ToStr(i));
+                EXPECT_EQ(v1.value_.varchar.ToString(), "Helloworld" + std::to_string(i));
+                EXPECT_EQ(v2.value_.varchar.ToString(), "helloworld" + std::to_string(i));
             }
         }
 
@@ -477,16 +484,16 @@ TEST_F(LessFunctionsTest, less_func) {
             Value v = result->GetValue(i);
             EXPECT_EQ(v.type_.type(), LogicalType::kBoolean);
             if (i % 2 == 0) {
-                String s1 = "Helloworld" + ToStr(i);
-                String s2 = "Helloworld" + ToStr(i);
+                String s1 = "Helloworld" + std::to_string(i);
+                String s2 = "Helloworld" + std::to_string(i);
                 if (s1 < s2) {
                     EXPECT_EQ(v.value_.boolean, true);
                 } else {
                     EXPECT_EQ(v.value_.boolean, false);
                 }
             } else {
-                String s1 = "Helloworld" + ToStr(i);
-                String s2 = "helloworld" + ToStr(i);
+                String s1 = "Helloworld" + std::to_string(i);
+                String s2 = "helloworld" + std::to_string(i);
                 if (s1 < s2) {
                     EXPECT_EQ(v.value_.boolean, true);
                 } else {

@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
 #include <cstdint>
 #include <random>
 
+#include "gtest/gtest.h"
+import base_test;
 import dist_func_ip;
-import lvq_store;
+import data_store;
+import vec_store_type;
+import stl;
+import hnsw_common;
 
 using namespace infinity;
 
 class DistFuncTest2 : public BaseTest {};
-
 
 float F32IPTest(const float *v1, const float *v2, size_t dim) {
     float res = 0;
@@ -33,12 +36,15 @@ float F32IPTest(const float *v1, const float *v2, size_t dim) {
 }
 
 TEST_F(DistFuncTest2, test2) {
-    using LVQ8Store = LVQStore<float, int8_t, LVQIPCache<float, int8_t>>;
-    using Distance = LVQIPDist<float, int8_t>;
-    using LVQ8Data = LVQ8Store::StoreType;
+    using LabelT = int;
+    using VecStoreType = LVQIPVecStoreType<float, int8_t>;
+    using DataStore = DataStore<VecStoreType, LabelT>;
+    using Distance = typename VecStoreType::Distance;
+    using LVQ8Data = typename VecStoreType::StoreType;
 
     size_t dim = 128;
-    size_t vec_n = 10000;
+    size_t vec_n = 8192;
+    size_t max_chunk_size = 1;
 
     auto vecs1 = std::make_unique<float[]>(dim * vec_n);
     auto vecs2 = std::make_unique<float[]>(dim * vec_n);
@@ -53,9 +59,13 @@ TEST_F(DistFuncTest2, test2) {
         }
     }
 
-    auto lvq_store = LVQ8Store::Make(vec_n, dim, 0);
+    auto lvq_store = DataStore::Make(vec_n, max_chunk_size, dim, 0 /*Mmax0*/, 0 /*Mmax*/);
     Distance distance(lvq_store.dim());
-    lvq_store.AddVec(vecs1.get(), vec_n);
+
+    auto iter = DenseVectorIter<float, LabelT>(vecs1.get(), dim, vec_n);
+    auto [start_i, end_i] = lvq_store.AddVec(std::move(iter));
+    EXPECT_EQ(start_i, 0u);
+    EXPECT_EQ(end_i, vec_n);
 
     for (size_t i = 0; i < vec_n; ++i) {
         const float *v2 = vecs2.get() + i * dim;
@@ -64,23 +74,26 @@ TEST_F(DistFuncTest2, test2) {
         LVQ8Data lvq1 = query;
         LVQ8Data lvq2 = lvq_store.GetVec(i);
 
-        float dist1 = distance(lvq1, lvq2, lvq_store);
+        const auto &vec_store_meta = lvq_store.vec_store_meta();
+        float dist1 = distance(query, i, lvq_store);
 
-        float qv1[dim];
-        float qv2[dim];
+        Vector<float> qv1(dim);
+        Vector<float> qv2(dim);
         {
-            auto c1 = lvq1.GetCompressVec();
-            auto c2 = lvq2.GetCompressVec();
-            auto mean = lvq_store.GetMean();
-            auto [scale1, bias1] = lvq1.GetScalar();
-            auto [scale2, bias2] = lvq2.GetScalar();
+            const auto *c1 = lvq1->compress_vec_;
+            const auto *c2 = lvq2->compress_vec_;
+            const auto *mean = vec_store_meta.mean();
+            auto scale1 = lvq1->scale_;
+            auto bias1 = lvq1->bias_;
+            auto scale2 = lvq2->scale_;
+            auto bias2 = lvq2->bias_;
             for (size_t i = 0; i < dim; ++i) {
                 qv1[i] = scale1 * c1[i] + bias1 + mean[i];
                 qv2[i] = scale2 * c2[i] + bias2 + mean[i];
             }
         }
 
-        float dist2 = F32IPTest(qv1, qv2, dim);
+        float dist2 = F32IPTest(qv1.data(), qv2.data(), dim);
 
         float err = std::abs((dist1 - dist2) / dist1);
         EXPECT_LT(err, 1e-5);

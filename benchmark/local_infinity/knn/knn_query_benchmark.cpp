@@ -20,73 +20,64 @@
 #include <memory>
 #include <thread>
 #include <unordered_set>
+#include "hnsw_benchmark_util.h"
 
 import compilation_config;
 
 import infinity;
-import database;
-import table;
-import parser;
+
 import profiler;
-import local_file_system;
+import virtual_store;
 import third_party;
 import query_options;
 import query_result;
+import knn_expr;
+import column_expr;
+import parsed_expr;
+import search_expr;
+import function_expr;
+import statement_common;
+import internal_types;
 
 using namespace infinity;
 
-template <typename T>
-std::unique_ptr<T[]> load_data(const std::string &filename, size_t &num, int &dim) {
-    std::ifstream in(filename, std::ios::binary);
-    if (!in.is_open()) {
-        std::cout << "open file error" << std::endl;
-        exit(-1);
-    }
-    in.read((char *)&dim, 4);
-    in.seekg(0, std::ios::end);
-    auto ss = in.tellg();
-    num = ((size_t)ss) / (dim + 1) / 4;
-    auto data = std::make_unique_for_overwrite<T[]>(num * dim);
-
-    in.seekg(0, std::ios::beg);
-    for (size_t i = 0; i < num; i++) {
-        in.seekg(4, std::ios::cur);
-        in.read((char *)(data.get() + i * dim), dim * 4);
-    }
-    in.close();
-    return data;
-}
-
-template <class Function>
-inline void LoopFor(size_t id_begin, size_t id_end, size_t threadId, Function fn, const std::string &table_name) {
-    std::cout << "threadId = " << threadId << " [" << id_begin << ", " << id_end << ")" << std::endl;
+template <typename Function>
+inline void LoopFor(size_t id_begin, size_t id_end, size_t thread_id, Function fn, const std::string &db_name, const std::string &table_name) {
+    std::cout << "thread_id = " << thread_id << " [" << id_begin << ", " << id_end << ")" << std::endl;
     std::shared_ptr<Infinity> infinity = Infinity::LocalConnect();
-    std::shared_ptr<Database> data_base = infinity->GetDatabase("default");
-    std::shared_ptr<Table> table = data_base->GetTable(table_name);
+    //    auto [data_base, status1] = infinity->GetDatabase("default_db");
+    //    auto [table, status2] = data_base->GetTable(table_name);
+    //    std::shared_ptr<Table> shared_table(std::move(table));
     for (auto id = id_begin; id < id_end; ++id) {
-        fn(id, table, threadId);
+        fn(id, thread_id, infinity.get(), db_name, table_name);
     }
 }
 
-template <class Function>
-inline void ParallelFor(size_t start, size_t end, size_t numThreads, Function fn, const std::string &table_name) {
+template <typename Function>
+inline void ParallelFor(size_t start, size_t end, size_t numThreads, Function fn, const std::string &db_name, const std::string &table_name) {
     if (numThreads <= 0) {
         numThreads = std::thread::hardware_concurrency();
     }
-    std::vector<std::jthread> threads;
+    std::vector<std::thread> threads;
     threads.reserve(numThreads);
     size_t avg_cnt = (end - start) / numThreads;
     size_t extra_cnt = (end - start) % numThreads;
-    for (size_t id_begin = start, threadId = 0; threadId < numThreads; ++threadId) {
-        size_t id_end = id_begin + avg_cnt + (threadId < extra_cnt);
-        threads.emplace_back([id_begin, id_end, threadId, fn, table_name] { LoopFor(id_begin, id_end, threadId, fn, table_name); });
+    for (size_t id_begin = start, thread_id = 0; thread_id < numThreads; ++thread_id) {
+        size_t id_end = id_begin + avg_cnt + (thread_id < extra_cnt);
+        threads.emplace_back(
+            [id_begin, id_end, thread_id, fn, db_name, table_name] { LoopFor(id_begin, id_end, thread_id, fn, db_name, table_name); });
         id_begin = id_end;
+    }
+    for (auto &thread : threads) {
+        thread.join();
     }
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        std::cout << "query gist/sift ef=?" << std::endl;
+    if (argc < 3) {
+        std::cout << "query gist/sift ef=? , with optional test_data_path (default to /infinity/test/data in docker) and optional infinity path "
+                     "(default to /var/infinity)"
+                  << std::endl;
         return 1;
     }
     bool sift = true;
@@ -95,6 +86,10 @@ int main(int argc, char *argv[]) {
     }
     sift = strcmp(argv[1], "sift") == 0;
     size_t ef = std::stoull(argv[2]);
+    bool rerank = false;
+    if (argc >= 4) {
+        rerank = std::string(argv[3]) == "true";
+    }
 
     size_t thread_num = 1;
     size_t total_times = 1;
@@ -103,21 +98,33 @@ int main(int argc, char *argv[]) {
     std::cout << "Please input total_times:" << std::endl;
     std::cin >> total_times;
 
-    std::string path = "/tmp/infinity";
-    LocalFileSystem fs;
+    std::string path = "/var/infinity";
+    if (argc >= 6) {
+        path = std::string(argv[5]);
+    }
 
-    Infinity::LocalInit(path);
+    std::string config_path;
+    if (argc >= 7) {
+        config_path = std::string(argv[6]);
+    }
+
+    Infinity::LocalInit(path, config_path);
 
     std::cout << ">>> Query Benchmark Start <<<" << std::endl;
     std::cout << "Thread Num: " << thread_num << ", Times: " << total_times << std::endl;
 
     std::vector<std::string> results;
 
-    std::string query_path = std::string(test_data_path());
-    std::string groundtruth_path = std::string(test_data_path());
+    std::string base_path = std::string(test_data_path());
+    if (argc >= 5) {
+        base_path = std::string(argv[4]);
+    }
+    std::string query_path = base_path;
+    std::string groundtruth_path = base_path;
     size_t dimension = 0;
     int64_t topk = 100;
 
+    std::string db_name = "default_db";
     std::string table_name;
     if (sift) {
         dimension = 128;
@@ -133,11 +140,11 @@ int main(int argc, char *argv[]) {
     std::cout << "query from: " << query_path << std::endl;
     std::cout << "groundtruth is: " << groundtruth_path << std::endl;
 
-    if (!fs.Exists(query_path)) {
+    if (!VirtualStore::Exists(query_path)) {
         std::cerr << "File: " << query_path << " doesn't exist" << std::endl;
         exit(-1);
     }
-    if (!fs.Exists(groundtruth_path)) {
+    if (!VirtualStore::Exists(groundtruth_path)) {
         std::cerr << "File: " << groundtruth_path << " doesn't exist" << std::endl;
         exit(-1);
     }
@@ -145,7 +152,7 @@ int main(int argc, char *argv[]) {
     size_t query_count;
     {
         int dim = -1;
-        queries_ptr = load_data<float>(query_path, query_count, dim);
+        std::tie(query_count, dim, queries_ptr) = benchmark::DecodeFvecsDataset<float>(query_path);
         assert((int)dimension == dim || !"query vector dim isn't 128");
     }
     auto queries = queries_ptr.get();
@@ -155,7 +162,7 @@ int main(int argc, char *argv[]) {
         size_t gt_count;
         int gt_top_k;
         {
-            gt = load_data<int>(groundtruth_path, gt_count, gt_top_k);
+            std::tie(gt_count, gt_top_k, gt) = benchmark::DecodeFvecsDataset<int>(groundtruth_path);
             assert(gt_top_k == topk || !"gt_top_k != topk");
             assert(gt_count == query_count || !"gt_count != query_count");
         }
@@ -177,19 +184,25 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    do {
+    float elapsed_s_sum = 0;
+    for (size_t times = 0; times < total_times + 2; ++times) {
         std::cout << "--- Start to run search benchmark: " << std::endl;
         std::vector<std::vector<uint64_t>> query_results(query_count);
         for (auto &v : query_results) {
             v.reserve(100);
         }
-        auto query_function = [&](size_t query_idx, std::shared_ptr<Table> &table, size_t threadId) {
+        auto query_function = [&](size_t query_idx, size_t thread_id, Infinity *infinity, const std::string &db_name, const std::string &table_name) {
             KnnExpr *knn_expr = new KnnExpr();
             knn_expr->dimension_ = dimension;
             knn_expr->distance_type_ = KnnDistanceType::kL2;
             knn_expr->topn_ = topk;
             knn_expr->opt_params_ = new std::vector<InitParameter *>();
-            knn_expr->opt_params_->push_back(new InitParameter("ef", std::to_string(ef)));
+            {
+                knn_expr->opt_params_->push_back(new InitParameter("ef", std::to_string(ef)));
+                if (rerank) {
+                    knn_expr->opt_params_->push_back(new InitParameter("rerank"));
+                }
+            }
             knn_expr->embedding_data_type_ = EmbeddingDataType::kElemFloat;
             auto embedding_data_ptr = new float[dimension];
             knn_expr->embedding_data_ptr_ = embedding_data_ptr;
@@ -208,7 +221,7 @@ int main(int argc, char *argv[]) {
             auto select_rowid_expr = new FunctionExpr();
             select_rowid_expr->func_name_ = "row_id";
             output_columns->emplace_back(select_rowid_expr);
-            auto result = table->Search(search_expr, nullptr, output_columns);
+            auto result = infinity->Search(db_name, table_name, search_expr, nullptr, nullptr, nullptr, output_columns, nullptr, nullptr, nullptr, nullptr, false);
             {
                 auto &cv = result.result_table_->GetDataBlockById(0)->column_vectors;
                 auto &column = *cv[0];
@@ -218,13 +231,18 @@ int main(int argc, char *argv[]) {
                     query_results[query_idx].emplace_back(data[i].ToUint64());
                 }
             }
-//            delete[] embedding_data_ptr;
         };
-        BaseProfiler profiler;
+        BaseProfiler profiler("ParallelFor");
         profiler.Begin();
-        ParallelFor(0, query_count, thread_num, query_function, table_name);
+        ParallelFor(0, query_count, thread_num, query_function, db_name, table_name);
         profiler.End();
-        results.push_back(Format("Total cost : {}", profiler.ElapsedToString(1000)));
+        // skip 2 warm up loops
+        if (times >= 2) {
+            auto elapsed_ns = profiler.Elapsed();
+            auto elapsed_s = elapsed_ns / (1'000'000'000.0);
+            results.push_back(fmt::format("Total cost : {} s", elapsed_s));
+            elapsed_s_sum += elapsed_s;
+        }
         {
             size_t correct_1 = 0, correct_10 = 0, correct_100 = 0;
             for (size_t query_idx = 0; query_idx < query_count; ++query_idx) {
@@ -244,15 +262,18 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-            results.push_back(Format("R@1:   {:.3f}", float(correct_1) / float(query_count * 1)));
-            results.push_back(Format("R@10:  {:.3f}", float(correct_10) / float(query_count * 10)));
-            results.push_back(Format("R@100: {:.3f}", float(correct_100) / float(query_count * 100)));
+            results.push_back(fmt::format("R@1:   {:.3f}", float(correct_1) / float(query_count * 1)));
+            results.push_back(fmt::format("R@10:  {:.3f}", float(correct_10) / float(query_count * 10)));
+            results.push_back(fmt::format("R@100: {:.3f}", float(correct_100) / float(query_count * 100)));
         }
-    } while (--total_times);
+    }
 
     std::cout << ">>> Query Benchmark End <<<" << std::endl;
     for (const auto &item : results) {
         std::cout << item << std::endl;
     }
+    float elapsed_s_avg = elapsed_s_sum / total_times;
+    std::cout << "Average cost : " << elapsed_s_avg << " s" << std::endl;
+
     Infinity::LocalUnInit();
 }

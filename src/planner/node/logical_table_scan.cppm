@@ -18,14 +18,16 @@ import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
-import parser;
+
+import base_table_ref;
+import meta_info;
+import internal_types;
+import data_type;
+import fast_rough_filter;
 
 export module logical_table_scan;
 
 namespace infinity {
-
-class BaseTableRef;
-struct TableEntry;
 
 export class LogicalTableScan : public LogicalNode {
 public:
@@ -37,7 +39,7 @@ public:
 
     [[nodiscard]] SharedPtr<Vector<SharedPtr<DataType>>> GetOutputTypes() const final;
 
-    [[nodiscard]] TableEntry *table_collection_ptr() const;
+    [[nodiscard]] TableInfo *table_info() const;
 
     [[nodiscard]] String TableAlias() const;
 
@@ -48,6 +50,8 @@ public:
     inline String name() final { return "LogicalTableScan"; }
 
     SharedPtr<BaseTableRef> base_table_ref_{};
+
+    UniquePtr<FastRoughFilterEvaluator> fast_rough_filter_evaluator_;
 
     bool add_row_id_;
 };

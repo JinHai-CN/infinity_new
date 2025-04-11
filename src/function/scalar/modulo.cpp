@@ -14,18 +14,19 @@
 
 module;
 
-#include <cmath>
+module modulo;
 
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
-import third_party;
 
-module modulo;
+import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -45,7 +46,8 @@ struct ModuloFunction {
 
 template <>
 inline bool ModuloFunction::Run(HugeIntT, HugeIntT, HugeIntT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: MinusFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
@@ -67,7 +69,29 @@ inline bool ModuloFunction::Run(DoubleT left, DoubleT right, DoubleT &result) {
     return true;
 }
 
-void RegisterModuloFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+template <>
+inline bool ModuloFunction::Run(Float16T left, Float16T right, Float16T &result) {
+    float mid = 0.0f;
+    const bool success = ModuloFunction::Run(static_cast<float>(left), static_cast<float>(right), mid);
+    result = mid;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return success;
+}
+
+template <>
+inline bool ModuloFunction::Run(BFloat16T left, BFloat16T right, BFloat16T &result) {
+    float mid = 0.0f;
+    const bool success = ModuloFunction::Run(static_cast<float>(left), static_cast<float>(right), mid);
+    result = mid;
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return success;
+}
+
+void RegisterModuloFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "%";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -114,7 +138,19 @@ void RegisterModuloFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                        &ScalarFunction::BinaryFunctionWithFailure<DoubleT, DoubleT, DoubleT, ModuloFunction>);
     function_set_ptr->AddFunction(mod_function_double);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    ScalarFunction mod_function_float16(func_name,
+                                        {DataType(LogicalType::kFloat16), DataType(LogicalType::kFloat16)},
+                                        {DataType(LogicalType::kFloat16)},
+                                        &ScalarFunction::BinaryFunctionWithFailure<Float16T, Float16T, Float16T, ModuloFunction>);
+    function_set_ptr->AddFunction(mod_function_float16);
+
+    ScalarFunction mod_function_bfloat16(func_name,
+                                         {DataType(LogicalType::kBFloat16), DataType(LogicalType::kBFloat16)},
+                                         {DataType(LogicalType::kBFloat16)},
+                                         &ScalarFunction::BinaryFunctionWithFailure<BFloat16T, BFloat16T, BFloat16T, ModuloFunction>);
+    function_set_ptr->AddFunction(mod_function_bfloat16);
+
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

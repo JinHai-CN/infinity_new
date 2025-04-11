@@ -14,17 +14,21 @@
 
 module;
 
+export module physical_create_schema;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
-import index_def;
+import index_base;
 import load_meta;
 import infinity_exception;
-
-export module physical_create_schema;
+import internal_types;
+import extra_ddl_info;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -32,23 +36,20 @@ export class PhysicalCreateSchema final : public PhysicalOperator {
 public:
     explicit PhysicalCreateSchema(SharedPtr<String> schema_name,
                                   ConflictType conflict_type,
+                                  SharedPtr<String> comment,
                                   SharedPtr<Vector<String>> output_names,
                                   SharedPtr<Vector<SharedPtr<DataType>>> output_types,
                                   u64 id,
                                   SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kCreateDatabase, nullptr, nullptr, id, load_metas), schema_name_(Move(schema_name)),
-          conflict_type_(conflict_type), output_names_(Move(output_names)), output_types_(Move(output_types)) {}
+        : PhysicalOperator(PhysicalOperatorType::kCreateDatabase, nullptr, nullptr, id, load_metas), schema_name_(std::move(schema_name)),
+          conflict_type_(conflict_type), comment_(std::move(comment)), output_names_(std::move(output_names)),
+          output_types_(std::move(output_types)) {}
 
     ~PhysicalCreateSchema() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 
@@ -61,6 +62,7 @@ public:
 private:
     SharedPtr<String> schema_name_{};
     ConflictType conflict_type_{ConflictType::kInvalid};
+    SharedPtr<String> comment_{};
 
     SharedPtr<Vector<String>> output_names_{};
     SharedPtr<Vector<SharedPtr<DataType>>> output_types_{};

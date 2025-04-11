@@ -16,17 +16,18 @@ module;
 
 #include <sstream>
 
+module logical_cross_product;
+
 import stl;
 import column_binding;
 import logical_node_type;
-import parser;
 
-module logical_cross_product;
+import internal_types;
 
 namespace infinity {
 
 LogicalCrossProduct::LogicalCrossProduct(u64 node_id, String alias, const SharedPtr<LogicalNode> &left, const SharedPtr<LogicalNode> &right)
-    : LogicalNode(node_id, LogicalNodeType::kCrossProduct), alias_(Move(alias)) {
+    : LogicalNode(node_id, LogicalNodeType::kCrossProduct), alias_(std::move(alias)) {
     this->set_left_node(left);
     this->set_right_node(right);
 }

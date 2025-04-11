@@ -14,21 +14,22 @@
 
 module;
 
+export module logical_filter;
+
 import stl;
 import logical_node_type;
 import column_binding;
 import logical_node;
 import base_expression;
-import parser;
-
-export module logical_filter;
+import data_type;
+import internal_types;
 
 namespace infinity {
 
 export class LogicalFilter : public LogicalNode {
 public:
     explicit LogicalFilter(u64 node_id, SharedPtr<BaseExpression> expression)
-        : LogicalNode(node_id, LogicalNodeType::kFilter), expression_(Move(expression)) {}
+        : LogicalNode(node_id, LogicalNodeType::kFilter), expression_(std::move(expression)) {}
 
     [[nodiscard]] Vector<ColumnBinding> GetColumnBindings() const;
 

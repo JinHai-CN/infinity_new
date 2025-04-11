@@ -14,16 +14,17 @@
 
 module;
 
-#include <cmath>
-
 import stl;
 import catalog;
-
+import logical_type;
 import infinity_exception;
 import scalar_function;
 import scalar_function_set;
-import parser;
+
 import third_party;
+import internal_types;
+import data_type;
+import logger;
 
 module pow;
 
@@ -38,12 +39,31 @@ struct PowFunction {
 };
 
 template <>
+inline bool PowFunction::Run(Float16T base, Float16T exponent, Float16T &result) {
+    result = std::pow(static_cast<float>(base), static_cast<float>(exponent));
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
+}
+
+template <>
+inline bool PowFunction::Run(BFloat16T base, BFloat16T exponent, BFloat16T &result) {
+    result = std::pow(static_cast<float>(base), static_cast<float>(exponent));
+    if (const auto f = static_cast<float>(result); std::isnan(f) || std::isinf(f)) {
+        return false;
+    }
+    return true;
+}
+
+template <>
 inline bool PowFunction::Run(MixedT, DoubleT, DoubleT &) {
-    Error<NotImplementException>("Not implement");
+    String error_message = "Not implement: PowFunction::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 
-void RegisterPowFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterPowFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "POW";
 
     SharedPtr<ScalarFunctionSet> function_set_ptr = MakeShared<ScalarFunctionSet>(func_name);
@@ -60,13 +80,25 @@ void RegisterPowFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
                                        &ScalarFunction::BinaryFunctionWithFailure<DoubleT, DoubleT, DoubleT, PowFunction>);
     function_set_ptr->AddFunction(pow_function_double);
 
+    ScalarFunction pow_function_float16(func_name,
+                                        {DataType(LogicalType::kFloat16), DataType(LogicalType::kFloat16)},
+                                        {DataType(LogicalType::kFloat16)},
+                                        &ScalarFunction::BinaryFunctionWithFailure<Float16T, Float16T, Float16T, PowFunction>);
+    function_set_ptr->AddFunction(pow_function_float16);
+
+    ScalarFunction pow_function_bfloat16(func_name,
+                                         {DataType(LogicalType::kBFloat16), DataType(LogicalType::kBFloat16)},
+                                         {DataType(LogicalType::kBFloat16)},
+                                         &ScalarFunction::BinaryFunctionWithFailure<BFloat16T, BFloat16T, BFloat16T, PowFunction>);
+    function_set_ptr->AddFunction(pow_function_bfloat16);
+
     ScalarFunction pow_function_mixed_double(func_name,
                                              {DataType(LogicalType::kMixed), DataType(LogicalType::kDouble)},
                                              {DataType(LogicalType::kDouble)},
                                              &ScalarFunction::BinaryFunctionWithFailure<MixedT, DoubleT, DoubleT, PowFunction>);
     function_set_ptr->AddFunction(pow_function_mixed_double);
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

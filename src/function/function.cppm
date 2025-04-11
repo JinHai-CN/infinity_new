@@ -14,9 +14,9 @@
 
 module;
 
-import stl;
-
 export module function;
+
+import stl;
 
 namespace infinity {
 
@@ -31,7 +31,7 @@ export enum class FunctionType {
 
 export class Function {
 public:
-    explicit Function(String name, FunctionType type) : name_(Move(name)), type_(type) {}
+    explicit Function(String name, FunctionType type) : name_(std::move(name)), type_(type) {}
 
     virtual ~Function() = default;
 

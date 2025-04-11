@@ -11,7 +11,7 @@ static thread_local std::stringstream string_buffer;
 %option reentrant
 %option bison-bridge
 
-%option noyywrap nounput
+%option noyywrap nounput noinput
 %option warn
 %option never-interactive
 %option batch
@@ -28,28 +28,41 @@ static thread_local std::stringstream string_buffer;
 
 [ \t\n]+        /* ignore \t\n and space */;
 
+ADD             { return ADD; }
+ADMIN           { return ADMIN; }
 ALL             { return ALL; }
+ALLOCATION      { return ALLOCATION; }
 ALTER           { return ALTER; }
-ANALYZE         { return ANALYZE; }
 AND             { return AND; }
+ARRAY           { return ARRAY; }
 AS              { return AS; }
-AST             { return AST; }
 ASC             { return ASC; }
 BETWEEN         { return BETWEEN; }
+BFLOAT16        { return BFLOAT16; }
 BIGINT          { return BIGINT; }
 BIT             { return BIT; }
 BITMAP          { return BITMAP; }
 BOOLEAN         { return BOOLEAN; }
 BOX             { return BOX; }
 BLOB            { return BLOB; }
-BLOCK          { return BLOCK; }
+BLOCK           { return BLOCK; }
+BLOCKS          { return BLOCKS; }
 BUFFER          { return BUFFER; }
 BY              { return BY; }
 CASE            { return CASE; }
 CAST            { return CAST; }
+CATALOG         { return CATALOG; }
+CATALOGS        { return CATALOGS; }
+CHUNK           { return CHUNK; }
 CIRCLE          { return CIRCLE; }
 COLLECTION      { return COLLECTION; }
+COLUMN          { return COLUMN; }
+COLUMNS         { return COLUMNS; }
+COMMENT         { return COMMENT; }
+COMPACT         { return COMPACT; }
 CONFIGS         { return CONFIGS; }
+CONFIG          { return CONFIG; }
+CONNECT         { return CONNECT; }
 COPY            { return COPY; }
 CREATE          { return CREATE; }
 CROSS           { return CROSS; }
@@ -63,9 +76,10 @@ DAYS            { return DAYS; }
 DISTINCT        { return DISTINCT; }
 DOUBLE          { return DOUBLE; }
 DECIMAL         { return DECIMAL; }
+DEFAULT         { return DEFAULT; }
 DELETE          { return DELETE; }
 DELIMITER       { return DELIMITER; }
-DESCRIBE        { return DESCRIBE; }
+DELTA           { return DELTA; }
 DESC            { return DESC; }
 DROP            { return DROP; }
 ELSE            { return ELSE; }
@@ -78,11 +92,12 @@ EXISTS          { return EXISTS; }
 EXPLAIN         { return EXPLAIN; }
 EXPORT          { return EXPORT; }
 FALSE           { return FALSE; }
+FILES           { return FILES; }
 FLOAT           { return FLOAT; }
+FLOAT16         { return FLOAT16; }
 FLUSH           { return FLUSH; }
-OPTIMIZE        { return OPTIMIZE; }
+FOLLOWER        { return FOLLOWER; }
 FORMAT          { return FORMAT; }
-FRAGMENT        { return FRAGMENT; }
 FROM            { return FROM; }
 FULL            { return FULL; }
 FUSION          { return FUSION; }
@@ -90,12 +105,16 @@ GLOBAL          { return GLOBAL; }
 GROUP           { return GROUP; }
 HAVING          { return HAVING; }
 HEADER          { return HEADER; }
+HIGHLIGHT       { return HIGHLIGHT; }
+HISTORY         { return HISTORY; }
 HOUR            { return HOUR; }
 HOURS           { return HOURS; }
 HUGEINT         { return HUGEINT; }
 IF              { return IF; }
+IGNORE          { return IGNORE; }
 IN              { return IN; }
 INDEX           { return INDEX; }
+INDEXES         { return INDEXES; }
 INNER           { return INNER; }
 INSERT          { return INSERT; }
 INTEGER         { return INTEGER; }
@@ -106,41 +125,56 @@ INTO            { return INTO; }
 IS              { return IS; }
 JOIN            { return JOIN; }
 KEY             { return KEY; }
-KNN             { return KNN; }
+LEADER          { return LEADER; }
+LEARNER         { return LEARNER; }
 LEFT            { return LEFT; }
 LIKE            { return LIKE; }
 LIMIT           { return LIMIT; }
 LINE            { return LINE; }
+LOCK            { return LOCK; }
 LOG             { return LOG; }
-LOGICAL         { return LOGICAL; }
+LOGS            { return LOGS; }
 LSEG            { return LSEG; }
 MATCH           { return MATCH; }
+MAXSIM          { return MAXSIM; }
+MEMORY          { return MEMORY; }
+MEMINDEX        { return MEMINDEX; }
 MINUTE          { return MINUTE; }
 MINUTES         { return MINUTES; }
 MONTH           { return MONTH; }
 MONTHS          { return MONTHS; }
+MULTIVECTOR     { return MULTIVECTOR; }
 NATURAL         { return NATURAL; }
 NULL            { return NULLABLE; }
+NODE            { return NODE; }
+NODES           { return NODES; }
 NOT             { return NOT; }
+OBJECT          { return OBJECT; }
+OBJECTS         { return OBJECTS; }
 OFF             { return OFF; }
 OFFSET          { return OFFSET; }
 ON              { return ON; }
+OPTIMIZE        { return OPTIMIZE; }
 OR              { return OR; }
 ORDER           { return ORDER; }
 OUTER           { return OUTER; }
 PATH            { return PATH; }
-PHYSICAL        { return PHYSICAL; }
-PIPELINE        { return PIPELINE; }
+PERSISTENCE     { return PERSISTENCE; }
 POINT           { return POINT; }
 POLYGON         { return POLYGON; }
 PREPARE         { return PREPARE; }
 PRIMARY         { return PRIMARY; }
-PROFILE         { return PROFILE; }
 PROFILES        { return PROFILES; }
+PROPERTIES      { return PROPERTIES; }
+QUERIES         { return QUERIES; }
 QUERY           { return QUERY; }
-RAW             { return RAW; }
 REAL            { return REAL; }
+RECOVER         { return RECOVER; }
+RESTORE         { return RESTORE; }
+RENAME          { return RENAME; }
+REMOVE          { return REMOVE; }
 RIGHT           { return RIGHT; }
+ROWLIMIT        { return ROWLIMIT; }
 SEARCH          { return SEARCH; }
 SECOND          { return SECOND; }
 SECONDS         { return SECONDS; }
@@ -148,25 +182,39 @@ SELECT          { return SELECT; }
 SESSION         { return SESSION; }
 SET             { return SET; }
 SEGMENT         { return SEGMENT; }
-SEGMENTS         { return SEGMENTS; }
+SEGMENTS        { return SEGMENTS; }
 SHOW            { return SHOW; }
 SMALLINT        { return SMALLINT; }
-STATUS          { return STATUS; }
+SNAPSHOT        { return SNAPSHOT; }
+SNAPSHOTS       { return SNAPSHOTS; }
+SPARSE          { return SPARSE; }
+STANDALONE      { return STANDALONE; }
+SYSTEM          { return SYSTEM; }
+TABLE           { return TABLE; }
+TABLES          { return TABLES; }
+TENSOR          { return TENSOR; }
+TENSORARRAY     { return TENSORARRAY; }
+TEXT            { return TEXT; }
 THEN            { return THEN; }
 TIME            { return TIME; }
 TIMESTAMP       { return TIMESTAMP; }
-TO              { return TO; }
-TABLE           { return TABLE; }
-TABLES          { return TABLES; }
-TRUE            { return TRUE; }
 TINYINT         { return TINYINT; }
+TO              { return TO; }
+TRANSACTION     { return TRANSACTION; }
+TRANSACTIONS    { return TRANSACTIONS; }
+TRUE            { return TRUE; }
+TUPLE           { return TUPLE; }
 UNION           { return UNION; }
 UNIQUE          { return UNIQUE; }
+UNLOCK          { return UNLOCK; }
+UNSIGNED        { return UNSIGNED; }
 USING           { return USING; }
 UPDATE          { return UPDATE; }
 UUID            { return UUID; }
 USE             { return USE; }
 VALUES          { return VALUES; }
+VARIABLE        { return VARIABLE; }
+VARIABLES       { return VARIABLES; }
 VARCHAR         { return VARCHAR; }
 VECTOR          { return VECTOR; }
 VIEW            { return VIEW; }
@@ -185,7 +233,7 @@ YEARS           { return YEARS; }
 
 [-+*/(){},.;<>=^%:?[\]|]    { return yytext[0]; }
 
--?[0-9]+"."[0-9]* |
+-?[0-9]+"."[0-9]*((E|e)-?[0-9]+)? |
 "."[0-9]*  {
     yylval->double_value = atof(yytext);
     return DOUBLE_VALUE;

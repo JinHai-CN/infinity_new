@@ -14,33 +14,50 @@
 
 module;
 
+module avg;
+
 import stl;
 import catalog;
-
+import status;
 import infinity_exception;
 import aggregate_function;
 import aggregate_function_set;
-import parser;
-import third_party;
 
-module avg;
+import third_party;
+import logical_type;
+import internal_types;
+import data_type;
+import logger;
 
 namespace infinity {
 
 template <typename ValueType, typename ResultType>
 struct AvgState {
 public:
-    inline void Initialize() { Error<NotImplementException>("Initialize average state."); }
-
-    inline void Update(const ValueType *__restrict, SizeT) { Error<NotImplementException>("Update average state."); }
-
-    inline void ConstantUpdate(const ValueType *__restrict, SizeT, SizeT) {
-        Error<NotImplementException>("Constant update average state.");
+    inline void Initialize() {
+        Status status = Status::NotSupport("Initialize average state.");
+        RecoverableError(status);
     }
 
-    inline ptr_t Finalize() { Error<NotImplementException>("Finalize average state."); }
+    inline void Update(const ValueType *__restrict, SizeT) {
+        Status status = Status::NotSupport("Update average state.");
+        RecoverableError(status);
+    }
 
-    inline static SizeT Size(const DataType &data_type) { Error<NotImplementException>(Format("Average state type size: {}", data_type.ToString())); }
+    inline void ConstantUpdate(const ValueType *__restrict, SizeT, SizeT) {
+        Status status = Status::NotSupport("Constant update average state.");
+        RecoverableError(status);
+    }
+
+    inline ptr_t Finalize() {
+        Status status = Status::NotSupport("Finalize average state.");
+        RecoverableError(status);
+    }
+
+    inline static SizeT Size(const DataType &data_type) {
+        Status status = Status::NotSupport(fmt::format("Average state type size: {}", data_type.ToString()));
+        RecoverableError(status);
+    }
 };
 
 template <>
@@ -56,8 +73,9 @@ public:
     }
 
     inline void Update(const TinyIntT *__restrict input, SizeT idx) {
-        if (count_ == i64_max) {
-            Error<ExecutorException>(Format("Data count exceeds: {}", count_));
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
         }
         this->count_++;
         value_ += input[idx];
@@ -89,8 +107,9 @@ public:
     }
 
     inline void Update(const SmallIntT *__restrict input, SizeT idx) {
-        if (count_ == i64_max) {
-            Error<ExecutorException>(Format("Data count exceeds: {}", count_));
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
         }
         this->count_++;
         value_ += input[idx];
@@ -123,8 +142,9 @@ public:
     }
 
     inline void Update(const IntegerT *__restrict input, SizeT idx) {
-        if (count_ == i64_max) {
-            Error<ExecutorException>(Format("Data count exceeds: {}", count_));
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
         }
         this->count_++;
         value_ += input[idx];
@@ -157,8 +177,9 @@ public:
     }
 
     inline void Update(const BigIntT *__restrict input, SizeT idx) {
-        if (count_ == i64_max) {
-            Error<ExecutorException>(Format("Data count exceeds: {}", count_));
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
         }
         this->count_++;
         value_ += input[idx];
@@ -168,6 +189,76 @@ public:
         // TODO: Need to check overflow.
         this->count_ += count;
         value_ += (input[idx] * count);
+    }
+
+    inline ptr_t Finalize() {
+        result_ = value_ / count_;
+        return (ptr_t)&result_;
+    }
+
+    inline static SizeT Size(const DataType &) { return sizeof(value_) + sizeof(count_) + sizeof(result_); }
+};
+
+template <>
+struct AvgState<Float16T, DoubleT> {
+public:
+    double value_{};
+    i64 count_{};
+    double result_{};
+
+    inline void Initialize() {
+        this->value_ = 0;
+        this->count_ = 0;
+    }
+
+    inline void Update(const Float16T *__restrict input, SizeT idx) {
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
+        }
+        this->count_++;
+        value_ += static_cast<float>(input[idx]);
+    }
+
+    inline void ConstantUpdate(const Float16T *__restrict input, SizeT idx, SizeT count) {
+        // TODO: Need to check overflow.
+        this->count_ += count;
+        value_ += static_cast<float>(input[idx]) * count;
+    }
+
+    inline ptr_t Finalize() {
+        result_ = value_ / count_;
+        return (ptr_t)&result_;
+    }
+
+    inline static SizeT Size(const DataType &) { return sizeof(value_) + sizeof(count_) + sizeof(result_); }
+};
+
+template <>
+struct AvgState<BFloat16T, DoubleT> {
+public:
+    double value_{};
+    i64 count_{};
+    double result_{};
+
+    inline void Initialize() {
+        this->value_ = 0;
+        this->count_ = 0;
+    }
+
+    inline void Update(const BFloat16T *__restrict input, SizeT idx) {
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
+        }
+        this->count_++;
+        value_ += static_cast<float>(input[idx]);
+    }
+
+    inline void ConstantUpdate(const BFloat16T *__restrict input, SizeT idx, SizeT count) {
+        // TODO: Need to check overflow.
+        this->count_ += count;
+        value_ += static_cast<float>(input[idx]) * count;
     }
 
     inline ptr_t Finalize() {
@@ -191,8 +282,9 @@ public:
     }
 
     inline void Update(const FloatT *__restrict input, SizeT idx) {
-        if (count_ == i64_max) {
-            Error<ExecutorException>(Format("Data count exceeds: {}", count_));
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
         }
         this->count_++;
         value_ += input[idx];
@@ -225,8 +317,9 @@ public:
     }
 
     inline void Update(const DoubleT *__restrict input, SizeT idx) {
-        if (count_ == i64_max) {
-            Error<ExecutorException>(Format("Data count exceeds: {}", count_));
+        if (count_ == std::numeric_limits<i64>::max()) {
+            String error_message = fmt::format("Data count exceeds: {}", count_);
+            UnrecoverableError(error_message);
         }
         this->count_++;
         value_ += input[idx];
@@ -246,7 +339,7 @@ public:
     inline static SizeT Size(const DataType &) { return sizeof(value_) + sizeof(count_) + sizeof(result_); }
 };
 
-void RegisterAvgFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
+void RegisterAvgFunction(const UniquePtr<Catalog> &catalog_ptr) {
     String func_name = "AVG";
 
     SharedPtr<AggregateFunctionSet> function_set_ptr = MakeShared<AggregateFunctionSet>(func_name);
@@ -301,6 +394,20 @@ void RegisterAvgFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
     }
 
     {
+        AggregateFunction avg_function = UnaryAggregate<AvgState<Float16T, DoubleT>, Float16T, DoubleT>(func_name,
+                                                                                                        DataType(LogicalType::kFloat16),
+                                                                                                        DataType(LogicalType::kDouble));
+        function_set_ptr->AddFunction(avg_function);
+    }
+
+    {
+        AggregateFunction avg_function = UnaryAggregate<AvgState<BFloat16T, DoubleT>, BFloat16T, DoubleT>(func_name,
+                                                                                                          DataType(LogicalType::kBFloat16),
+                                                                                                          DataType(LogicalType::kDouble));
+        function_set_ptr->AddFunction(avg_function);
+    }
+
+    {
         AggregateFunction avg_function =
             UnaryAggregate<AvgState<FloatT, DoubleT>, FloatT, DoubleT>(func_name, DataType(LogicalType::kFloat), DataType(LogicalType::kDouble));
         function_set_ptr->AddFunction(avg_function);
@@ -312,7 +419,7 @@ void RegisterAvgFunction(const UniquePtr<NewCatalog> &catalog_ptr) {
         function_set_ptr->AddFunction(avg_function);
     }
 
-    NewCatalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
+    Catalog::AddFunctionSet(catalog_ptr.get(), function_set_ptr);
 }
 
 } // namespace infinity

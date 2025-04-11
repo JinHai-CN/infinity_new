@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
@@ -24,34 +25,21 @@ import global_resource_usage;
 import infinity_context;
 import default_values;
 
+using namespace infinity;
+
 class StringChunkTest : public BaseTest {};
-//
-//
-//TEST_F(StringChunkTest, heap_chunk_test) {
-//    using namespace infinity;
-//
-//    {
-//        HeapChunk heap_chunk(0);
-//        EXPECT_EQ(heap_chunk.ptr_, nullptr);
-//    }
-//
-//    {
-//        HeapChunk heap_chunk(MIN_VECTOR_CHUNK_SIZE);
-//        EXPECT_NE(heap_chunk.ptr_, nullptr);
-//    }
-//}
 
 TEST_F(StringChunkTest, string_chunk_a) {
     using namespace infinity;
 
     StringHeapMgr string_chunk_mgr;
 
-    EXPECT_THROW(string_chunk_mgr.Allocate(0), ExecutorException);
+    EXPECT_THROW(string_chunk_mgr.Allocate(0), UnrecoverableException);
 
     for (u64 i = 256; i <= 8192; i += 256) {
         string_chunk_mgr.Allocate(i);
     }
 
-    EXPECT_EQ(string_chunk_mgr.current_chunk_idx(), 26);
-    EXPECT_EQ(string_chunk_mgr.current_chunk_size(), 8192);
+    EXPECT_EQ(string_chunk_mgr.current_chunk_idx(), 26u);
+    EXPECT_EQ(string_chunk_mgr.current_chunk_size(), 8192u);
 }

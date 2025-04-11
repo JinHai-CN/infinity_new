@@ -14,16 +14,20 @@
 
 module;
 
+export module physical_drop_collection;
+
 import stl;
-import parser;
+
 import query_context;
 import operator_state;
 import physical_operator;
 import physical_operator_type;
 import load_meta;
 import infinity_exception;
-
-export module physical_drop_collection;
+import internal_types;
+import extra_ddl_info;
+import data_type;
+import logger;
 
 namespace infinity {
 
@@ -34,19 +38,14 @@ public:
                                     ConflictType conflict_type,
                                     u64 id,
                                     SharedPtr<Vector<LoadMeta>> load_metas)
-        : PhysicalOperator(PhysicalOperatorType::kDropCollection, nullptr, nullptr, id, load_metas), schema_name_(Move(schema_name)),
-          collection_name_(Move(collection_name)), conflict_type_(conflict_type) {}
+        : PhysicalOperator(PhysicalOperatorType::kDropCollection, nullptr, nullptr, id, load_metas), schema_name_(std::move(schema_name)),
+          collection_name_(std::move(collection_name)), conflict_type_(conflict_type) {}
 
     ~PhysicalDropCollection() override = default;
 
-    void Init() override;
+    void Init(QueryContext* query_context) override;
 
     bool Execute(QueryContext *query_context, OperatorState *operator_state) final;
-
-    SizeT TaskletCount() override {
-        Error<NotImplementException>("TaskletCount not Implement");
-        return 0;
-    }
 
     inline SharedPtr<Vector<String>> GetOutputNames() const final { return output_names_; }
 

@@ -14,15 +14,17 @@
 
 module;
 
+module merge_knn_data;
 import stl;
-import parser;
 import base_table_ref;
-
 import infinity_exception;
 import merge_knn;
 import knn_result_handler;
-
-module merge_knn_data;
+import status;
+import logger;
+import internal_types;
+import knn_expr;
+import statement_common;
 
 namespace infinity {
 
@@ -33,41 +35,47 @@ MergeKnnFunctionData::MergeKnnFunctionData(i64 query_count,
                                            SharedPtr<BaseTableRef> table_ref)
     : query_count_(query_count), topk_(topk), elem_type_(elem_type), table_ref_(table_ref) {
     switch (elem_type) {
-        case kElemInvalid: {
-            Error<ExecutorException>("Invalid element type");
+        case EmbeddingDataType::kElemInvalid: {
+            String error_message = "Invalid element type";
+            UnrecoverableError(error_message);
         }
-        case kElemFloat: {
-            MergeKnnFunctionData::InitMergeKnn<f32>(knn_distance_type);
+        case EmbeddingDataType::kElemUInt8:
+        case EmbeddingDataType::kElemInt8:
+        case EmbeddingDataType::kElemFloat: {
+            MergeKnnFunctionData::InitMergeKnn<f32, f32>(knn_distance_type);
             break;
         }
         default: {
-            Error<ExecutorException>("Not implemented");
+            Status status = Status::NotSupport("Not implemented");
+            RecoverableError(status);
         }
     }
 }
 
-template <typename DataType>
+template <typename DatType, typename DistType>
 void MergeKnnFunctionData::InitMergeKnn(KnnDistanceType knn_distance_type) {
     switch (knn_distance_type) {
         case KnnDistanceType::kInvalid: {
-            Error<ExecutorException>("Invalid knn distance type");
+            String error_message = "Invalid knn distance type";
+            UnrecoverableError(error_message);
         }
         case KnnDistanceType::kL2:
         case KnnDistanceType::kHamming: {
-            auto merge_knn_max = MakeShared<MergeKnn<DataType, CompareMax>>(query_count_, topk_);
+            auto merge_knn_max = MakeShared<MergeKnn<DatType, CompareMax, DistType>>(query_count_, topk_, Optional<f32>());
             merge_knn_max->Begin();
-            merge_knn_base_ = Move(merge_knn_max);
+            merge_knn_base_ = std::move(merge_knn_max);
             heap_type_ = MergeKnnHeapType::kMaxHeap;
             break;
         }
         case KnnDistanceType::kCosine:
         case KnnDistanceType::kInnerProduct: {
-            auto merge_knn_min = MakeShared<MergeKnn<DataType, CompareMin>>(query_count_, topk_);
+            auto merge_knn_min = MakeShared<MergeKnn<DatType, CompareMin, DistType>>(query_count_, topk_, Optional<f32>());
             merge_knn_min->Begin();
-            merge_knn_base_ = Move(merge_knn_min);
+            merge_knn_base_ = std::move(merge_knn_min);
             heap_type_ = MergeKnnHeapType::kMinHeap;
             break;
         }
     }
 }
+
 } // namespace infinity

@@ -14,21 +14,33 @@
 
 module;
 
+export module operator_state;
+
 import stl;
 import global_block_id;
 import physical_operator_type;
 import fragment_data;
 import data_block;
-import table_scan_function_data;
-import knn_scan_data;
+import match_tensor_scan_function_data;
+import match_sparse_scan_function_data;
+import compact_state_data;
 import table_def;
-import parser;
-import merge_knn_data;
-import blocking_queue;
 
-export module operator_state;
+import merge_knn_data;
+import create_index_data;
+import blocking_queue;
+import expression_state;
+import status;
+import internal_types;
+import column_def;
+import data_type;
+import segment_entry;
+import hash_table;
 
 namespace infinity {
+
+class TableScanFunctionData;
+class KnnScanFunctionData;
 
 export struct OperatorState {
     inline explicit OperatorState(PhysicalOperatorType operator_type) : operator_type_(operator_type) {}
@@ -39,12 +51,19 @@ export struct OperatorState {
 
     inline void ConnectToPrevOutputOpState(OperatorState *prev_op_state) { prev_op_state_ = prev_op_state; }
 
+    inline bool Ok() const { return status_.ok(); }
+
     // Output status
     PhysicalOperatorType operator_type_{PhysicalOperatorType::kInvalid};
     Vector<UniquePtr<DataBlock>> data_block_array_{};
-    UniquePtr<String> error_message_{};
+    //    UniquePtr<String> error_message_{};
+    Status status_{};
+    bool empty_source_{false};
 
     bool complete_{false};
+
+    bool total_hits_count_flag_{};
+    SizeT total_hits_count_{};
 
     inline void SetComplete() { complete_ = true; }
 
@@ -53,7 +72,11 @@ export struct OperatorState {
 
 // Aggregate
 export struct AggregateOperatorState : public OperatorState {
-    inline explicit AggregateOperatorState() : OperatorState(PhysicalOperatorType::kAggregate) {}
+    inline explicit AggregateOperatorState(Vector<UniquePtr<char[]>> states)
+        : OperatorState(PhysicalOperatorType::kAggregate), states_(std::move(states)) {}
+
+    Vector<UniquePtr<char[]>> states_;
+    HashTable hash_table_;
 };
 
 // Merge Aggregate
@@ -61,8 +84,9 @@ export struct MergeAggregateOperatorState : public OperatorState {
     inline explicit MergeAggregateOperatorState() : OperatorState(PhysicalOperatorType::kMergeAggregate) {}
 
     /// Since merge agg is the first op, no previous operator state. This ptr is to get input data.
-    //Vector<UniquePtr<DataBlock>> input_data_blocks_{nullptr};
+    // Vector<UniquePtr<DataBlock>> input_data_blocks_{nullptr};
     UniquePtr<DataBlock> input_data_block_{nullptr};
+    MergeHashTable hash_table_;
     bool input_complete_{false};
 };
 
@@ -83,16 +107,51 @@ export struct UnionAllOperatorState : public OperatorState {
 
 // TableScan
 export struct TableScanOperatorState : public OperatorState {
-    inline explicit TableScanOperatorState() : OperatorState(PhysicalOperatorType::kTableScan) {}
+    TableScanOperatorState();
+    ~TableScanOperatorState();
 
     UniquePtr<TableScanFunctionData> table_scan_function_data_{};
 };
 
+// MatchTensorScan
+export struct MatchTensorScanOperatorState : public OperatorState {
+    inline explicit MatchTensorScanOperatorState() : OperatorState(PhysicalOperatorType::kMatchTensorScan) {}
+
+    UniquePtr<MatchTensorScanFunctionData> match_tensor_scan_function_data_{};
+};
+
+// MergeMatchTensor
+export struct MergeMatchTensorOperatorState : public OperatorState {
+    inline explicit MergeMatchTensorOperatorState() : OperatorState(PhysicalOperatorType::kMergeMatchTensor) {}
+
+    Vector<UniquePtr<DataBlock>> middle_sorted_data_blocks_; // middle result
+    u32 middle_result_count_{};
+    Vector<UniquePtr<DataBlock>> input_data_blocks_;
+    bool input_complete_{false};
+};
+
+// MatchSparseScan
+export struct MatchSparseScanOperatorState : public OperatorState {
+    inline explicit MatchSparseScanOperatorState() : OperatorState(PhysicalOperatorType::kMatchSparseScan) {}
+
+    MatchSparseScanFunctionData match_sparse_scan_function_data_{};
+};
+
+// MergeMatchSparse
+export struct MergeMatchSparseOperatorState : public OperatorState {
+    inline explicit MergeMatchSparseOperatorState() : OperatorState(PhysicalOperatorType::kMergeMatchSparse) {}
+
+    UniquePtr<DataBlock> input_data_block_{nullptr};
+    bool input_complete_{false};
+    MergeSparseFunctionData merge_sparse_function_data_{};
+};
+
 // KnnScan
 export struct KnnScanOperatorState : public OperatorState {
-    inline explicit KnnScanOperatorState() : OperatorState(PhysicalOperatorType::kKnnScan) {}
+    KnnScanOperatorState();
+    ~KnnScanOperatorState();
 
-//    Vector<SharedPtr<DataBlock>> output_data_blocks_{};
+    //    Vector<SharedPtr<DataBlock>> output_data_blocks_{};
     UniquePtr<KnnScanFunctionData> knn_scan_function_data_{};
 };
 
@@ -109,9 +168,13 @@ export struct MergeKnnOperatorState : public OperatorState {
 export struct FilterOperatorState : public OperatorState {
     inline explicit FilterOperatorState() : OperatorState(PhysicalOperatorType::kFilter) {}
 };
+
 // IndexScan
 export struct IndexScanOperatorState : public OperatorState {
-    inline explicit IndexScanOperatorState() : OperatorState(PhysicalOperatorType::kIndexScan) {}
+    inline explicit IndexScanOperatorState(UniquePtr<Vector<SegmentID>> &&segment_ids)
+        : OperatorState(PhysicalOperatorType::kIndexScan), segment_ids_(std::move(segment_ids)) {}
+    UniquePtr<Vector<SegmentID>> segment_ids_; // moved from IndexScanSourceState
+    u32 next_idx_{};
 };
 
 // Hash
@@ -165,11 +228,17 @@ export struct MergeLimitOperatorState : public OperatorState {
 // Merge Top
 export struct MergeTopOperatorState : public OperatorState {
     inline explicit MergeTopOperatorState() : OperatorState(PhysicalOperatorType::kMergeTop) {}
+    Vector<SharedPtr<ExpressionState>> expr_states_;         // expression states
+    Vector<UniquePtr<DataBlock>> middle_sorted_data_blocks_; // middle result
+    u32 middle_result_count_{};
+    Vector<UniquePtr<DataBlock>> input_data_blocks_;
+    bool input_complete_{false};
 };
 
 // Top
 export struct TopOperatorState : public OperatorState {
     inline explicit TopOperatorState() : OperatorState(PhysicalOperatorType::kTop) {}
+    Vector<SharedPtr<ExpressionState>> expr_states_; // expression states
 };
 
 // Projection
@@ -180,7 +249,7 @@ export struct ProjectionOperatorState : public OperatorState {
 // Sort
 export struct SortOperatorState : public OperatorState {
     inline explicit SortOperatorState() : OperatorState(PhysicalOperatorType::kSort) {}
-
+    Vector<SharedPtr<ExpressionState>> expr_states_; // expression states
     Vector<UniquePtr<DataBlock>> unmerge_sorted_blocks_{};
 };
 
@@ -215,7 +284,7 @@ export struct InsertOperatorState : public OperatorState {
 export struct ImportOperatorState : public OperatorState {
     inline explicit ImportOperatorState() : OperatorState(PhysicalOperatorType::kImport) {}
 
-//    Vector<SharedPtr<DataBlock>> output_{};
+    //    Vector<SharedPtr<DataBlock>> output_{};
     SharedPtr<TableDef> table_def_{};
     // For insert, update, delete, update
     UniquePtr<String> result_msg_{};
@@ -224,6 +293,7 @@ export struct ImportOperatorState : public OperatorState {
 // Export
 export struct ExportOperatorState : public OperatorState {
     inline explicit ExportOperatorState() : OperatorState(PhysicalOperatorType::kExport) {}
+    UniquePtr<String> result_msg_{};
 };
 
 // Alter
@@ -236,8 +306,23 @@ export struct CreateTableOperatorState : public OperatorState {
     inline explicit CreateTableOperatorState() : OperatorState(PhysicalOperatorType::kCreateTable) {}
 };
 
-export struct CreateIndexOperatorState : public OperatorState {
-    inline explicit CreateIndexOperatorState() : OperatorState(PhysicalOperatorType::kCreateIndex) {}
+export struct CreateIndexPrepareOperatorState : public OperatorState {
+    inline explicit CreateIndexPrepareOperatorState() : OperatorState(PhysicalOperatorType::kCreateIndexPrepare) {}
+
+    UniquePtr<String> result_msg_{};
+};
+
+export struct CreateIndexDoOperatorState : public OperatorState {
+    inline explicit CreateIndexDoOperatorState() : OperatorState(PhysicalOperatorType::kCreateIndexDo) {}
+
+    UniquePtr<String> result_msg_{};
+    CreateIndexSharedData *create_index_shared_data_;
+};
+
+export struct CreateIndexFinishOperatorState : public OperatorState {
+    inline explicit CreateIndexFinishOperatorState() : OperatorState(PhysicalOperatorType::kCreateIndexFinish) {}
+
+    UniquePtr<String> error_message_{};
 };
 
 // Create Collection
@@ -322,8 +407,72 @@ export struct FusionOperatorState : public OperatorState {
     Map<u64, Vector<UniquePtr<DataBlock>>> input_data_blocks_{};
 };
 
+export struct ReadCacheState : public OperatorState {
+    inline explicit ReadCacheState() : OperatorState(PhysicalOperatorType::kReadCache) {}
+};
+
+// Compact
+export struct CompactOperatorState : public OperatorState {
+    inline explicit CompactOperatorState(Vector<Vector<SegmentEntry *>> segment_groups, SharedPtr<CompactStateData> compact_state_data)
+        : OperatorState(PhysicalOperatorType::kCompact), segment_groups_(std::move(segment_groups)), compact_state_data_(compact_state_data) {}
+
+    SizeT compact_idx_{};
+    Vector<Vector<SegmentEntry *>> segment_groups_;
+    SharedPtr<CompactStateData> compact_state_data_{};
+};
+
+export struct CompactIndexPrepareOperatorState : public OperatorState {
+    inline explicit CompactIndexPrepareOperatorState(SharedPtr<CompactStateData> compact_state_data,
+                                                     SharedPtr<Vector<UniquePtr<CreateIndexSharedData>>> create_index_shared_data)
+        : OperatorState(PhysicalOperatorType::kCompactIndexPrepare), compact_state_data_(compact_state_data),
+          create_index_shared_data_(create_index_shared_data) {}
+
+    SharedPtr<CompactStateData> compact_state_data_{};
+    SharedPtr<Vector<UniquePtr<CreateIndexSharedData>>> create_index_shared_data_{};
+    SizeT create_index_idx_{};
+};
+
+export struct CompactIndexDoOperatorState : public OperatorState {
+    inline explicit CompactIndexDoOperatorState(SharedPtr<CompactStateData> compact_state_data,
+                                                SharedPtr<Vector<UniquePtr<CreateIndexSharedData>>> create_index_shared_data)
+        : OperatorState(PhysicalOperatorType::kCompactIndexDo), compact_state_data_(compact_state_data),
+          create_index_shared_data_(create_index_shared_data) {}
+
+    SharedPtr<CompactStateData> compact_state_data_{};
+    SharedPtr<Vector<UniquePtr<CreateIndexSharedData>>> create_index_shared_data_{};
+    SizeT create_index_idx_{};
+};
+
+export struct CompactFinishOperatorState : public OperatorState {
+    explicit CompactFinishOperatorState(SharedPtr<CompactStateData> compact_state_data)
+        : OperatorState(PhysicalOperatorType::kCompactFinish), compact_state_data_(compact_state_data) {}
+
+    SharedPtr<CompactStateData> compact_state_data_{};
+};
+
+// Unnest
+export struct UnnestOperatorState : public OperatorState {
+    inline explicit UnnestOperatorState() : OperatorState(PhysicalOperatorType::kUnnest) {}
+};
+
+// Unnest
+export struct UnnestAggregateOperatorState : public OperatorState {
+    inline explicit UnnestAggregateOperatorState() : OperatorState(PhysicalOperatorType::kUnnestAggregate) {}
+};
+
 // Source
-export enum class SourceStateType { kInvalid, kQueue, kAggregate, kTableScan, kKnnScan, kEmpty };
+export enum class SourceStateType {
+    kInvalid,
+    kQueue,
+    kAggregate,
+    kTableScan,
+    kIndexScan,
+    kKnnScan,
+    kMatchTensorScan,
+    kMatchSparseScan,
+    kCompact,
+    kEmpty,
+};
 
 export struct SourceState {
     inline explicit SourceState(SourceStateType state_type) : state_type_(state_type) {}
@@ -337,7 +486,8 @@ export struct SourceState {
     bool complete_{false};
     OperatorState *next_op_state_{};
     SourceStateType state_type_{SourceStateType::kInvalid};
-    UniquePtr<String> error_message_{};
+    //    UniquePtr<String> error_message_{};
+    Status status_{};
 };
 
 export struct QueueSourceState : public SourceState {
@@ -347,7 +497,7 @@ export struct QueueSourceState : public SourceState {
 
     bool GetData();
 
-    BlockingQueue<SharedPtr<FragmentDataBase>> source_queue_{};
+    BlockingQueue<SharedPtr<FragmentDataBase>> source_queue_{"QueueSourceState"};
 
     Map<u64, u64> num_tasks_; // fragment_id -> number of pending tasks
 
@@ -364,18 +514,44 @@ export struct AggregateSourceState : public SourceState {
     i64 hash_start_{};
     i64 hash_end_{};
 
-    BlockingQueue<UniquePtr<FragmentDataBase>> source_queue_{};
+    //    BlockingQueue<UniquePtr<FragmentDataBase>> source_queue_{};
 };
 
 export struct TableScanSourceState : public SourceState {
     explicit TableScanSourceState(SharedPtr<Vector<GlobalBlockID>> global_ids)
-        : SourceState(SourceStateType::kTableScan), global_ids_(Move(global_ids)) {}
+        : SourceState(SourceStateType::kTableScan), global_ids_(std::move(global_ids)) {}
 
     SharedPtr<Vector<GlobalBlockID>> global_ids_;
 };
 
+export struct MatchTensorScanSourceState : public SourceState {
+    explicit MatchTensorScanSourceState() : SourceState(SourceStateType::kMatchTensorScan) {}
+};
+
+export struct MatchSparseScanSourceState : public SourceState {
+    explicit MatchSparseScanSourceState(SharedPtr<Vector<GlobalBlockID>> global_ids, SharedPtr<Vector<SegmentID>> segment_ids)
+        : SourceState(SourceStateType::kMatchSparseScan), global_ids_(std::move(global_ids)), segment_ids_(std::move(segment_ids)) {}
+
+    SharedPtr<Vector<GlobalBlockID>> global_ids_;
+    SharedPtr<Vector<SegmentID>> segment_ids_;
+};
+
+export struct IndexScanSourceState : public SourceState {
+    explicit IndexScanSourceState(UniquePtr<Vector<SegmentID>> &&segment_ids)
+        : SourceState(SourceStateType::kIndexScan), segment_ids_(std::move(segment_ids)) {}
+
+    UniquePtr<Vector<SegmentID>> segment_ids_; // will be moved into IndexScanOperatorState
+};
+
 export struct KnnScanSourceState : public SourceState {
     explicit KnnScanSourceState() : SourceState(SourceStateType::kKnnScan) {}
+};
+
+export struct CompactSourceState : public SourceState {
+    explicit CompactSourceState(Vector<Vector<SegmentEntry *>> segment_groups)
+        : SourceState(SourceStateType::kCompact), segment_groups_(std::move(segment_groups)) {}
+
+    Vector<Vector<SegmentEntry *>> segment_groups_;
 };
 
 export struct EmptySourceState : public SourceState {
@@ -401,13 +577,16 @@ export struct SinkState {
 
     [[nodiscard]] inline SinkStateType state_type() const { return state_type_; }
 
-    inline bool Error() const { return error_message_.get() != nullptr; }
+    inline bool Error() const { return !status_.ok(); }
+
+    bool Ignore() const { return status_.code() == ErrorCode::kIgnore; }
 
     u64 fragment_id_{};
     u64 task_id_{};
     OperatorState *prev_op_state_{};
     SinkStateType state_type_{SinkStateType::kInvalid};
-    UniquePtr<String> error_message_{};
+    //    UniquePtr<String> error_message_{};
+    Status status_{};
 };
 
 export struct QueueSinkState : public SinkState {
@@ -415,6 +594,8 @@ export struct QueueSinkState : public SinkState {
 
     Vector<UniquePtr<DataBlock>> data_block_array_{};
     Vector<BlockingQueue<SharedPtr<FragmentDataBase>> *> fragment_data_queues_;
+
+    bool sent_data_{false};
 };
 
 export struct MaterializeSinkState : public SinkState {
@@ -425,6 +606,8 @@ export struct MaterializeSinkState : public SinkState {
     Vector<UniquePtr<DataBlock>> data_block_array_{};
 
     bool empty_result_{false};
+    bool total_hits_count_flag_{false};
+    SizeT total_hits_count_{};
 };
 
 export struct ResultSinkState : public SinkState {

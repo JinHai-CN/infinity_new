@@ -14,16 +14,19 @@
 
 module;
 
+export module data_table;
+
 import table_def;
 import base_table;
 import stl;
-import parser;
+import data_type;
 import data_block;
 import infinity_exception;
-
+import internal_types;
 import third_party;
-
-export module data_table;
+import column_def;
+import logger;
+import default_values;
 
 namespace infinity {
 
@@ -69,7 +72,8 @@ public:
 
     [[nodiscard]] SharedPtr<DataBlock> &GetDataBlockById(SizeT idx) {
         if (idx >= data_blocks_.size()) {
-            Error<StorageException>(Format("Attempt to access invalid index: {}/{}", idx, DataBlockCount()));
+            String error_message = fmt::format("Attempt to access invalid index: {}/{}", idx, DataBlockCount());
+            UnrecoverableError(error_message);
         }
         return data_blocks_[idx];
     }
@@ -82,7 +86,7 @@ public:
 
     inline void UpdateRowCount(SizeT row_count) { row_count_ += row_count; }
 
-    inline void SetResultMsg(UniquePtr<String> result_msg) { result_msg_ = Move(result_msg); }
+    inline void SetResultMsg(UniquePtr<String> result_msg) { result_msg_ = std::move(result_msg); }
 
     [[nodiscard]] inline String *result_msg() const { return result_msg_.get(); }
 
@@ -94,12 +98,16 @@ public:
     // Currently this method is used in aggregate operator.
     void UnionWith(const SharedPtr<DataTable> &other);
 
+    void ShrinkBlocks(SizeT block_capacity = DEFAULT_VECTOR_SIZE);
+
 public:
     SharedPtr<TableDef> definition_ptr_{};
     SizeT row_count_{0};
     TableType type_{TableType::kInvalid};
     Vector<SharedPtr<DataBlock>> data_blocks_{};
     SharedPtr<String> result_msg_{};
+    bool total_hits_count_flag_{false};
+    SizeT total_hits_count_{};
 };
 
 } // namespace infinity

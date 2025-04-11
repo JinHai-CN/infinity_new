@@ -25,10 +25,12 @@
 #include <unordered_set>
 
 import compilation_config;
-import parser;
+
 import profiler;
-import local_file_system;
+import virtual_store;
 import third_party;
+import statement_common;
+import internal_types;
 
 using namespace apache::thrift;
 using namespace apache::thrift::protocol;
@@ -48,7 +50,9 @@ struct InfinityClient {
         client = std::make_unique<InfinityServiceClient>(protocol);
         transport->open();
         CommonResponse response;
-        client->Connect(response);
+        ConnectRequest request;
+        request.__set_client_version(29); // 0.6.0.dev3
+        client->Connect(response, request);
         session_id = response.session_id;
     }
     ~InfinityClient() {
@@ -94,7 +98,7 @@ inline void ParallelFor(size_t start, size_t end, size_t numThreads, auto fn) {
     if (numThreads <= 0) {
         numThreads = std::thread::hardware_concurrency();
     }
-    std::vector<std::jthread> threads;
+    std::vector<std::thread> threads;
     threads.reserve(numThreads);
     size_t avg_cnt = (end - start) / numThreads;
     size_t extra_cnt = (end - start) % numThreads;
@@ -102,6 +106,10 @@ inline void ParallelFor(size_t start, size_t end, size_t numThreads, auto fn) {
         size_t id_end = id_begin + avg_cnt + (threadId < extra_cnt);
         threads.emplace_back([id_begin, id_end, threadId, fn] { LoopFor(id_begin, id_end, threadId, fn); });
         id_begin = id_end;
+    }
+
+    for(auto& thread: threads) {
+        thread.join();
     }
 }
 
@@ -116,8 +124,6 @@ int main() {
     std::cout << "Please input ef:" << std::endl;
     std::cin >> ef;
 
-    infinity::LocalFileSystem fs;
-
     std::cout << ">>> Query Benchmark Start <<<" << std::endl;
     std::cout << "Thread Num: " << thread_num << ", Times: " << total_times << std::endl;
 
@@ -125,11 +131,11 @@ int main() {
 
     std::string sift_query_path = std::string(infinity::test_data_path()) + "/benchmark/sift_1m/sift_query.fvecs";
     std::string sift_groundtruth_path = std::string(infinity::test_data_path()) + "/benchmark/sift_1m/sift_groundtruth.ivecs";
-    if (!fs.Exists(sift_query_path)) {
+    if (!infinity::VirtualStore::Exists(sift_query_path)) {
         std::cerr << "File: " << sift_query_path << " doesn't exist" << std::endl;
         exit(-1);
     }
-    if (!fs.Exists(sift_groundtruth_path)) {
+    if (!infinity::VirtualStore::Exists(sift_groundtruth_path)) {
         std::cerr << "File: " << sift_groundtruth_path << " doesn't exist" << std::endl;
         exit(-1);
     }
@@ -184,7 +190,7 @@ int main() {
             {
                 req.session_id = client.session_id;
                 req.__isset.session_id = true;
-                req.db_name = "default";
+                req.db_name = "default_db";
                 req.__isset.db_name = true;
                 req.table_name = "sift_benchmark";
                 req.__isset.table_name = true;
@@ -198,25 +204,25 @@ int main() {
                 }
                 req.select_list.push_back(std::move(expr));
                 req.__isset.select_list = true;
-                KnnExpr knn_expr;
+                auto knn_expr = std::make_shared<KnnExpr>();
                 {
-                    knn_expr.column_expr.column_name.emplace_back("col1");
-                    knn_expr.column_expr.__isset.column_name = true;
-                    knn_expr.__isset.column_expr = true;
-                    auto &q = knn_expr.embedding_data.f32_array_value;
+                    knn_expr->column_expr.column_name.emplace_back("col1");
+                    knn_expr->column_expr.__isset.column_name = true;
+                    knn_expr->__isset.column_expr = true;
+                    auto &q = knn_expr->embedding_data.f32_array_value;
                     q.reserve(dimension);
                     auto src_ptr = queries + query_idx * dimension;
                     for (int64_t i = 0; i < dimension; ++i) {
                         q.push_back(src_ptr[i]);
                     }
-                    knn_expr.embedding_data.__isset.f32_array_value = true;
-                    knn_expr.__isset.embedding_data = true;
-                    knn_expr.embedding_data_type = ElementType::type::ElementFloat32;
-                    knn_expr.__isset.embedding_data_type = true;
-                    knn_expr.distance_type = KnnDistanceType::type::L2;
-                    knn_expr.__isset.distance_type = true;
-                    knn_expr.topn = topk;
-                    knn_expr.__isset.topn = true;
+                    knn_expr->embedding_data.__isset.f32_array_value = true;
+                    knn_expr->__isset.embedding_data = true;
+                    knn_expr->embedding_data_type = ElementType::type::ElementFloat32;
+                    knn_expr->__isset.embedding_data_type = true;
+                    knn_expr->distance_type = KnnDistanceType::type::L2;
+                    knn_expr->__isset.distance_type = true;
+                    knn_expr->topn = topk;
+                    knn_expr->__isset.topn = true;
                     InitParameter init_param;
                     {
                         init_param.param_name = "ef";
@@ -224,11 +230,13 @@ int main() {
                         init_param.param_value = std::to_string(ef);
                         init_param.__isset.param_value = true;
                     }
-                    knn_expr.opt_params.push_back(std::move(init_param));
-                    knn_expr.__isset.opt_params = true;
+                    knn_expr->opt_params.push_back(std::move(init_param));
+                    knn_expr->__isset.opt_params = true;
                 }
-                req.search_expr.knn_exprs.push_back(std::move(knn_expr));
-                req.search_expr.__isset.knn_exprs = true;
+                GenericMatchExpr generic_match_expr;
+                generic_match_expr.__set_match_vector_expr(knn_expr);
+                req.search_expr.match_exprs.push_back(generic_match_expr);
+                req.search_expr.__isset.match_exprs = true;
                 req.__isset.search_expr = true;
             }
             client.client->Select(ret, req);
@@ -244,7 +252,7 @@ int main() {
         ParallelFor(0, query_count, thread_num, query_function);
         profiler.End();
 
-        results.push_back(infinity::Format("Total cost: {}", profiler.ElapsedToString(1000)));
+        results.push_back(fmt::format("Total cost: {}", profiler.ElapsedToString(1000)));
         {
             size_t correct_1 = 0, correct_10 = 0, correct_100 = 0;
             for (size_t query_idx = 0; query_idx < query_count; ++query_idx) {
@@ -265,9 +273,9 @@ int main() {
                     }
                 }
             }
-            results.push_back(infinity::Format("R@1:   {:.3f}", float(correct_1) / float(query_count * 1)));
-            results.push_back(infinity::Format("R@10:  {:.3f}", float(correct_10) / float(query_count * 10)));
-            results.push_back(infinity::Format("R@100: {:.3f}", float(correct_100) / float(query_count * 100)));
+            results.push_back(fmt::format("R@1:   {:.3f}", float(correct_1) / float(query_count * 1)));
+            results.push_back(fmt::format("R@10:  {:.3f}", float(correct_10) / float(query_count * 10)));
+            results.push_back(fmt::format("R@100: {:.3f}", float(correct_100) / float(query_count * 100)));
         }
     } while (--total_times);
 

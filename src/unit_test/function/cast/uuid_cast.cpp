@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "unit_test/base_test.h"
+#include "gtest/gtest.h"
+import base_test;
 
 import infinity_exception;
 
 import global_resource_usage;
 import third_party;
-import parser;
+
 import logger;
 import stl;
 import infinity_context;
-import catalog;
-import parser;
+
 import function_set;
 import aggregate_function_set;
 import aggregate_function;
@@ -35,7 +35,10 @@ import data_block;
 import uuid_cast;
 import column_vector;
 import bound_cast_func;
+import internal_types;
+import logical_type;
 #if 0
+using namespace infinity;
 class UuidCastTest : public BaseTest {};
 
 TEST_F(UuidCastTest, uuid_cast0) {
@@ -48,7 +51,7 @@ TEST_F(UuidCastTest, uuid_cast0) {
         source.Set(uuid_str);
 
         TinyIntT target;
-        EXPECT_THROW(UuidTryCastToVarlen::Run(source, target, nullptr), FunctionException);
+        EXPECT_THROW(UuidTryCastToVarlen::Run(source, target, nullptr), UnrecoverableException);
     }
     {
         char uuid_str[17] = "aabbccddeeffgghh";
@@ -60,7 +63,7 @@ TEST_F(UuidCastTest, uuid_cast0) {
         SharedPtr<ColumnVector> col_varchar_ptr = MakeShared<ColumnVector>(data_type);
         col_varchar_ptr->Initialize();
 
-        EXPECT_TRUE(UuidTryCastToVarlen::Run(source, target, col_varchar_ptr));
+        EXPECT_TRUE(UuidTryCastToVarlen::Run(source, target, col_varchar_ptr.get()));
 
         target.Reset(false);
     }
@@ -72,7 +75,7 @@ TEST_F(UuidCastTest, uuid_cast1) {
     // Call BindUuidCast with wrong type of parameters
     {
         DataType target_type(LogicalType::kDecimal);
-        EXPECT_THROW(BindUuidCast(target_type), TypeException);
+        EXPECT_THROW(BindUuidCast(target_type), UnrecoverableException);
     }
 
     SharedPtr<DataType> source_type = MakeShared<DataType>(LogicalType::kUuid);

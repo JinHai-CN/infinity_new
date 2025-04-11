@@ -14,42 +14,59 @@
 
 module;
 
-#include <algorithm>
+export module base_table_ref;
 
 import stl;
 import table_ref;
-import catalog;
-import parser;
+import txn;
 import table_function;
-import block_index;
-
+import internal_types;
 import infinity_exception;
-
-export module base_table_ref;
+import table_reference;
+import data_type;
+import meta_info;
+import status;
 
 namespace infinity {
 
+struct BlockIndex;
+struct IndexIndex;
+
 export class BaseTableRef : public TableRef {
 public:
-    explicit BaseTableRef(TableEntry *table_entry_ptr,
-                          Vector<SizeT> column_ids,
-                          SharedPtr<BlockIndex> block_index,
-                          const String &alias,
-                          u64 table_index,
-                          SharedPtr<Vector<String>> column_names,
-                          SharedPtr<Vector<SharedPtr<DataType>>> column_types)
-        : TableRef(TableRefType::kTable, alias), table_entry_ptr_(table_entry_ptr), column_ids_(Move(column_ids)),
-          block_index_(Move(block_index)), column_names_(Move(column_names)), column_types_(Move(column_types)), table_index_(table_index) {}
+    BaseTableRef(SharedPtr<TableInfo> table_info,
+                 Vector<SizeT> column_ids,
+                 SharedPtr<BlockIndex> block_index,
+                 const String &alias,
+                 u64 table_index,
+                 SharedPtr<Vector<String>> column_names,
+                 SharedPtr<Vector<SharedPtr<DataType>>> column_types);
 
-    void RetainColumnByIndices(const Vector<SizeT> &&indices) {
-        replace_field<SizeT>(column_ids_, indices);
-        replace_field<String>(*column_names_, indices);
-        replace_field<SharedPtr<DataType>>(*column_types_, indices);
-    };
+    // only use some fields
+    BaseTableRef(SharedPtr<TableInfo> table_info, SharedPtr<BlockIndex> block_index);
 
-    TableEntry *table_entry_ptr_{};
+    BaseTableRef(SharedPtr<TableInfo> table_info, SharedPtr<BlockIndex> block_index, SharedPtr<IndexIndex> index_index);
+
+    ~BaseTableRef() override;
+
+    static SharedPtr<BaseTableRef> FakeTableRef(Txn *txn, const String &db_name, const String &table_name);
+
+    void RetainColumnByIndices(const Vector<SizeT> &indices) {
+        replace_field(column_ids_, indices);
+        replace_field(*column_names_, indices);
+        replace_field(*column_types_, indices);
+    }
+
+    SharedPtr<String> db_name() const { return table_info_->db_name_; }
+
+    SharedPtr<String> table_name() const { return table_info_->table_name_; }
+
+    TxnTimeStamp max_commit_ts() const { return table_info_->max_commit_ts_; }
+
+    SharedPtr<TableInfo> table_info_{};
     Vector<SizeT> column_ids_{};
     SharedPtr<BlockIndex> block_index_{};
+    SharedPtr<IndexIndex> index_index_{};
 
     SharedPtr<Vector<String>> column_names_{};
     SharedPtr<Vector<SharedPtr<DataType>>> column_types_{};
@@ -57,14 +74,13 @@ public:
 
 private:
     template <typename T>
-    void replace_field(Vector<T> &field, const Vector<SizeT> &indices) {
+    inline static void replace_field(Vector<T> &field, const Vector<SizeT> &indices) {
         Vector<T> items;
-        items.reserve(field.size());
-
-        for (const auto &i : indices) {
-            items.push_back(field[i]);
+        items.reserve(indices.size());
+        for (SizeT i = 0; i < indices.size(); ++i) {
+            items.emplace_back(std::move(field[indices[i]]));
         }
-        field = items;
+        field = std::move(items);
     }
 };
 

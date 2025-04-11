@@ -14,34 +14,19 @@
 
 module;
 
-#include <cppjieba/Jieba.hpp>
-
 import stl;
+import jieba;
 
 export module term;
 
 namespace infinity {
 export class Term {
 public:
-    static const u8 OR;
-    static const u8 AND;
-
-    Term() : word_offset_(0), stats_(0) {}
-    Term(const String &str) : text_(str), word_offset_(0), stats_(0) {}
+    Term() : word_offset_(0), payload_(0) {}
+    Term(const String &str) : text_(str), word_offset_(0), payload_(0) {}
     ~Term() {}
 
     void Reset();
-
-    inline void SetStats(u8 and_or_bit, u8 level) { stats_ = ((and_or_bit & 0x01) << 7) | ((u8)(level) & 0x7F); }
-
-    inline void GetStats(u8 &and_or_bit, u8 &level) const {
-        and_or_bit = (stats_ & 0x80) >> 7;
-        level = (u8)(stats_ & 0x7F);
-    }
-
-    inline u8 GetAndOrBit() const { return (stats_ & 0x80) >> 7; }
-
-    inline u8 GetLevel() const { return (u8)(stats_ & 0x7F); }
 
     u32 Length() { return text_.length(); }
 
@@ -50,22 +35,40 @@ public:
 public:
     String text_;
     u32 word_offset_;
-    u8 stats_;
+    u32 end_offset_;
+    u16 payload_;
 };
 
 export class TermList : public Deque<Term> {
 public:
-    void Add(const char *text, const u32 len, const u32 offset, const u8 and_or_bit, const u8 level) {
+    void Add(const char *text, const u32 len, const u32 offset, const u32 end_offset, const u16 payload = 0) {
         push_back(global_temporary_);
         back().text_.assign(text, len);
         back().word_offset_ = offset;
-        back().SetStats(and_or_bit, level);
+        back().end_offset_ = end_offset;
+        back().payload_ = payload;
     }
 
     void Add(cppjieba::Word &cut_word) {
         push_back(global_temporary_);
         std::swap(back().text_, cut_word.word);
         back().word_offset_ = cut_word.offset;
+    }
+
+    void Add(const String &token, const u32 offset, const u32 end_offset, const u16 payload = 0) {
+        push_back(global_temporary_);
+        back().text_ = token;
+        back().word_offset_ = offset;
+        back().end_offset_ = end_offset;
+        back().payload_ = payload;
+    }
+
+    void Add(String &token, const u32 offset, const u32 end_offset, const u16 payload = 0) {
+        push_back(global_temporary_);
+        std::swap(back().text_, token);
+        back().word_offset_ = offset;
+        back().end_offset_ = end_offset;
+        back().payload_ = payload;
     }
 
 private:

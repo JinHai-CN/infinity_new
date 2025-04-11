@@ -14,15 +14,98 @@
 
 module;
 
-import query_context;
-import operator_state;
+#include <vector>
 
 module physical_alter;
 
+import query_context;
+import operator_state;
+import third_party;
+import txn;
+import status;
+import infinity_exception;
+import value;
+import defer_op;
+import wal_manager;
+import infinity_context;
+import new_txn;
+
 namespace infinity {
 
-void PhysicalAlter::Init() {}
+void PhysicalRenameTable::Init(QueryContext *query_context) {}
 
-bool PhysicalAlter::Execute(QueryContext *, OperatorState *) { return true; }
+bool PhysicalRenameTable::Execute(QueryContext *query_context, OperatorState *operator_state) {
+    RecoverableError(Status::NotSupport("Rename table is not supported."));
+    operator_state->SetComplete();
+    return true;
+}
+
+void PhysicalAddColumns::Init(QueryContext *query_context) {}
+
+bool PhysicalAddColumns::Execute(QueryContext *query_context, OperatorState *operator_state) {
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
+    bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+    Status status;
+    if (!use_new_catalog) {
+        Txn *txn = query_context->GetTxn();
+        txn->LockTable(*table_info_->db_name_, *table_info_->table_name_);
+        DeferFn defer_fn([&]() { txn->UnLockTable(*table_info_->db_name_, *table_info_->table_name_); });
+
+        status = txn->AddColumns(*table_info_->db_name_, *table_info_->table_name_, column_defs_);
+    } else {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        status = new_txn->AddColumns(*table_info_->db_name_, *table_info_->table_name_, column_defs_);
+    }
+    if (!status.ok()) {
+        RecoverableError(status);
+    }
+    operator_state->SetComplete();
+    return true;
+}
+
+void PhysicalDropColumns::Init(QueryContext *query_context) {}
+
+bool PhysicalDropColumns::Execute(QueryContext *query_context, OperatorState *operator_state) {
+    StorageMode storage_mode = InfinityContext::instance().storage()->GetStorageMode();
+    if (storage_mode == StorageMode::kUnInitialized) {
+        UnrecoverableError("Uninitialized storage mode");
+    }
+
+    if (storage_mode != StorageMode::kWritable) {
+        operator_state->status_ = Status::InvalidNodeRole("Attempt to write on non-writable node");
+        operator_state->SetComplete();
+        return true;
+    }
+
+    bool use_new_catalog = query_context->global_config()->UseNewCatalog();
+    Status status;
+    if (!use_new_catalog) {
+        Txn *txn = query_context->GetTxn();
+        txn->LockTable(*table_info_->db_name_, *table_info_->table_name_);
+        DeferFn defer_fn([&]() { txn->UnLockTable(*table_info_->db_name_, *table_info_->table_name_); });
+
+        status = txn->DropColumns(*table_info_->db_name_, *table_info_->table_name_, column_names_);
+    } else {
+        NewTxn *new_txn = query_context->GetNewTxn();
+        status = new_txn->DropColumns(*table_info_->db_name_, *table_info_->table_name_, column_names_);
+    }
+
+    if (!status.ok()) {
+        RecoverableError(status);
+    }
+
+    operator_state->SetComplete();
+    return true;
+}
 
 } // namespace infinity

@@ -1,41 +1,53 @@
 [general]
-version                 = "0.1.0"
-timezone                = "utc-9"
-
-[system]
-worker_cpu_limit        = 2
-total_memory_size       = "8GB"
-query_cpu_limit         = 2
-query_memory_limit      = "4MB"
+version                 = "0.6.0"
+time_zone               = "utc-8"
+cpu_limit               = 2
 
 [network]
-listen_address          = "127.0.0.1"
-pg_port                 = 25432
-http_port               = 8089
-sdk_port                = 24817
+server_address          = "127.0.0.1"
+postgres_port           = 25432
+http_port               = 24821
+client_port             = 24817
+connection_pool_size    = 128
 
-[profiler]
-enable                  = false
-profile_record_capacity = 100
+peer_retry_delay         = 1000
+peer_retry_count           = 2
+peer_connect_timeout     = 2000
+peer_recv_timeout        = 2000
+peer_send_timeout        = 2000
 
 [log]
-log_filename            = "info.log"
+log_filename            = "infinity.log"
 log_dir                 = "/var/infinity/log"
-log_to_stdout           = true
-log_max_size            = "2GB"
+log_to_stdout           = false
+log_file_max_size       = "2GB"
 log_file_rotate_count   = 3
 
-# trace/info/warning/error/critical 5 log levels, default: info
+# trace/debug/info/warning/error/critical 6 log levels, default: info
 log_level               = "trace"
 
 [storage]
-data_dir                = "/var/infinity/data"
-wal_dir                 = "/var/infinity/wal"
-default_row_size        = 4096
+persistence_dir         = "/var/infinity/persistence"
+storage_type            = "local"
+
+[storage.object_storage]
+url                     = "0.0.0.0:9000"
+bucket_name             = "infinity"
+access_key              = "minioadmin"
+secret_key              = "minioadmin"
+enable_https            = false
 
 [buffer]
-buffer_pool_size        = "3GB"
-temp_dir                = "/tmp"
+buffer_manager_size     = "3GB"
+lru_num                 = 8
+temp_dir                = "/var/infinity/tmp"
+memindex_memory_quota   = "2GB"
+
+result_cache            = "on"
+cache_result_capacity   = 100
+
+[wal]
+wal_dir                 = "/var/infinity/wal"
 
 [resource]
-dictionary_dir                = "/tmp/infinity/resource"
+resource_dir          = "/var/infinity/resource"

@@ -14,18 +14,19 @@
 
 module;
 
+export module interval_cast;
+
 import stl;
 import column_vector;
 import vector_buffer;
 import bound_cast_func;
-import parser;
 import column_vector_cast;
-
+import logical_type;
 import infinity_exception;
 import third_party;
-// import logger;
-
-export module interval_cast;
+import logger;
+import internal_types;
+import data_type;
 
 namespace infinity {
 
@@ -37,7 +38,8 @@ export inline BoundCastFunc BindTimeCast(DataType &target) {
             return BoundCastFunc(&ColumnVectorCast::TryCastColumnVectorToVarlen<IntervalT, VarcharT, IntervalTryCastToVarlen>);
         }
         default: {
-            Error<TypeException>(Format("Can't cast from Interval type to {}", target.ToString()));
+            String error_message = fmt::format("Can't cast from Interval type to {}", target.ToString());
+            UnrecoverableError(error_message);
         }
     }
     return BoundCastFunc(nullptr);
@@ -45,16 +47,18 @@ export inline BoundCastFunc BindTimeCast(DataType &target) {
 
 struct IntervalTryCastToVarlen {
     template <typename SourceType, typename TargetType>
-    static inline bool Run(SourceType, TargetType &, const SharedPtr<ColumnVector> &) {
-        Error<FunctionException>(
-            Format("Not support to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>()));
+    static inline bool Run(SourceType, TargetType &, ColumnVector *) {
+        String error_message =
+            fmt::format("Not support to cast from {} to {}", DataType::TypeToString<SourceType>(), DataType::TypeToString<TargetType>());
+        UnrecoverableError(error_message);
         return false;
     }
 };
 
 template <>
-inline bool IntervalTryCastToVarlen::Run(IntervalT, VarcharT &, const SharedPtr<ColumnVector> &) {
-    Error<NotImplementException>("Not implemented");
+inline bool IntervalTryCastToVarlen::Run(IntervalT, VarcharT &, ColumnVector *) {
+    String error_message = "Not implement: IntegerTryCastToFixlen::Run";
+    UnrecoverableError(error_message);
     return false;
 }
 

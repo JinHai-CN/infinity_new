@@ -14,7 +14,9 @@
 
 module;
 
-#include <memory>
+#include <vector>
+
+module expression_transformer;
 
 import stl;
 import base_expression;
@@ -29,15 +31,14 @@ import expression_type;
 
 import infinity_exception;
 import third_party;
-
-module expression_transformer;
+import logger;
 
 namespace infinity {
 
 Vector<SharedPtr<BaseExpression>> SplitExpressionByDelimiter(const SharedPtr<BaseExpression> &expression, ConjunctionType delimiter) {
     Vector<SharedPtr<BaseExpression>> result;
 
-    StdFunction<VisitControlType(SharedPtr<BaseExpression> & child)> func = [&](const SharedPtr<BaseExpression> &expr_ptr) -> VisitControlType {
+    std::function<VisitControlType(SharedPtr<BaseExpression> & child)> func = [&](const SharedPtr<BaseExpression> &expr_ptr) -> VisitControlType {
         if (expr_ptr->type() == ExpressionType::kConjunction) {
             const auto conjunction_expr_ptr = std::static_pointer_cast<ConjunctionExpression>(expr_ptr);
             if (conjunction_expr_ptr->conjunction_type() == delimiter)
@@ -64,7 +65,7 @@ SharedPtr<BaseExpression> ComposeExpressionWithDelimiter(const Vector<SharedPtr<
     return result;
 }
 
-void VisitExpression(const SharedPtr<BaseExpression> &expression, const StdFunction<VisitControlType(SharedPtr<BaseExpression> &child)> &visitor) {
+void VisitExpression(const SharedPtr<BaseExpression> &expression, const std::function<VisitControlType(SharedPtr<BaseExpression> &child)> &visitor) {
     Queue<SharedPtr<BaseExpression>> queue;
     queue.push(expression);
 
@@ -80,7 +81,7 @@ void VisitExpression(const SharedPtr<BaseExpression> &expression, const StdFunct
     }
 }
 
-void VisitExpression(const SharedPtr<BaseExpression> &expression, const StdFunction<void(SharedPtr<BaseExpression> &child)> &visitor) {
+void VisitExpression(const SharedPtr<BaseExpression> &expression, const std::function<void(SharedPtr<BaseExpression> &child)> &visitor) {
     switch (expression->type()) {
         case ExpressionType::kAggregate: {
             AggregateExpression *agg_expr = (AggregateExpression *)expression.get();
@@ -143,9 +144,11 @@ void VisitExpression(const SharedPtr<BaseExpression> &expression, const StdFunct
             break;
         case ExpressionType::kColumn:
         case ExpressionType::kValue:
+        case ExpressionType::kFilterFullText:
             break;
         default: {
-            Error<PlannerException>(Format("Unsupported expression type: {}", expression->Name()));
+            String error_message = fmt::format("Unsupported expression type: {}", expression->Name());
+            UnrecoverableError(error_message);
         }
     }
 }
