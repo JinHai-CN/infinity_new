@@ -354,7 +354,7 @@ TEST_P(TxnReplayExceptionTest, test_replay_import) {
             SegmentID segment_id = chunk_index_meta.segment_index_meta().segment_id();
 
             ChunkIndexMetaInfo *chunk_info_ptr = nullptr;
-            Status status = chunk_index_meta.GetChunkInfo(chunk_info_ptr);
+            Status status = chunk_index_meta.GetChunkInfo(txn->kv_instance(), chunk_info_ptr);
             EXPECT_TRUE(status.ok());
             EXPECT_EQ(chunk_info_ptr->base_row_id_, RowID(segment_id, 0));
             EXPECT_EQ(chunk_info_ptr->row_cnt_, block_row_cnt * 2);
